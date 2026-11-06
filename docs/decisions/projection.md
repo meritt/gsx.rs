@@ -17,6 +17,8 @@ Alt is fitted per item on every target that declares an `alt` limit for the item
 
 Media appear as references (`media:<id>`); the caller resolves URLs and builds the request.
 
+A directive id absent from the `items` fact is a medium the caller dropped (a gateway rejection, a size or variant filter, an offline analysis). `telegram-html-rich` and `blocks` targets remove that id from its directive, and the directive itself when no id is left, with one `omitted` `media_missing` change per directive; the surrounding text closes up as if the directive were absent, with no empty section at an edge and one separator between its neighbours. A group left with one item is placed as a single item and reports no split. `media_inline_unavailable` stays blocking: it reports a listed item that is not `inline` or whose format the form cannot place.
+
 ## Changes
 
 | Class | Meaning |

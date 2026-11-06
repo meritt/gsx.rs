@@ -37,5 +37,5 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
 
 fn dropped(context: &Context, id: &str) -> bool {
     let maximum = context.target.form.blocks().and_then(|form| form.items).unwrap_or(usize::MAX);
-    context.items().iter().position(|item| item.id == id).is_some_and(|index| index >= maximum)
+    context.items().iter().position(|item| item.id == id).is_none_or(|index| index >= maximum)
 }

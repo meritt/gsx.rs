@@ -156,6 +156,28 @@ fn a_group_left_with_one_item_is_not_reported_as_split() {
 }
 
 #[test]
+fn missing_media_drop_their_anchor() {
+    const MISSING: [(Class, Feature, &str); 1] = [(Class::Omitted, Feature::Media, "media_missing")];
+    for name in ["discord-blocks", "slack-blocks"] {
+        let middle = run(name, "a\n\n::media{id=\"x\"}\n\nb", &[]);
+        assert_eq!(middle.blocks, [text("a\n\nb")]);
+        assert_eq!(reasons(&middle), MISSING);
+        assert_eq!(run(name, "::media{id=\"x\"}\n\na", &[]).blocks, [text("a")]);
+        assert_eq!(run(name, "a\n\n::media{id=\"x\"}", &[]).blocks, [text("a")]);
+        let layout = if name == "slack-blocks" { "slideshow" } else { "collage" };
+        let singleton = run(name, &format!("a\n\n::media{{ids=\"p,x\" layout=\"{layout}\"}}"), &[image("p")]);
+        assert_eq!(singleton.blocks, [text("a\n\n"), single("p")]);
+        assert_eq!(reasons(&singleton), MISSING);
+        let empty = run(name, &format!("a\n\n::media{{ids=\"x,y\" layout=\"{layout}\"}}\n\nb"), &[]);
+        assert_eq!(empty.blocks, [text("a\n\nb")]);
+        assert_eq!(reasons(&empty), MISSING);
+        let all = run(name, "::media{id=\"x\"}\n\n::media{id=\"y\"}", &[]);
+        assert_eq!(all.blocks, []);
+        assert_eq!(reasons(&all), [MISSING[0], (Class::Blocked, Feature::Text, "text_empty"), MISSING[0]]);
+    }
+}
+
+#[test]
 fn slack_refuses_more_than_fifty_blocks() {
     let ids: Vec<String> = (0..26).map(|index| format!("m{index}")).collect();
     let items: Vec<_> = ids.iter().map(|id| image(id)).collect();

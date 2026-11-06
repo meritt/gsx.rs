@@ -419,12 +419,16 @@ impl Html {
 
     fn resolve(&self, context: &mut Context, node: &Node, ids: &[&str]) -> Vec<usize> {
         let mut kept = vec![];
+        let mut missing = false;
         for id in ids {
             match self.media.iter().position(|medium| medium.id == *id) {
                 Some(index) if index < self.limit() => kept.push(index),
                 Some(_) => {}
-                None => context.report_when(Feature::Media, Some(node.range), Some(When::Inline)),
+                None => missing = true,
             }
+        }
+        if missing {
+            context.report_when(Feature::Media, Some(node.range), Some(When::Missing));
         }
         kept
     }

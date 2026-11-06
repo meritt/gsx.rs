@@ -177,10 +177,23 @@ fn rich_media_count_beyond_fifty_is_omitted() {
 }
 
 #[test]
-fn rich_unknown_media_blocks_the_projection() {
-    let projection = rich("a\n\n::media{id=\"x\"}", &[]);
-    assert_eq!(blocked(&projection), ["MEDIA_INLINE_UNAVAILABLE"]);
-    assert_eq!(text(&projection), "<p>a</p>");
+fn rich_missing_media_drop_their_anchor() {
+    const MISSING: (&str, &str, &str) = ("media", "omitted", "media_missing");
+    let middle = rich("a\n\n::media{id=\"x\"}\n\nb", &[]);
+    assert_eq!(text(&middle), "<p>a<br><br>b</p>");
+    assert_eq!(changes(&middle), [MISSING]);
+    assert_eq!(text(&rich("::media{id=\"x\"}\n\na", &[])), "<p>a</p>");
+    assert_eq!(text(&rich("a\n\n::media{id=\"x\"}", &[])), "<p>a</p>");
+    let singleton = rich("::media{ids=\"p,x\" layout=\"collage\"}", &[image("p", None)]);
+    assert_eq!(text(&singleton), "<img src=\"media:p\"/>");
+    assert_eq!(changes(&singleton), [MISSING]);
+    let empty = rich("a\n\n::media{ids=\"x,y\" layout=\"collage\"}\n\nb", &[]);
+    assert_eq!(text(&empty), "<p>a<br><br>b</p>");
+    assert_eq!(changes(&empty), [MISSING]);
+    let all = rich("::media{id=\"x\"}\n\n::media{id=\"y\"}", &[]);
+    assert_eq!(text(&all), "");
+    assert_eq!(blocked(&all), ["TEXT_EMPTY"]);
+    assert_eq!(changes(&all).iter().filter(|change| **change == MISSING).count(), 2);
 }
 
 #[test]

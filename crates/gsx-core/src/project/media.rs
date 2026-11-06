@@ -227,6 +227,11 @@ pub(super) fn layout(
     for fact in facts.items.iter().skip(maximum) {
         layouter.change(FieldName::Text, range_of(children, fact.id), When::Count);
     }
+    for node in children {
+        if placed(node).is_some_and(|ids| ids.iter().any(|id| facts.items.iter().all(|item| item.id != *id))) {
+            layouter.change(FieldName::Text, Some(node.range), When::Missing);
+        }
+    }
     let mut cursor = 0;
     for anchor in anchors {
         layouter.text(&text[cursor..anchor.at]);
@@ -243,10 +248,7 @@ pub(super) fn layout(
         for id in placed(node).unwrap_or_default() {
             match facts.items.iter().position(|item| item.id == id) {
                 Some(index) if index < maximum => kept.push(&facts.items[index]),
-                Some(_) => {}
-                None => {
-                    layouter.change(FieldName::Text, Some(node.range), When::Inline);
-                }
+                _ => {}
             }
         }
         layouter.media(&kept, Some(node), anchor.cut);
