@@ -113,7 +113,7 @@ export interface WireError {
 export type Wire = { document: Document } | { error: WireError };
 
 export interface Facts {
-  media?: 'image' | 'video' | null;
+  media?: 'image' | 'video' | 'gif' | 'audio' | null;
   mediaCount?: number;
   title?: string | null;
   /** Appended after the body on targets that declare `target_url`; never cut. */

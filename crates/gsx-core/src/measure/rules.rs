@@ -32,6 +32,8 @@ pub enum Placement {
 pub enum MediaKind {
     Image,
     Video,
+    Gif,
+    Audio,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

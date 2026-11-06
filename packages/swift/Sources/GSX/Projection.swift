@@ -1,7 +1,16 @@
 import GSXFFI
 
 public enum MediaKind: String, Sendable, Hashable, Decodable {
-    case image, video
+    case image, video, gif, audio
+
+    var native: UInt32 {
+        switch self {
+        case .image: UInt32(GSX_MEDIA_IMAGE)
+        case .video: UInt32(GSX_MEDIA_VIDEO)
+        case .gif: UInt32(GSX_MEDIA_GIF)
+        case .audio: UInt32(GSX_MEDIA_AUDIO)
+        }
+    }
 }
 
 /// An attached media item, matched to media references by `id`.

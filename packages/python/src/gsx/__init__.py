@@ -411,7 +411,7 @@ _lib.gsx_project.restype = ctypes.c_void_p
 _lib.gsx_targets.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
 _lib.gsx_targets.restype = ctypes.c_void_p
 
-_KINDS = {None: 0, "image": 1, "video": 2}
+_KINDS = {None: 0, "image": 1, "video": 2, "gif": 3, "audio": 4}
 _FORMATS = {"image": 0, "gif": 1, "video": 2, "audio": 3}
 
 
@@ -425,7 +425,7 @@ def _limit(value: Optional[int], name: str) -> int:
 
 def _facts(facts: Facts) -> _Facts:
     if facts.media not in _KINDS:
-        raise ValueError("facts.media must be 'image', 'video' or None")
+        raise ValueError("facts.media must be 'image', 'video', 'gif', 'audio' or None")
     count = facts.media_count
     if not isinstance(count, int) or isinstance(count, bool) or not 0 <= count < 1 << 8 * ctypes.sizeof(ctypes.c_size_t):
         raise ValueError("facts.media_count must be a non-negative int that fits size_t")

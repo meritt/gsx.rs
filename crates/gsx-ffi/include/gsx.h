@@ -11,6 +11,10 @@
 
 #define GSX_MEDIA_VIDEO 2
 
+#define GSX_MEDIA_GIF 3
+
+#define GSX_MEDIA_AUDIO 4
+
 #define GSX_FORMAT_IMAGE 0
 
 #define GSX_FORMAT_GIF 1

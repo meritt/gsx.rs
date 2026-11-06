@@ -165,6 +165,8 @@ fn outcome(
             None => None,
             Some("image") => Some(MediaKind::Image),
             Some("video") => Some(MediaKind::Video),
+            Some("gif") => Some(MediaKind::Gif),
+            Some("audio") => Some(MediaKind::Audio),
             Some(other) => return Err(format!("{place}: no media kind {other}")),
         },
         media_count: limit("mediaCount").unwrap_or(0) as usize,

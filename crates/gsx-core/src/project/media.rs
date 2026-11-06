@@ -142,7 +142,7 @@ fn kind(format: Format) -> Option<MediaKind> {
     match format {
         Format::Image | Format::Gif => Some(MediaKind::Image),
         Format::Video => Some(MediaKind::Video),
-        Format::Audio => None,
+        Format::Audio => Some(MediaKind::Audio),
     }
 }
 

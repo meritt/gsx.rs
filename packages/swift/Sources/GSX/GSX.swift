@@ -102,9 +102,7 @@ public enum GSX {
                             withString(&title) { title, titleCount in
                                 withString(&targetUrl) { targetUrl, targetUrlCount in
                                     var native = gsx_facts(
-                                        media: facts.media.map {
-                                            $0 == .image ? UInt32(GSX_MEDIA_IMAGE) : UInt32(GSX_MEDIA_VIDEO)
-                                        } ?? UInt32(GSX_MEDIA_NONE),
+                                        media: facts.media?.native ?? UInt32(GSX_MEDIA_NONE),
                                         media_count: facts.mediaCount,
                                         title: title,
                                         title_len: titleCount,
