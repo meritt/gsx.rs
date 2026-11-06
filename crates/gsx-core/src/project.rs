@@ -273,32 +273,30 @@ fn render(
         }
         None => vec![],
     };
-    let (mut text, mut links) = match target.normalization {
+    let (text, links) = match target.normalization {
         Normalization::None => (written.text, written.links),
         Normalization::Nfc => normalized(&written.text, &written.links),
     };
+    let mut rendered = Rendered { text, links, styled, changes: context.changes, anchors: context.anchors };
+    cap_markers(target, field, &mut rendered);
+    rendered
+}
+
+fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendered) {
     for (unit, feature) in [(Unit::Hashtags, Feature::Hashtag), (Unit::Mentions, Feature::Mention)] {
-        let cap = target.limits.iter().find(|limit| limit.field == context.field && limit.unit == unit);
+        let cap = target.limits.iter().find(|limit| limit.field == field && limit.unit == unit);
         let Some(maximum) = cap.and_then(|limit| limit.maximum(&measure::Facts::default())) else {
             continue;
         };
-        let markers = measure::markers(unit, &text);
+        let markers = measure::markers(unit, &rendered.text);
         let Some(dropped) = markers.get(maximum as usize..).filter(|dropped| !dropped.is_empty()) else {
             continue;
         };
-        text = without_sigils(&text, dropped, &mut links);
+        rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links);
         let (class, reason) = target.rule(feature).outcome(None);
         let truncated = Truncated { unit, maximum: maximum as usize, value: markers.len(), exact: true };
-        context.changes.push(Change {
-            class,
-            feature,
-            reason,
-            field: context.field,
-            range: None,
-            truncated: Some(truncated),
-        });
+        rendered.changes.push(Change { class, feature, reason, field, range: None, truncated: Some(truncated) });
     }
-    Rendered { text, links, styled, changes: context.changes, anchors: context.anchors }
 }
 
 fn without_sigils(text: &str, sigils: &[usize], links: &mut [Span<usize>]) -> String {

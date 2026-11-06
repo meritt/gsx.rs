@@ -10,7 +10,7 @@ pub(super) fn utf16_code_units(text: &str) -> usize {
     text.chars().map(char::len_utf16).sum()
 }
 
-pub(super) fn markers(text: &str, sigil: char, word: impl Fn(char) -> bool) -> Vec<usize> {
+pub(super) fn markers(text: &str, sigil: char, word: fn(char) -> bool) -> Vec<usize> {
     let mut positions = vec![];
     let mut previous: Option<char> = None;
     let mut chars = text.char_indices().peekable();
