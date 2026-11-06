@@ -145,10 +145,12 @@ struct Layouter {
 }
 
 impl Layouter {
-    fn change(&mut self, field: FieldName, range: Option<Range>, when: When) -> &mut Change {
+    fn change(&mut self, field: FieldName, range: Option<Range>, when: When) {
         let (class, reason) = self.target.rule(Feature::Media).outcome(Some(when));
-        self.laid.changes.push(Change { class, feature: Feature::Media, reason, field, range, truncated: None });
-        self.laid.changes.last_mut().unwrap()
+        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None };
+        if !self.laid.changes.contains(&change) {
+            self.laid.changes.push(change);
+        }
     }
 
     fn item(&mut self, fact: &MediaFact, range: Option<Range>, slot: (usize, usize)) -> Item {

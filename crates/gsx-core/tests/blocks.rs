@@ -81,6 +81,9 @@ fn media_without_an_inline_variant_blocks_the_projection() {
     let discord = run("discord-blocks", "::media{id=\"p\"}", &[MediaFact { inline: false, ..image("p") }]);
     assert_eq!(reasons(&discord), [(Class::Blocked, Feature::Media, "media_inline_unavailable")]);
     assert_eq!(reasons(&run("discord-blocks", "::media{id=\"v\"}", &[video])), NONE);
+    let videos = [video, MediaFact { format: Format::Video, ..image("w") }];
+    let group = run("slack-blocks", "::media{ids=\"v,w\" layout=\"slideshow\"}", &videos);
+    assert_eq!(reasons(&group), [(Class::Blocked, Feature::Media, "media_inline_unavailable")]);
 }
 
 #[test]

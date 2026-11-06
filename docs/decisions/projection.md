@@ -31,6 +31,7 @@ Native output is not reported. A change has `feature`, `reason`, `field` and the
 
 - No change is silent: a datetime label, a nested quote on a `markdown` target, a code info string and the MAX spoiler each yield one.
 - Highlight keeps its content: `unwrapped`, never `omitted`.
+- Identical changes are reported once: in a `blocks` group every item shares the group's range, so two videos in a Slack slideshow give one `media_inline_unavailable`.
 - A change belongs to the field that produced it.
 
 ## Target table
