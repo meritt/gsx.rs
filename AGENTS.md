@@ -127,7 +127,7 @@ cargo xtask pin [--check] [<release set>]
    git push origin vX.Y.Z
    ```
 
-4. Once the Release workflow is green, publish the released artifacts and the tagged crate:
+4. The Release workflow publishes the npm package to GitHub Packages (`https://npm.pkg.github.com`) from the verified release set. Once it is green, publish the released artifacts to npmjs and PyPI and the tagged crate:
 
    ```bash
    gh release download vX.Y.Z --repo meritt/gsx.rs --pattern 'gsx-*' --dir /tmp/gsx-release
@@ -154,4 +154,5 @@ Recovery:
 | Identity, Gates, Build | rerun; for a code fix delete the tag (`git push origin :refs/tags/vX.Y.Z`), fix on `main`, tag again |
 | Draft, Readback, Publish | `gh release delete vX.Y.Z --repo meritt/gsx.rs --yes`, rerun |
 | Immutability | rerun the failed job |
+| Ship (GitHub Packages) | `gh release download vX.Y.Z --repo meritt/gsx.rs --pattern 'gsx-*-npm.tgz' --dir /tmp/gsx-release`, then `npm publish /tmp/gsx-release/gsx-vX.Y.Z-npm.tgz --registry https://npm.pkg.github.com` with a token that has `write:packages` |
 | Published release is wrong | release the next patch version |

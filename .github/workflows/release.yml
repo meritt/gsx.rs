@@ -145,6 +145,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      packages: write
     env:
       REF: ${{ github.ref_name }}
       SOURCE_COMMIT: ${{ needs.identity.outputs.source_commit }}
@@ -204,6 +205,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$REF" --repo "$REPOSITORY" --draft=false --latest
+
+      - name: Ship
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          npm config set //npm.pkg.github.com/:_authToken '${NODE_AUTH_TOKEN}'
+          npm publish "release-input/gsx-$REF-npm.tgz" --registry https://npm.pkg.github.com
 
   immutability:
     name: Immutability
