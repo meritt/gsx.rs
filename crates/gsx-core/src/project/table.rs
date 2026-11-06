@@ -79,6 +79,7 @@ impl Rule {
 pub enum Media {
     Any,
     Image,
+    Video,
 }
 
 impl Media {
@@ -86,6 +87,7 @@ impl Media {
         match self {
             Media::Any => true,
             Media::Image => media == Some(MediaKind::Image),
+            Media::Video => media == Some(MediaKind::Video),
         }
     }
 }

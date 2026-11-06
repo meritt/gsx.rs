@@ -89,7 +89,10 @@ pub static VK: Target = text(
     Escape::None,
     "vk-plain",
     plain!(&[]),
-    BODY,
+    &[
+        field(FieldName::Text, Media::Any, Source::Body, false),
+        field(FieldName::Title, Media::Video, Source::Body, false),
+    ],
     &[
         unlimited(Text, CodePoints),
         limit(Title, CodePoints, 128).when(Only(Video)),

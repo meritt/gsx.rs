@@ -575,11 +575,12 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     let mut changes = vec![];
     let mut required = vec![];
     let mut blocks = vec![];
+    let mut derived = false;
     for spec in target.fields(facts) {
         let request = Request { target, spec, facts, options };
         let fitted = match (spec.source, explicit, titled) {
             (Source::Body, ..) => {
-                let suffix = target_url.filter(|url| {
+                let suffix = target_url.filter(|_| !derived).filter(|url| {
                     let fits = request.fits(&Rendered::text(format!("{ELLIPSIS}\n\n{url}")));
                     if !fits {
                         changes.push(request.change(Feature::TargetUrl, None, Some(When::Overflow)));
@@ -594,6 +595,10 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                 if suffix.is_some() {
                     fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));
                 }
+                if derived {
+                    fitted.rendered.changes.retain(|change| change.feature == Feature::Text);
+                }
+                derived = true;
                 fitted
             }
             (Source::Title { .. }, Some(title), _) => explicit_title(&request, title),
