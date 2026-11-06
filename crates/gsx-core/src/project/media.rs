@@ -1,7 +1,7 @@
 use crate::document::{Kind, Layout, Node, Range};
 use crate::measure::{self, Fact, MediaKind, Placement};
 
-use super::change::{Change, Feature, FieldName, Truncated};
+use super::change::{Change, Feature, FieldName, Slot, Truncated};
 use super::facts::{Facts, Format, MediaFact};
 use super::table::{BlocksForm, Target, When};
 use super::{Measurement, shortened};
@@ -96,9 +96,8 @@ fn fit_alt(
             reason,
             field: FieldName::Alt,
             range,
-            truncated: Some(truncated),
-            block,
-            item: Some(item),
+            truncated: Some(Box::new(truncated)),
+            slot: Some(Box::new(Slot { block, item })),
         }
     });
     Alt { text, measurements, change }
@@ -156,8 +155,7 @@ struct Layouter {
 impl Layouter {
     fn change(&mut self, field: FieldName, range: Option<Range>, when: When) {
         let (class, reason) = self.target.rule(Feature::Media).outcome(Some(when));
-        let change =
-            Change { class, feature: Feature::Media, reason, field, range, truncated: None, block: None, item: None };
+        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None, slot: None };
         if !self.laid.changes.contains(&change) {
             self.laid.changes.push(change);
         }

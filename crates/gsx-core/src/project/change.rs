@@ -96,6 +96,16 @@ pub struct Truncated {
     pub exact: bool,
 }
 
+/// The media item a change is about: its index in the block, or in projection items outside
+/// the blocks/1 form, and on blocks targets the block's index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slot {
+    pub block: Option<usize>,
+    pub item: usize,
+}
+
+/// `truncated` and `slot` are boxed: few changes carry them, and fitting builds every other
+/// change once per probe, so they would otherwise widen the hot path.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Change {
     pub class: Class,
@@ -103,9 +113,8 @@ pub struct Change {
     pub reason: &'static str,
     pub field: FieldName,
     pub range: Option<Range>,
-    pub truncated: Option<Truncated>,
-    pub block: Option<usize>,
-    pub item: Option<usize>,
+    pub truncated: Option<Box<Truncated>>,
+    pub slot: Option<Box<Slot>>,
 }
 
 impl Change {

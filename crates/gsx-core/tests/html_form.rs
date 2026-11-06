@@ -1,5 +1,7 @@
 use gsx_core::document::{Media, parse};
-use gsx_core::project::{Facts, FieldName, Format, MediaFact, MediaKind, Options, Projection, project, project_with};
+use gsx_core::project::{
+    Facts, FieldName, Format, MediaFact, MediaKind, Options, Projection, Slot, project, project_with,
+};
 use gsx_core::targets::target;
 
 fn run(name: &str, markdown: &str) -> Projection {
@@ -222,10 +224,10 @@ fn rich_alts_share_the_text_budget() {
         changes(&projection),
         [("media", "approximated", "media_alt_truncated"), ("media", "omitted", "media_alt_omitted")]
     );
-    let truncated = projection.changes[0].truncated.unwrap();
+    let truncated = projection.changes[0].truncated.as_deref().unwrap();
     assert_eq!((truncated.maximum, truncated.value), (1, 13));
-    let indices: Vec<_> = projection.changes.iter().map(|change| (change.block, change.item)).collect();
-    assert_eq!(indices, [(None, Some(1)), (None, Some(2))]);
+    let slots: Vec<_> = projection.changes.iter().map(|change| change.slot.as_deref().copied()).collect();
+    assert_eq!(slots, [Some(Slot { block: None, item: 1 }), Some(Slot { block: None, item: 2 })]);
     let alts: Vec<_> = projection.items.iter().map(|item| item.alt.as_deref()).collect();
     assert_eq!(alts, [Some("abc def"), Some("…"), None]);
 }

@@ -5,7 +5,8 @@ use crate::document::{
     Range, Severity,
 };
 use crate::project::{
-    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Projection, Target, Truncated,
+    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Projection, Slot, Target,
+    Truncated,
 };
 use crate::targets::TARGETS;
 
@@ -411,7 +412,7 @@ impl Out {
     }
 
     fn change(&mut self, change: &Change) {
-        let Change { class, feature, reason, field, range, truncated, block, item } = change;
+        let Change { class, feature, reason, field, range, truncated, slot } = change;
         self.raw("{\"class\":");
         self.string(class.name());
         self.key("feature");
@@ -428,7 +429,7 @@ impl Out {
             None => self.raw("null"),
         }
         self.key("truncated");
-        match truncated {
+        match truncated.as_deref() {
             Some(Truncated { unit, maximum, value, exact }) => {
                 self.raw("{\"unit\":");
                 self.string(unit.name());
@@ -442,11 +443,11 @@ impl Out {
             }
             None => self.raw("null"),
         }
-        if let Some(block) = block {
-            self.key("block");
-            self.number(block);
-        }
-        if let Some(item) = item {
+        if let Some(Slot { block, item }) = slot.as_deref() {
+            if let Some(block) = block {
+                self.key("block");
+                self.number(block);
+            }
             self.key("item");
             self.number(item);
         }

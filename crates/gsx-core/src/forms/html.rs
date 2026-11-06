@@ -2,8 +2,8 @@ use super::{media, wrapper};
 use crate::document::{Align, Kind, Layout, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
-    CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Truncated, When,
-    blank, href, marker, placed, referenced, shortened,
+    CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Slot, Truncated,
+    When, blank, href, marker, placed, referenced, shortened,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks: render, inline: render_inline };
@@ -530,9 +530,8 @@ impl Html {
                         reason,
                         field: FieldName::Alt,
                         range: figure.range,
-                        truncated: Some(Truncated { unit, maximum: room, value, exact: false }),
-                        block: None,
-                        item: Some(*item),
+                        truncated: Some(Box::new(Truncated { unit, maximum: room, value, exact: false })),
+                        slot: Some(Box::new(Slot { block: None, item: *item })),
                     });
                     context.published_alt(*item, Some(text.clone()).filter(|text| !text.is_empty()));
                 }

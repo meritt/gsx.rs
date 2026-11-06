@@ -16,7 +16,7 @@ use crate::document::{Document, Kind, Node, Provenance, Range};
 use crate::measure::{self, Fact};
 
 pub use crate::measure::{MediaKind, Placement, Unit};
-pub use change::{Change, Class, Feature, FieldName, Truncated};
+pub use change::{Change, Class, Feature, FieldName, Slot, Truncated};
 pub use entities::Entity;
 pub use facts::{Facts, Format, MediaFact};
 pub use fit::WINDOW;
@@ -141,16 +141,7 @@ impl<'a> Context<'a> {
 
     pub fn report_when(&mut self, feature: Feature, range: Option<Range>, when: Option<When>) {
         let (class, reason) = self.target.rule(feature).outcome(when);
-        self.changes.push(Change {
-            class,
-            feature,
-            reason,
-            field: self.field,
-            range,
-            truncated: None,
-            block: None,
-            item: None,
-        });
+        self.changes.push(Change { class, feature, reason, field: self.field, range, truncated: None, slot: None });
     }
 
     pub fn record(&mut self, change: Change) {
@@ -312,16 +303,8 @@ fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendere
         rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links);
         let (class, reason) = target.rule(feature).outcome(None);
         let truncated = Truncated { unit, maximum: maximum as usize, value: markers.len(), exact: true };
-        rendered.changes.push(Change {
-            class,
-            feature,
-            reason,
-            field,
-            range: None,
-            truncated: Some(truncated),
-            block: None,
-            item: None,
-        });
+        let truncated = Some(Box::new(truncated));
+        rendered.changes.push(Change { class, feature, reason, field, range: None, truncated, slot: None });
     }
 }
 
@@ -406,7 +389,7 @@ impl Request<'_, '_> {
 
     fn change(&self, feature: Feature, range: Option<Range>, when: Option<When>) -> Change {
         let (class, reason) = self.target.rule(feature).outcome(when);
-        Change { class, feature, reason, field: self.spec.name, range, truncated: None, block: None, item: None }
+        Change { class, feature, reason, field: self.spec.name, range, truncated: None, slot: None }
     }
 
     fn limits(&self) -> Vec<Bound> {
@@ -526,7 +509,7 @@ impl Request<'_, '_> {
             probes.remove(&cut.key()).and_then(|(_, probe)| probe).expect("the kept cut was probed and fits");
         let (range, exact) = cut.dropped(outline.end());
         let mut change = self.change(Feature::Text, Some(range), None);
-        change.truncated = Some(Truncated { unit, maximum, value, exact });
+        change.truncated = Some(Box::new(Truncated { unit, maximum, value, exact }));
         rendered.changes.push(change);
         Fitted { rendered, measurements: self.measurements(&limits, &fitted) }
     }
@@ -728,8 +711,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             field,
             range: Some(Range { start: 0, end }),
             truncated: None,
-            block: None,
-            item: None,
+            slot: None,
         });
     } else {
         changes.append(&mut required);
