@@ -116,6 +116,8 @@ export interface Facts {
   media?: 'image' | 'video' | null;
   mediaCount?: number;
   title?: string | null;
+  /** Appended after the body on targets that declare `target_url`; never cut. */
+  targetUrl?: string | null;
   maxCharacters?: number | null;
   charactersReservedPerUrl?: number | null;
   captionLimit?: number | null;
@@ -170,7 +172,8 @@ export type Feature =
   | 'datetime'
   | 'angle_brackets'
   | 'text'
-  | 'title';
+  | 'title'
+  | 'target_url';
 
 /** Entity ranges are in the target's `offsets` unit; links are UTF-16 ranges of the field text. */
 export interface Entity {

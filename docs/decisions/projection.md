@@ -50,6 +50,8 @@ All forms share block layout: one list-marker set, continuation lines indented b
 
 A derived field (YouTube title, TikTok photo title, VK video name) declares its source (explicit fact, leading heading, first line), whether it leaves the body, its unit, maximum and truncation (ellipsis or hard). Every limited field is measured and fitted on its own; fitting one never cuts another.
 
+A target URL (Threads reply or quote target) is appended to the body after a blank line, or replaces an empty body, and is never cut: the body is fitted with the URL counted, and the change is `textual_fallback` `target_url_as_text`. When `…`, a blank line and the URL alone exceed a limit, nothing is appended and the change is `omitted` `target_url_omitted`. Targets without a `target_url` rule ignore the fact.
+
 Generated ellipsis, cut position and the gap before a block are node fields. A truncated literal stays literal: escaping and entity detection treat it as authored text.
 
 ## Fitting

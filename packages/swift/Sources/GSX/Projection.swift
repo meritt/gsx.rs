@@ -38,6 +38,7 @@ public struct Facts: Sendable, Hashable {
     public var media: MediaKind?
     public var mediaCount: Int
     public var title: String?
+    public var targetUrl: String?
     public var maxCharacters: UInt32?
     public var charactersReservedPerUrl: UInt32?
     public var captionLimit: UInt32?
@@ -48,6 +49,7 @@ public struct Facts: Sendable, Hashable {
         media: MediaKind? = nil,
         mediaCount: Int = 0,
         title: String? = nil,
+        targetUrl: String? = nil,
         maxCharacters: UInt32? = nil,
         charactersReservedPerUrl: UInt32? = nil,
         captionLimit: UInt32? = nil,
@@ -57,6 +59,7 @@ public struct Facts: Sendable, Hashable {
         self.media = media
         self.mediaCount = mediaCount
         self.title = title
+        self.targetUrl = targetUrl
         self.maxCharacters = maxCharacters
         self.charactersReservedPerUrl = charactersReservedPerUrl
         self.captionLimit = captionLimit
@@ -167,6 +170,7 @@ public enum Feature: String, Sendable, Hashable, Decodable {
     case datetime
     case angleBrackets = "angle_brackets"
     case text, title
+    case targetUrl = "target_url"
 }
 
 public struct Truncated: Sendable, Hashable, Decodable {

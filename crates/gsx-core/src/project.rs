@@ -365,6 +365,12 @@ impl Request<'_, '_> {
         limits
     }
 
+    fn fits(&self, rendered: &Rendered) -> bool {
+        let limits = self.limits();
+        let values = self.values(&limits, rendered);
+        limits.iter().zip(values).all(|(limit, value)| limit.maximum.is_none_or(|maximum| value <= maximum))
+    }
+
     fn values(&self, limits: &[Bound], rendered: &Rendered) -> Vec<usize> {
         limits.iter().map(|limit| self.measure(limit.unit, rendered)).collect()
     }
@@ -454,6 +460,18 @@ impl Request<'_, '_> {
         rendered.changes.push(change);
         Fitted { rendered, measurements: self.measurements(&limits, &fitted) }
     }
+}
+
+fn appended(mut rendered: Rendered, url: Option<&str>) -> Rendered {
+    if let Some(url) = url {
+        if !rendered.text.is_empty() {
+            rendered.text.push_str("\n\n");
+        }
+        let start = rendered.text.len();
+        rendered.text.push_str(url);
+        rendered.links.push(start..rendered.text.len());
+    }
+    rendered
 }
 
 fn without_first_line(text: &str) -> String {
@@ -550,6 +568,8 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         rendered
     };
 
+    let target_url = facts.target_url.filter(|_| target.handles(Feature::TargetUrl));
+
     let mut fields = vec![];
     let mut measurements = vec![];
     let mut changes = vec![];
@@ -559,7 +579,22 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         let request = Request { target, spec, facts, options };
         let fitted = match (spec.source, explicit, titled) {
             (Source::Body, ..) => {
-                request.fit(|| Outline::of_nodes(document, body), !removed, |cut| draw_body(spec.name, cut))
+                let suffix = target_url.filter(|url| {
+                    let fits = request.fits(&Rendered::text(format!("{ELLIPSIS}\n\n{url}")));
+                    if !fits {
+                        changes.push(request.change(Feature::TargetUrl, None, Some(When::Overflow)));
+                    }
+                    fits
+                });
+                let mut fitted = request.fit(
+                    || Outline::of_nodes(document, body),
+                    !removed,
+                    |cut| appended(draw_body(spec.name, cut), suffix),
+                );
+                if suffix.is_some() {
+                    fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));
+                }
+                fitted
             }
             (Source::Title { .. }, Some(title), _) => explicit_title(&request, title),
             (Source::Title { .. }, None, Some(heading)) => request.fit(

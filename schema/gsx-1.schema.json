@@ -174,7 +174,8 @@
             "datetime",
             "angle_brackets",
             "text",
-            "title"
+            "title",
+            "target_url"
           ]
         },
         "reason": { "type": "string", "pattern": "^[a-z0-9_]+$" },

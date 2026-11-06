@@ -401,6 +401,10 @@ impl Target {
             .unwrap_or_else(|| panic!("{} declares no rule for {}", self.name, feature.name()))
     }
 
+    pub fn handles(&self, feature: Feature) -> bool {
+        self.rules.iter().any(|rule| rule.feature == feature)
+    }
+
     pub fn class(&self, feature: Feature) -> Class {
         self.rule(feature).class
     }

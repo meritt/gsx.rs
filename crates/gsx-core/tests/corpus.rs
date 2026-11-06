@@ -16,10 +16,9 @@ fn media(case: &Json) -> Vec<Media<'_>> {
         .collect()
 }
 
-fn facts(json: &Json) -> Facts<'static> {
+fn facts(json: &Json) -> Facts<'_> {
     if let Json::Object(object) = json {
-        let unknown: Vec<_> =
-            object.keys().filter(|key| !["media", "captionLimit", "entitiesAllowed"].contains(&key.as_str())).collect();
+        let unknown: Vec<_> = object.keys().filter(|key| !KNOWN_FACTS.contains(&key.as_str())).collect();
         assert!(unknown.is_empty(), "facts not read by the corpus test: {unknown:?}");
     }
     Facts {
@@ -34,9 +33,12 @@ fn facts(json: &Json) -> Facts<'static> {
             _ => None,
         },
         entities_allowed: json.get("entitiesAllowed") == &Json::Bool(true),
+        target_url: json.get("targetUrl").str(),
         ..Facts::default()
     }
 }
+
+const KNOWN_FACTS: &[&str] = &["media", "captionLimit", "entitiesAllowed", "targetUrl"];
 
 fn check(failures: &mut Vec<String>, label: &str, expected: &Json, actual: &str) {
     if let Some(found) = difference("", expected, &Json::parse(actual)) {

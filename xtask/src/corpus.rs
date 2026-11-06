@@ -158,6 +158,7 @@ fn outcome(
         })
         .collect();
     let title = facts.get("title").string();
+    let target_url = facts.get("targetUrl").string();
     let limit = |key| facts.get(key).number();
     let facts = Facts {
         media: match facts.get("media").string().as_deref() {
@@ -168,6 +169,7 @@ fn outcome(
         },
         media_count: limit("mediaCount").unwrap_or(0) as usize,
         title: title.as_deref(),
+        target_url: target_url.as_deref(),
         max_characters: limit("maxCharacters"),
         characters_reserved_per_url: limit("charactersReservedPerUrl"),
         caption_limit: limit("captionLimit"),
@@ -187,7 +189,7 @@ fn outcome(
 
 const FACTS: [&str; 2] = [
     "{}",
-    r#"{"media":"image","mediaCount":1,"title":"Title","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"entitiesAllowed":true}"#,
+    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"entitiesAllowed":true}"#,
 ];
 
 pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> Result {

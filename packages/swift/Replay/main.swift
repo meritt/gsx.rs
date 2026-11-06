@@ -11,6 +11,7 @@ struct Case: Decodable {
         let media: MediaKind?
         let mediaCount: Int?
         let title: String?
+        let targetUrl: String?
         let maxCharacters: UInt32?
         let charactersReservedPerUrl: UInt32?
         let captionLimit: UInt32?
@@ -48,6 +49,7 @@ for file in arguments.dropFirst() {
             media: given?.media,
             mediaCount: given?.mediaCount ?? 0,
             title: given?.title,
+            targetUrl: given?.targetUrl,
             maxCharacters: given?.maxCharacters,
             charactersReservedPerUrl: given?.charactersReservedPerUrl,
             captionLimit: given?.captionLimit,

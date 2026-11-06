@@ -201,6 +201,7 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
         media: (setup.media > 0).then_some(if setup.video { MediaKind::Video } else { MediaKind::Image }),
         media_count: setup.media,
         title: setup.title.as_deref(),
+        target_url: None,
         max_characters: setup.max_characters,
         characters_reserved_per_url: setup.characters_reserved_per_url,
         caption_limit: setup.caption_limit,

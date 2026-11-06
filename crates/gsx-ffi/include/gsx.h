@@ -45,6 +45,8 @@ typedef struct gsx_facts {
   size_t media_count;
   const uint8_t *title;
   size_t title_len;
+  const uint8_t *target_url;
+  size_t target_url_len;
   int64_t max_characters;
   int64_t characters_reserved_per_url;
   int64_t caption_limit;

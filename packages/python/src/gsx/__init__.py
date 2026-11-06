@@ -270,6 +270,7 @@ class Facts:
     caption_limit: Optional[int] = None
     entities_allowed: bool = False
     items: Tuple[MediaFact, ...] = ()
+    target_url: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -372,6 +373,8 @@ class _Facts(ctypes.Structure):
         ("media_count", ctypes.c_size_t),
         ("title", ctypes.c_char_p),
         ("title_len", ctypes.c_size_t),
+        ("target_url", ctypes.c_char_p),
+        ("target_url_len", ctypes.c_size_t),
         ("max_characters", ctypes.c_int64),
         ("characters_reserved_per_url", ctypes.c_int64),
         ("caption_limit", ctypes.c_int64),
@@ -414,7 +417,8 @@ def _facts(facts: Facts) -> _Facts:
     if not isinstance(count, int) or isinstance(count, bool) or not 0 <= count < 1 << 8 * ctypes.sizeof(ctypes.c_size_t):
         raise ValueError("facts.media_count must be a non-negative int that fits size_t")
     title = None if facts.title is None else facts.title.encode("utf-8")
-    items = (_MediaFact * len(facts.items))()
+    target_url = None if facts.target_url is None else facts.target_url.encode("utf-8")
+    items =(_MediaFact * len(facts.items))()
     for index, item in enumerate(facts.items):
         if item.format not in _FORMATS:
             raise ValueError("facts.items format must be 'image', 'gif', 'video' or 'audio'")
@@ -428,6 +432,8 @@ def _facts(facts: Facts) -> _Facts:
         facts.media_count,
         title,
         0 if title is None else len(title),
+        target_url,
+        0 if target_url is None else len(target_url),
         _limit(facts.max_characters, "facts.max_characters"),
         _limit(facts.characters_reserved_per_url, "facts.characters_reserved_per_url"),
         _limit(facts.caption_limit, "facts.caption_limit"),

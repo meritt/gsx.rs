@@ -92,31 +92,36 @@ public enum GSX {
         var text = text
         var target = target
         var title = facts.title
+        var targetUrl = facts.targetUrl
         let limit = { (value: UInt32?) in value.map(Int64.init) ?? -1 }
         return try withMedia(media) { (entries, count) throws(InternalError) -> String in
             try withItems(facts.items) { (items, itemCount) throws(InternalError) -> String in
                 try call("gsx_project") { error in
                     text.withUTF8 { utf8 in
                         target.withUTF8 { name in
-                            withTitle(&title) { title, titleCount in
-                                var native = gsx_facts(
-                                    media: facts.media.map {
-                                        $0 == .image ? UInt32(GSX_MEDIA_IMAGE) : UInt32(GSX_MEDIA_VIDEO)
-                                    } ?? UInt32(GSX_MEDIA_NONE),
-                                    media_count: facts.mediaCount,
-                                    title: title,
-                                    title_len: titleCount,
-                                    max_characters: limit(facts.maxCharacters),
-                                    characters_reserved_per_url: limit(facts.charactersReservedPerUrl),
-                                    caption_limit: limit(facts.captionLimit),
-                                    entities_allowed: facts.entitiesAllowed,
-                                    items: items,
-                                    items_len: itemCount
-                                )
-                                return gsx_project(
-                                    utf8.baseAddress, utf8.count, entries, count,
-                                    name.baseAddress, name.count, &native, &error
-                                )
+                            withString(&title) { title, titleCount in
+                                withString(&targetUrl) { targetUrl, targetUrlCount in
+                                    var native = gsx_facts(
+                                        media: facts.media.map {
+                                            $0 == .image ? UInt32(GSX_MEDIA_IMAGE) : UInt32(GSX_MEDIA_VIDEO)
+                                        } ?? UInt32(GSX_MEDIA_NONE),
+                                        media_count: facts.mediaCount,
+                                        title: title,
+                                        title_len: titleCount,
+                                        target_url: targetUrl,
+                                        target_url_len: targetUrlCount,
+                                        max_characters: limit(facts.maxCharacters),
+                                        characters_reserved_per_url: limit(facts.charactersReservedPerUrl),
+                                        caption_limit: limit(facts.captionLimit),
+                                        entities_allowed: facts.entitiesAllowed,
+                                        items: items,
+                                        items_len: itemCount
+                                    )
+                                    return gsx_project(
+                                        utf8.baseAddress, utf8.count, entries, count,
+                                        name.baseAddress, name.count, &native, &error
+                                    )
+                                }
                             }
                         }
                     }
@@ -162,10 +167,10 @@ public enum GSX {
         return try result.get()
     }
 
-    private static func withTitle<R>(
-        _ title: inout String?, _ body: (UnsafePointer<UInt8>?, Int) -> R
+    private static func withString<R>(
+        _ string: inout String?, _ body: (UnsafePointer<UInt8>?, Int) -> R
     ) -> R {
-        guard var value = title else { return body(nil, 0) }
+        guard var value = string else { return body(nil, 0) }
         return value.withUTF8 { utf8 in
             utf8.count == 0 ? withUnsafePointer(to: UInt8(0)) { body($0, 0) } : body(utf8.baseAddress, utf8.count)
         }

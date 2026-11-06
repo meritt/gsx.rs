@@ -48,6 +48,7 @@ pub enum Feature {
     AngleBrackets,
     Text,
     Title,
+    TargetUrl,
 }
 
 impl Feature {
@@ -76,6 +77,7 @@ impl Feature {
             Feature::AngleBrackets => "angle_brackets",
             Feature::Text => "text",
             Feature::Title => "title",
+            Feature::TargetUrl => "target_url",
         }
     }
 }

@@ -8,6 +8,7 @@ FACTS = {
     "media": "media",
     "mediaCount": "media_count",
     "title": "title",
+    "targetUrl": "target_url",
     "maxCharacters": "max_characters",
     "charactersReservedPerUrl": "characters_reserved_per_url",
     "captionLimit": "caption_limit",

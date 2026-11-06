@@ -163,7 +163,7 @@ export const load = (() => {
         throw new TypeError('target must be a string');
       }
 
-      const { title = null, entitiesAllowed = false, items = [] } = facts;
+      const { title = null, targetUrl = null, entitiesAllowed = false, items = [] } = facts;
       const kind = facts.media == null ? 0 : KINDS[facts.media];
 
       if (kind === undefined) {
@@ -172,6 +172,10 @@ export const load = (() => {
 
       if (title !== null && (typeof title !== 'string' || !title.isWellFormed())) {
         throw new TypeError('facts.title must be a well-formed string or null');
+      }
+
+      if (targetUrl !== null && (typeof targetUrl !== 'string' || !targetUrl.isWellFormed())) {
+        throw new TypeError('facts.targetUrl must be a well-formed string or null');
       }
 
       if (typeof entitiesAllowed !== 'boolean') {
@@ -190,6 +194,7 @@ export const load = (() => {
         kind,
         count(facts.mediaCount, 'facts.mediaCount') ?? 0,
         title ?? undefined,
+        targetUrl ?? undefined,
         count(facts.maxCharacters, 'facts.maxCharacters'),
         count(facts.charactersReservedPerUrl, 'facts.charactersReservedPerUrl'),
         count(facts.captionLimit, 'facts.captionLimit'),

@@ -72,7 +72,15 @@ static THREADS_FORM: EntityForm = EntityForm {
 
 pub static THREADS: Target = entities(
     "threads-entities",
-    rules!(Rules { spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"), ..DEFAULT }),
+    rules!(
+        Rules { spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"), ..DEFAULT },
+        Rule {
+            feature: Feature::TargetUrl,
+            class: TextualFallback,
+            reason: "target_url_as_text",
+            conditions: &[Condition { when: When::Overflow, class: Omitted, reason: "target_url_omitted" }],
+        },
+    ),
     &THREADS_FORM,
     &[limit(Text, ThreadsWeighted, 500)],
 );
