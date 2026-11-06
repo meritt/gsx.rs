@@ -5,7 +5,7 @@ import PackageDescription
 
 let release = (
     url: "https://github.com/meritt/gsx.rs/releases/download/v0.1.0/gsx-v0.1.0-xcframework.zip",
-    checksum: "0000000000000000000000000000000000000000000000000000000000000000"
+    checksum: "3ada74c1e2661550a743fe936ec26baa9721b68c6c01c003bc624a38ef4c106e"
 )
 
 let local = "packages/swift/GSXFFI.xcframework"
