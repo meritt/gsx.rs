@@ -10,6 +10,22 @@ pub(super) fn utf16_code_units(text: &str) -> usize {
     text.chars().map(char::len_utf16).sum()
 }
 
+pub(super) fn markers(text: &str, sigil: char, word: fn(char) -> bool) -> Vec<usize> {
+    let mut positions = vec![];
+    let mut previous: Option<char> = None;
+    let mut chars = text.char_indices().peekable();
+    while let Some((at, char)) = chars.next() {
+        if char == sigil
+            && previous.is_none_or(char::is_whitespace)
+            && chars.peek().is_some_and(|&(_, next)| word(next))
+        {
+            positions.push(at);
+        }
+        previous = Some(char);
+    }
+    positions
+}
+
 pub(super) fn graphemes(text: &str) -> usize {
     clusters(text).count()
 }

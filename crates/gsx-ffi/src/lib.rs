@@ -120,9 +120,12 @@ pub struct Facts {
     pub media_count: usize,
     pub title: *const u8,
     pub title_len: usize,
+    pub target_url: *const u8,
+    pub target_url_len: usize,
     pub max_characters: i64,
     pub characters_reserved_per_url: i64,
     pub caption_limit: i64,
+    pub description_limit: i64,
     pub entities_allowed: bool,
     pub items: *const MediaFact,
     pub items_len: usize,
@@ -154,7 +157,8 @@ impl Facts {
     }
 
     /// # Safety
-    /// `title` is `NULL` or points to `title_len` bytes.
+    /// `title` is `NULL` or points to `title_len` bytes; `target_url` is `NULL` or points to
+    /// `target_url_len` bytes.
     unsafe fn core<'a>(&'a self, items: &'a [CoreMediaFact<'a>]) -> Result<CoreFacts<'a>, String> {
         let limit = |value: i64, what: &str| match value {
             ..0 => Ok(None),
@@ -162,6 +166,8 @@ impl Facts {
         };
         // SAFETY: the caller promises `title` is NULL or points to `title_len` readable bytes.
         let title = unsafe { optional_string(self.title, self.title_len, "title") }?;
+        // SAFETY: the caller promises `target_url` is NULL or points to `target_url_len` readable bytes.
+        let target_url = unsafe { optional_string(self.target_url, self.target_url_len, "target_url") }?;
         Ok(CoreFacts {
             media: match self.media {
                 GSX_MEDIA_NONE => None,
@@ -171,9 +177,11 @@ impl Facts {
             },
             media_count: self.media_count,
             title,
+            target_url,
             max_characters: limit(self.max_characters, "max_characters")?,
             characters_reserved_per_url: limit(self.characters_reserved_per_url, "characters_reserved_per_url")?,
             caption_limit: limit(self.caption_limit, "caption_limit")?,
+            description_limit: limit(self.description_limit, "description_limit")?,
             entities_allowed: self.entities_allowed,
             items,
         })
@@ -419,9 +427,12 @@ mod tests {
             media_count: 1,
             title: title.as_ptr(),
             title_len: title.len(),
+            target_url: ptr::null(),
+            target_url_len: 0,
             max_characters: 100,
             characters_reserved_per_url: -1,
             caption_limit: -1,
+            description_limit: -1,
             entities_allowed: true,
             items: ptr::null(),
             items_len: 0,

@@ -11,6 +11,9 @@
 | `measurements` | one per limited field: unit, value, maximum; per-block limits carry the block index |
 | `changes` | every change, ordered by source position, uncapped |
 | `media` | selected items, covers, per-item changes |
+| `items` | targets outside `blocks`, when facts list media items: one `{reference, alt}` per item in fact order, with the alt fitted; a per-item measurement carries `item`, the index here, and no `block` |
+
+Alt is fitted per item on every target that declares an `alt` limit for the item's kind: the longest grapheme prefix with an ellipsis that fits (`media_alt_truncated`); when not even the ellipsis fits, the alt is dropped (`omitted` `media_alt_omitted`). The Mastodon limit is the instance `descriptionLimit` fact; without it alt is measured and not fitted.
 
 Media appear as references (`media:<id>`); the caller resolves URLs and builds the request.
 
@@ -28,6 +31,7 @@ Native output is not reported. A change has `feature`, `reason`, `field` and the
 
 - No change is silent: a datetime label, a nested quote on a `markdown` target, a code info string and the MAX spoiler each yield one.
 - Highlight keeps its content: `unwrapped`, never `omitted`.
+- Identical changes are reported once: in a `blocks` group every item shares the group's range, so two videos in a Slack slideshow give one `media_inline_unavailable`.
 - A change belongs to the field that produced it.
 
 ## Target table
@@ -48,7 +52,11 @@ All forms share block layout: one list-marker set, continuation lines indented b
 
 ## Fields
 
-A derived field (YouTube title, TikTok photo title, VK video name) declares its source (explicit fact, leading heading, first line), whether it leaves the body, its unit, maximum and truncation (ellipsis or hard). Every limited field is measured and fitted on its own; fitting one never cuts another.
+A derived field (YouTube title, TikTok photo title, VK video name) declares its source (explicit fact, leading heading, first line), whether it leaves the body, its unit, maximum and truncation (ellipsis or hard). Every limited field is measured and fitted on its own; fitting one never cuts another. The VK video name (field `title`, video only) is the whole body fitted again to its own limit; its rendering changes belong to `text`, so it reports only its truncation.
+
+A target URL (Threads reply or quote target) is appended to the body after a blank line, or replaces an empty body, and is never cut: the body is fitted with the URL counted, and the change is `textual_fallback` `target_url_as_text`. When `…`, a blank line and the URL alone exceed a limit, nothing is appended and the change is `omitted` `target_url_omitted`. Targets without a `target_url` rule ignore the fact.
+
+Instagram counts hashtags (`#` after the start or whitespace, then letters, digits or `_`) and mentions (`@`, then ASCII letters, digits, `.` or `_`) in each rendered probe, before measuring. Beyond the 30th hashtag or the 20th mention the sigil is removed and the word kept, with one `approximated` change per cap (`hashtag_limit_exceeded`, `mention_limit_exceeded`) carrying unit `hashtags` or `mentions`, the cap and the count. The caps are `text` limits in those units, so they are measured and never drive the cut.
 
 Generated ellipsis, cut position and the gap before a block are node fields. A truncated literal stays literal: escaping and entity detection treat it as authored text.
 

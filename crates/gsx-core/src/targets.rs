@@ -54,7 +54,15 @@ const DEFAULT: Rules = Rules {
     link_title: rule(Feature::LinkTitle, Omitted, "link_title_omitted"),
     datetime: rule(Feature::Datetime, TextualFallback, "datetime_label_as_text"),
     text: TEXT,
-    media: rule(Feature::Media, Approximated, "media_attached"),
+    media: Rule {
+        feature: Feature::Media,
+        class: Approximated,
+        reason: "media_attached",
+        conditions: &[
+            Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
+            Condition { when: When::Overflow, class: Omitted, reason: "media_alt_omitted" },
+        ],
+    },
 };
 
 macro_rules! rules {
@@ -93,9 +101,10 @@ mod limits {
     pub(super) use crate::measure::MediaKind::{Image, Video};
     pub(super) use crate::measure::Placement::{Post, Reel, Story};
     pub(super) use crate::measure::Unit::{
-        CodePoints, Graphemes, MastodonWeighted, ThreadsWeighted, Utf8Bytes, Utf16CodeUnits, XWeighted,
+        CodePoints, Graphemes, Hashtags, MastodonWeighted, Mentions, ThreadsWeighted, Utf8Bytes, Utf16CodeUnits,
+        XWeighted,
     };
-    pub(super) use crate::measure::{Fact, Limit, limit, resolved, unlimited};
+    pub(super) use crate::measure::{Fact, Limit, given, limit, resolved, unlimited};
 }
 
 mod blocks;

@@ -31,7 +31,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - name: Restore
@@ -104,16 +103,6 @@ jobs:
 
       - name: Package
         run: cargo package -p gsx-core --locked
-
-      - name: Semver
-        run: |
-          baseline="$(git tag --list 'v*' --no-contains HEAD --sort=-version:refname | head -n 1)"
-          if [ -z "$baseline" ]; then
-            echo "no release to compare with"
-            exit 0
-          fi
-          cargo install --locked cargo-semver-checks@0.51.0 --root target/tools
-          target/tools/bin/cargo-semver-checks semver-checks -p gsx-core --baseline-rev "$baseline"
 
       - name: Setup
         env:

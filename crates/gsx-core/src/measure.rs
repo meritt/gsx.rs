@@ -8,7 +8,7 @@ use std::ops::Range;
 
 pub use grapheme::{Clusters, clusters};
 pub use rules::{Condition, Context, Field, Limit, Maximum, Measurement, MediaKind, Placement, Rendering};
-pub(crate) use rules::{limit, resolved, unlimited};
+pub(crate) use rules::{given, limit, resolved, unlimited};
 pub use tables::UNICODE_VERSION;
 
 pub const X_URL_WEIGHT: usize = 23;
@@ -23,9 +23,15 @@ pub enum Unit {
     XWeighted,
     MastodonWeighted,
     ThreadsWeighted,
+    Hashtags,
+    Mentions,
 }
 
 impl Unit {
+    pub const fn counts_markers(self) -> bool {
+        matches!(self, Unit::Hashtags | Unit::Mentions)
+    }
+
     pub const fn name(self) -> &'static str {
         match self {
             Unit::Graphemes => "graphemes",
@@ -35,6 +41,8 @@ impl Unit {
             Unit::XWeighted => "x-weighted",
             Unit::MastodonWeighted => "mastodon-weighted",
             Unit::ThreadsWeighted => "threads-weighted",
+            Unit::Hashtags => "hashtags",
+            Unit::Mentions => "mentions",
         }
     }
 }
@@ -74,6 +82,15 @@ pub fn measure(unit: Unit, text: &str, facts: &Facts) -> u32 {
             facts.resolved(Fact::CharactersReservedPerUrl).unwrap_or(MASTODON_RESERVED_PER_URL) as usize,
         ),
         Unit::ThreadsWeighted => count::threads_weighted(text),
+        Unit::Hashtags | Unit::Mentions => markers(unit, text).len(),
     };
     u32::try_from(count).unwrap_or(u32::MAX)
+}
+
+pub fn markers(unit: Unit, text: &str) -> Vec<usize> {
+    match unit {
+        Unit::Hashtags => count::markers(text, '#', |char| char.is_alphanumeric() || char == '_'),
+        Unit::Mentions => count::markers(text, '@', |char| char.is_ascii_alphanumeric() || matches!(char, '.' | '_')),
+        _ => vec![],
+    }
 }

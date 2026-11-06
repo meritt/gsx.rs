@@ -56,9 +56,11 @@ fuzz_target!(|input: Input| {
         media: (count > 0).then_some(if input.video { MediaKind::Video } else { MediaKind::Image }),
         media_count: count,
         title: input.title,
+        target_url: None,
         max_characters: input.max_characters.map(u32::from),
         characters_reserved_per_url: input.characters_reserved_per_url.map(u32::from),
         caption_limit: input.caption_limit.map(u32::from),
+        description_limit: input.caption_limit.map(u32::from),
         entities_allowed: input.entities_allowed,
         items: &items,
     };

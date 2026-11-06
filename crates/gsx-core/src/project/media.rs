@@ -1,16 +1,22 @@
 use crate::document::{Kind, Layout, Node, Range};
-use crate::measure::{self, MediaKind, Placement};
+use crate::measure::{self, Fact, MediaKind, Placement};
 
 use super::change::{Change, Feature, FieldName, Truncated};
 use super::facts::{Facts, Format, MediaFact};
 use super::table::{BlocksForm, Target, When};
-use super::{Measurement, Unit, shortened};
+use super::{Measurement, shortened};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Item {
     pub reference: String,
     pub alt: Option<String>,
     pub spoiler: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attachment {
+    pub reference: String,
+    pub alt: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,6 +36,86 @@ pub(super) struct Laid {
     pub blocks: Vec<Block>,
     pub changes: Vec<Change>,
     pub measurements: Vec<Measurement>,
+}
+
+pub(super) struct Attached {
+    pub items: Vec<Attachment>,
+    pub changes: Vec<Change>,
+    pub measurements: Vec<Measurement>,
+}
+
+struct Alt {
+    text: Option<String>,
+    measurements: Vec<Measurement>,
+    change: Option<Change>,
+}
+
+fn fit_alt(
+    target: &'static Target,
+    alt: &str,
+    format: Format,
+    range: Option<Range>,
+    resolved: &[(Fact, u32)],
+    (block, item): (Option<usize>, usize),
+) -> Alt {
+    let context = measure::Context { placement: Placement::Post, media: kind(format) };
+    let facts = measure::Facts { resolved, ..measure::Facts::default() };
+    let limits: Vec<_> = target.applicable(FieldName::Alt, context).collect();
+    let fits = |text: &str| limits.iter().all(|limit| !limit.measure(text, &facts).exceeds());
+    let worst = limits.iter().map(|limit| limit.measure(alt, &facts)).find(measure::Measurement::exceeds);
+    let text = match worst {
+        Some(_) => Some(shortened(alt, fits)).filter(|kept| fits(kept)),
+        None => Some(alt.to_owned()),
+    };
+    let mut measurements = vec![];
+    if let Some(kept) = &text {
+        for limit in &limits {
+            let measured = limit.measure(kept, &facts);
+            measurements.push(Measurement {
+                field: FieldName::Alt,
+                unit: measured.unit,
+                value: measured.value as usize,
+                maximum: measured.maximum.map(|maximum| maximum as usize),
+                block,
+                item: Some(item),
+            });
+        }
+    }
+    let change = worst.map(|worst| {
+        let when = if text.is_some() { When::Truncated } else { When::Overflow };
+        let (class, reason) = target.rule(Feature::Media).outcome(Some(when));
+        let truncated = Truncated {
+            unit: worst.unit,
+            maximum: worst.maximum.unwrap_or(0) as usize,
+            value: worst.value as usize,
+            exact: false,
+        };
+        Change { class, feature: Feature::Media, reason, field: FieldName::Alt, range, truncated: Some(truncated) }
+    });
+    Alt { text, measurements, change }
+}
+
+fn authored<'a>(fact: &MediaFact<'a>) -> Option<&'a str> {
+    fact.alt.filter(|alt| !alt.trim().is_empty())
+}
+
+fn range_of(children: &[Node], id: &str) -> Option<Range> {
+    children.iter().find(|node| referenced(std::slice::from_ref(node), id)).map(|node| node.range)
+}
+
+pub(super) fn attach(target: &'static Target, facts: &Facts, children: &[Node]) -> Attached {
+    let resolved = super::resolved(facts);
+    let mut attached = Attached { items: vec![], changes: vec![], measurements: vec![] };
+    for (index, fact) in facts.items.iter().enumerate() {
+        let alt = authored(fact).and_then(|alt| {
+            let fitted = fit_alt(target, alt, fact.format, range_of(children, fact.id), &resolved, (None, index));
+            attached.measurements.extend(fitted.measurements);
+            attached.changes.extend(fitted.change);
+            fitted.text
+        });
+        attached.items.push(Attachment { reference: format!("media:{}", fact.id), alt });
+    }
+    attached
 }
 
 pub fn placed(node: &Node) -> Option<Vec<&str>> {
@@ -54,14 +140,17 @@ fn kind(format: Format) -> Option<MediaKind> {
 struct Layouter {
     target: &'static Target,
     form: &'static BlocksForm,
+    resolved: Vec<(Fact, u32)>,
     laid: Laid,
 }
 
 impl Layouter {
-    fn change(&mut self, field: FieldName, range: Option<Range>, when: When) -> &mut Change {
+    fn change(&mut self, field: FieldName, range: Option<Range>, when: When) {
         let (class, reason) = self.target.rule(Feature::Media).outcome(Some(when));
-        self.laid.changes.push(Change { class, feature: Feature::Media, reason, field, range, truncated: None });
-        self.laid.changes.last_mut().unwrap()
+        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None };
+        if !self.laid.changes.contains(&change) {
+            self.laid.changes.push(change);
+        }
     }
 
     fn item(&mut self, fact: &MediaFact, range: Option<Range>, slot: (usize, usize)) -> Item {
@@ -71,35 +160,13 @@ impl Layouter {
         if fact.spoiler && !self.form.spoiler {
             self.change(FieldName::Text, range, When::Spoiler);
         }
-        let alt = fact.alt.filter(|alt| !alt.trim().is_empty()).map(|alt| self.alt(alt, fact.format, range, slot));
+        let alt = authored(fact).and_then(|alt| {
+            let fitted = fit_alt(self.target, alt, fact.format, range, &self.resolved, (Some(slot.0), slot.1));
+            self.laid.measurements.extend(fitted.measurements);
+            self.laid.changes.extend(fitted.change);
+            fitted.text
+        });
         Item { reference: format!("media:{}", fact.id), alt, spoiler: fact.spoiler && self.form.spoiler }
-    }
-
-    fn alt(&mut self, alt: &str, format: Format, range: Option<Range>, (block, item): (usize, usize)) -> String {
-        let context = measure::Context { placement: Placement::Post, media: kind(format) };
-        let facts = measure::Facts::default();
-        let limits: Vec<_> = self.target.applicable(FieldName::Alt, context).collect();
-        let fits = |text: &str| limits.iter().all(|limit| !limit.measure(text, &facts).exceeds());
-        let worst = limits.iter().map(|limit| limit.measure(alt, &facts)).find(measure::Measurement::exceeds);
-        let kept = if worst.is_some() { shortened(alt, fits) } else { alt.to_owned() };
-        for limit in &limits {
-            let measured = limit.measure(&kept, &facts);
-            self.laid.measurements.push(Measurement {
-                field: FieldName::Alt,
-                unit: measured.unit,
-                value: measured.value as usize,
-                maximum: measured.maximum.map(|maximum| maximum as usize),
-                block: Some(block),
-                item: Some(item),
-            });
-        }
-        if let Some(worst) = worst {
-            let (unit, maximum, value): (Unit, usize, usize) =
-                (worst.unit, worst.maximum.unwrap_or(0) as usize, worst.value as usize);
-            self.change(FieldName::Alt, range, When::Truncated).truncated =
-                Some(Truncated { unit, maximum, value, exact: false });
-        }
-        kept
     }
 
     fn text(&mut self, text: &str) {
@@ -151,10 +218,14 @@ pub(super) fn layout(
     anchors: &[Anchor],
 ) -> Laid {
     let maximum = form.items.unwrap_or(usize::MAX);
-    let mut layouter = Layouter { target, form, laid: Laid { blocks: vec![], changes: vec![], measurements: vec![] } };
+    let mut layouter = Layouter {
+        target,
+        form,
+        resolved: super::resolved(facts),
+        laid: Laid { blocks: vec![], changes: vec![], measurements: vec![] },
+    };
     for fact in facts.items.iter().skip(maximum) {
-        let range = children.iter().find(|node| referenced(std::slice::from_ref(node), fact.id)).map(|node| node.range);
-        layouter.change(FieldName::Text, range, When::Count);
+        layouter.change(FieldName::Text, range_of(children, fact.id), When::Count);
     }
     let mut cursor = 0;
     for anchor in anchors {

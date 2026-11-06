@@ -23,7 +23,7 @@ pub use fit::WINDOW;
 pub(crate) use layout::blank;
 pub use layout::{CELL, ELLIPSIS, RULE, Writer, marker, single_line};
 pub use links::href;
-pub use media::{Block, Item, placed, referenced};
+pub use media::{Attachment, Block, Item, placed, referenced};
 pub use table::{
     BlocksForm, Condition, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm, LineStart,
     MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Structure, Style, Target, Truncation,
@@ -59,6 +59,7 @@ pub struct Projection {
     pub changes: Vec<Change>,
     pub media: Vec<String>,
     pub blocks: Vec<Block>,
+    pub items: Vec<Attachment>,
 }
 
 impl Projection {
@@ -276,7 +277,41 @@ fn render(
         Normalization::None => (written.text, written.links),
         Normalization::Nfc => normalized(&written.text, &written.links),
     };
-    Rendered { text, links, styled, changes: context.changes, anchors: context.anchors }
+    let mut rendered = Rendered { text, links, styled, changes: context.changes, anchors: context.anchors };
+    cap_markers(target, field, &mut rendered);
+    rendered
+}
+
+fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendered) {
+    for (unit, feature) in [(Unit::Hashtags, Feature::Hashtag), (Unit::Mentions, Feature::Mention)] {
+        let cap = target.limits.iter().find(|limit| limit.field == field && limit.unit == unit);
+        let Some(maximum) = cap.and_then(|limit| limit.maximum(&measure::Facts::default())) else {
+            continue;
+        };
+        let markers = measure::markers(unit, &rendered.text);
+        let Some(dropped) = markers.get(maximum as usize..).filter(|dropped| !dropped.is_empty()) else {
+            continue;
+        };
+        rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links);
+        let (class, reason) = target.rule(feature).outcome(None);
+        let truncated = Truncated { unit, maximum: maximum as usize, value: markers.len(), exact: true };
+        rendered.changes.push(Change { class, feature, reason, field, range: None, truncated: Some(truncated) });
+    }
+}
+
+fn without_sigils(text: &str, sigils: &[usize], links: &mut [Span<usize>]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0;
+    for &at in sigils {
+        out.push_str(&text[cursor..at]);
+        cursor = at + 1;
+    }
+    out.push_str(&text[cursor..]);
+    let shift = |offset: usize| offset - sigils.iter().take_while(|&&at| at < offset).count();
+    for link in links {
+        *link = shift(link.start)..shift(link.end);
+    }
+    out
 }
 
 fn normalized(text: &str, links: &[Span<usize>]) -> (String, Vec<Span<usize>>) {
@@ -314,17 +349,21 @@ struct Request<'a, 'b> {
     options: &'a Options,
 }
 
+fn resolved(facts: &Facts) -> Vec<(Fact, u32)> {
+    [
+        (Fact::MaxCharacters, facts.max_characters),
+        (Fact::CharactersReservedPerUrl, facts.characters_reserved_per_url),
+        (Fact::CaptionLimit, facts.caption_limit),
+        (Fact::DescriptionLimit, facts.description_limit),
+    ]
+    .into_iter()
+    .filter_map(|(fact, value)| value.map(|value| (fact, value)))
+    .collect()
+}
+
 impl Request<'_, '_> {
     fn resolved(&self) -> Vec<(Fact, u32)> {
-        let facts = self.facts;
-        [
-            (Fact::MaxCharacters, facts.max_characters),
-            (Fact::CharactersReservedPerUrl, facts.characters_reserved_per_url),
-            (Fact::CaptionLimit, facts.caption_limit),
-        ]
-        .into_iter()
-        .filter_map(|(fact, value)| value.map(|value| (fact, value)))
-        .collect()
+        resolved(self.facts)
     }
 
     fn measure(&self, unit: Unit, rendered: &Rendered) -> usize {
@@ -363,6 +402,12 @@ impl Request<'_, '_> {
             first.maximum = self.options.maximum.or(first.maximum);
         }
         limits
+    }
+
+    fn fits(&self, rendered: &Rendered) -> bool {
+        let limits = self.limits();
+        let values = self.values(&limits, rendered);
+        limits.iter().zip(values).all(|(limit, value)| limit.maximum.is_none_or(|maximum| value <= maximum))
     }
 
     fn values(&self, limits: &[Bound], rendered: &Rendered) -> Vec<usize> {
@@ -417,7 +462,12 @@ impl Request<'_, '_> {
         if outline.is_empty() {
             return overflow(full);
         }
-        let least = limits.iter().filter_map(|limit| limit.maximum).min().unwrap_or(maximum);
+        let least = limits
+            .iter()
+            .filter(|limit| !limit.unit.counts_markers())
+            .filter_map(|limit| limit.maximum)
+            .min()
+            .unwrap_or(maximum);
         let upper = bounded.then(|| outline.upper(least)).flatten().unwrap_or_else(|| outline.units() - 1);
         let load = |values: &[usize]| {
             limits
@@ -454,6 +504,18 @@ impl Request<'_, '_> {
         rendered.changes.push(change);
         Fitted { rendered, measurements: self.measurements(&limits, &fitted) }
     }
+}
+
+fn appended(mut rendered: Rendered, url: Option<&str>) -> Rendered {
+    if let Some(url) = url {
+        if !rendered.text.is_empty() {
+            rendered.text.push_str("\n\n");
+        }
+        let start = rendered.text.len();
+        rendered.text.push_str(url);
+        rendered.links.push(start..rendered.text.len());
+    }
+    rendered
 }
 
 fn without_first_line(text: &str) -> String {
@@ -550,16 +612,38 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         rendered
     };
 
+    let target_url = facts.target_url.filter(|_| target.handles(Feature::TargetUrl));
+
     let mut fields = vec![];
     let mut measurements = vec![];
     let mut changes = vec![];
     let mut required = vec![];
     let mut blocks = vec![];
+    let mut derived = false;
     for spec in target.fields(facts) {
         let request = Request { target, spec, facts, options };
         let fitted = match (spec.source, explicit, titled) {
             (Source::Body, ..) => {
-                request.fit(|| Outline::of_nodes(document, body), !removed, |cut| draw_body(spec.name, cut))
+                let suffix = target_url.filter(|_| !derived).filter(|url| {
+                    let fits = request.fits(&Rendered::text(format!("{ELLIPSIS}\n\n{url}")));
+                    if !fits {
+                        changes.push(request.change(Feature::TargetUrl, None, Some(When::Overflow)));
+                    }
+                    fits
+                });
+                let mut fitted = request.fit(
+                    || Outline::of_nodes(document, body),
+                    !removed,
+                    |cut| appended(draw_body(spec.name, cut), suffix),
+                );
+                if suffix.is_some() {
+                    fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));
+                }
+                if derived {
+                    fitted.rendered.changes.retain(|change| change.feature == Feature::Text);
+                }
+                derived = true;
+                fitted
             }
             (Source::Title { .. }, Some(title), _) => explicit_title(&request, title),
             (Source::Title { .. }, None, Some(heading)) => request.fit(
@@ -620,10 +704,17 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     } else {
         changes.append(&mut required);
     }
+    let mut items = vec![];
+    if target.form.blocks().is_none() {
+        let attached = media::attach(target, facts, children);
+        items = attached.items;
+        changes.extend(attached.changes);
+        measurements.extend(attached.measurements);
+    }
     changes.sort_by_key(|change| change.range.map(|range| range.start));
     let mut references = vec![];
     media(children, &mut references);
-    Projection { fields, measurements, changes, media: references, blocks }
+    Projection { fields, measurements, changes, media: references, blocks, items }
 }
 
 fn explicit_title(request: &Request, title: &str) -> Fitted {

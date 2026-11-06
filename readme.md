@@ -19,7 +19,7 @@ pnpm add @meritt/gsx-wasm
 Swift:
 
 ```swift
-.package(url: "https://github.com/meritt/gsx.rs", exact: "0.1.0")
+.package(url: "https://github.com/meritt/gsx.rs", exact: "0.1.1")
 ```
 
 Python:
@@ -62,6 +62,13 @@ gsx.project(text, 'telegram-entities', { entitiesAllowed: true }).fields[0];
 gsx.project('word '.repeat(80), 'x-plain');
 // measurements: [{ field: 'text', unit: 'x-weighted', value: 276, maximum: 280 }]
 // changes: [{ class: 'approximated', reason: 'text_truncated', range: [274, 400], … }]
+
+gsx.project('Reply **body**', 'threads-entities', { targetUrl: 'https://example.com/post/1' }).fields[0].text;
+// 'Reply body\n\nhttps://example.com/post/1'; changes: target_url_as_text, strong_unwrapped
+
+const photo = [{ id: 'p', format: 'image', alt: 'A long description' }];
+gsx.project('Photo\n\n::media{id="p"}', 'mastodon-plain', { descriptionLimit: 8, items: photo }, [{ id: 'p' }]).items;
+// [{ reference: 'media:p', alt: 'A long…' }]; changes: media_attached, media_alt_truncated
 
 gsx.parse('a\u0000'); // throws ParseError { code: 'MARKDOWN_INVALID_TEXT', range: [1, 2] }
 ```

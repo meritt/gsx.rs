@@ -1,4 +1,4 @@
-use super::limits::{Alt, CodePoints, Limit, Text, limit};
+use super::limits::{Alt, CodePoints, Image, Limit, Only, Text, limit};
 use super::plain::BODY;
 use super::{DEFAULT, Rules, rule};
 use crate::forms::markdown::RENDERER;
@@ -90,5 +90,9 @@ pub(super) static SLACK_FORM: MarkdownForm = MarkdownForm {
 pub(super) const SLACK_RULES: Rules =
     Rules { code_block: Rule { conditions: &[INFO], ..DEFAULT.code_block }, ..DEFAULT };
 
-pub static SLACK: Target =
-    markdown("slack-markdown", rules!(SLACK_RULES), &SLACK_FORM, &[limit(Text, CodePoints, 12000)]);
+pub static SLACK: Target = markdown(
+    "slack-markdown",
+    rules!(SLACK_RULES),
+    &SLACK_FORM,
+    &[limit(Text, CodePoints, 12000), limit(Alt, CodePoints, 1000).when(Only(Image))],
+);

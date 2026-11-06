@@ -116,9 +116,13 @@ export interface Facts {
   media?: 'image' | 'video' | null;
   mediaCount?: number;
   title?: string | null;
+  /** Appended after the body on targets that declare `target_url`; never cut. */
+  targetUrl?: string | null;
   maxCharacters?: number | null;
   charactersReservedPerUrl?: number | null;
   captionLimit?: number | null;
+  /** Mastodon instance media description limit in code points; without it alt is not fitted. */
+  descriptionLimit?: number | null;
   entitiesAllowed?: boolean;
   items?: Iterable<MediaFact>;
 }
@@ -143,7 +147,9 @@ export type Unit =
   | 'utf8-bytes'
   | 'x-weighted'
   | 'mastodon-weighted'
-  | 'threads-weighted';
+  | 'threads-weighted'
+  | 'hashtags'
+  | 'mentions';
 
 export type Class = 'approximated' | 'textual_fallback' | 'unwrapped' | 'omitted' | 'blocked';
 
@@ -170,7 +176,10 @@ export type Feature =
   | 'datetime'
   | 'angle_brackets'
   | 'text'
-  | 'title';
+  | 'title'
+  | 'target_url'
+  | 'hashtag'
+  | 'mention';
 
 /** Entity ranges are in the target's `offsets` unit; links are UTF-16 ranges of the field text. */
 export interface Entity {
@@ -191,7 +200,7 @@ export interface Measurement {
   unit: Unit;
   value: number;
   maximum: number | null;
-  /** Indexes of the measured block and media item, for per-item limits of blocks targets. */
+  /** Per-item limits: the block and the item in it on blocks targets, else the index in `items`. */
   block?: number;
   item?: number;
 }
@@ -229,6 +238,13 @@ export interface Projection {
   media: string[];
   /** Present for targets of the `blocks/1` form only. */
   blocks?: Block[];
+  /** Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items. */
+  items?: Attachment[];
+}
+
+export interface Attachment {
+  reference: string;
+  alt: string | null;
 }
 
 export type ProjectionWire = { projection: Projection } | { error: WireError };

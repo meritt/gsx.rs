@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, List, NamedTuple, Optional, Tuple
 
 __all__ = [
+    "Attachment",
     "Block",
     "Change",
     "Details",
@@ -270,6 +271,8 @@ class Facts:
     caption_limit: Optional[int] = None
     entities_allowed: bool = False
     items: Tuple[MediaFact, ...] = ()
+    target_url: Optional[str] = None
+    description_limit: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -296,8 +299,14 @@ class Measurement:
     value: int
     maximum: Optional[int]
     block: Optional[int] = None
-    """Indexes of the measured block and media item, for per-item limits of blocks targets."""
+    """Per-item limits: the block and the item in it on blocks targets, else the index in items."""
     item: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class Attachment:
+    reference: str
+    alt: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -343,6 +352,8 @@ class Projection:
     media: List[str]
     blocks: Optional[List[Block]] = None
     """Present for targets of the blocks/1 form only."""
+    items: Optional[List[Attachment]] = None
+    """Outside the blocks/1 form, one per media fact item with its fitted alt; absent without items."""
 
 
 @dataclass(frozen=True)
@@ -372,9 +383,12 @@ class _Facts(ctypes.Structure):
         ("media_count", ctypes.c_size_t),
         ("title", ctypes.c_char_p),
         ("title_len", ctypes.c_size_t),
+        ("target_url", ctypes.c_char_p),
+        ("target_url_len", ctypes.c_size_t),
         ("max_characters", ctypes.c_int64),
         ("characters_reserved_per_url", ctypes.c_int64),
         ("caption_limit", ctypes.c_int64),
+        ("description_limit", ctypes.c_int64),
         ("entities_allowed", ctypes.c_bool),
         ("items", ctypes.POINTER(_MediaFact)),
         ("items_len", ctypes.c_size_t),
@@ -414,7 +428,8 @@ def _facts(facts: Facts) -> _Facts:
     if not isinstance(count, int) or isinstance(count, bool) or not 0 <= count < 1 << 8 * ctypes.sizeof(ctypes.c_size_t):
         raise ValueError("facts.media_count must be a non-negative int that fits size_t")
     title = None if facts.title is None else facts.title.encode("utf-8")
-    items = (_MediaFact * len(facts.items))()
+    target_url = None if facts.target_url is None else facts.target_url.encode("utf-8")
+    items =(_MediaFact * len(facts.items))()
     for index, item in enumerate(facts.items):
         if item.format not in _FORMATS:
             raise ValueError("facts.items format must be 'image', 'gif', 'video' or 'audio'")
@@ -428,9 +443,12 @@ def _facts(facts: Facts) -> _Facts:
         facts.media_count,
         title,
         0 if title is None else len(title),
+        target_url,
+        0 if target_url is None else len(target_url),
         _limit(facts.max_characters, "facts.max_characters"),
         _limit(facts.characters_reserved_per_url, "facts.characters_reserved_per_url"),
         _limit(facts.caption_limit, "facts.caption_limit"),
+        _limit(facts.description_limit, "facts.description_limit"),
         bool(facts.entities_allowed),
         items,
         len(facts.items),
@@ -484,6 +502,7 @@ def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Medi
         ],
         media=projection["media"],
         blocks=None if "blocks" not in projection else [_block(block) for block in projection["blocks"]],
+        items=None if "items" not in projection else [Attachment(**item) for item in projection["items"]],
     )
 
 

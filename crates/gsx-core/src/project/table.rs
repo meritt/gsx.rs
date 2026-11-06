@@ -79,6 +79,7 @@ impl Rule {
 pub enum Media {
     Any,
     Image,
+    Video,
 }
 
 impl Media {
@@ -86,6 +87,7 @@ impl Media {
         match self {
             Media::Any => true,
             Media::Image => media == Some(MediaKind::Image),
+            Media::Video => media == Some(MediaKind::Video),
         }
     }
 }
@@ -399,6 +401,10 @@ impl Target {
             .iter()
             .find(|rule| rule.feature == feature)
             .unwrap_or_else(|| panic!("{} declares no rule for {}", self.name, feature.name()))
+    }
+
+    pub fn handles(&self, feature: Feature) -> bool {
+        self.rules.iter().any(|rule| rule.feature == feature)
     }
 
     pub fn class(&self, feature: Feature) -> Class {

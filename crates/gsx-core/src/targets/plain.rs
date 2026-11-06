@@ -1,6 +1,6 @@
 use super::limits::{
-    Alt, CodePoints, Description, Fact, Image, Limit, MastodonWeighted, Only, Post, Text, Title, Utf8Bytes,
-    Utf16CodeUnits, Video, XWeighted, limit, resolved, unlimited,
+    Alt, CodePoints, Description, Fact, Hashtags, Image, Limit, MastodonWeighted, Mentions, Only, Post, Text, Title,
+    Utf8Bytes, Utf16CodeUnits, Video, XWeighted, given, limit, resolved, unlimited,
 };
 use super::{DEFAULT, Rules, rule};
 use crate::forms::plain::RENDERER;
@@ -60,10 +60,7 @@ pub static MASTODON: Target = text(
     "mastodon-plain",
     plain!(&[]),
     BODY,
-    &[
-        resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500),
-        resolved(Alt, CodePoints, Fact::DescriptionLimit, 1500),
-    ],
+    &[resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500), given(Alt, CodePoints, Fact::DescriptionLimit)],
 );
 
 pub static LINKEDIN: Target = text(
@@ -80,16 +77,28 @@ pub static FACEBOOK: Target =
 pub static INSTAGRAM: Target = text(
     Escape::None,
     "instagram-plain",
-    plain!(&[]),
+    plain!(
+        &[],
+        rule(Feature::Hashtag, Approximated, "hashtag_limit_exceeded"),
+        rule(Feature::Mention, Approximated, "mention_limit_exceeded"),
+    ),
     BODY,
-    &[limit(Text, CodePoints, 2200), limit(Alt, CodePoints, 1000)],
+    &[
+        limit(Text, CodePoints, 2200),
+        limit(Text, Hashtags, 30),
+        limit(Text, Mentions, 20),
+        limit(Alt, CodePoints, 1000),
+    ],
 );
 
 pub static VK: Target = text(
     Escape::None,
     "vk-plain",
     plain!(&[]),
-    BODY,
+    &[
+        field(FieldName::Text, Media::Any, Source::Body, false),
+        field(FieldName::Title, Media::Video, Source::Body, false),
+    ],
     &[
         unlimited(Text, CodePoints),
         limit(Title, CodePoints, 128).when(Only(Video)),

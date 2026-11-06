@@ -56,6 +56,19 @@
           "description": "Present for targets of the blocks/1 form only: text and media laid out in order.",
           "type": "array",
           "items": { "$ref": "#/$defs/block" }
+        },
+        "items": {
+          "description": "Outside the blocks/1 form, one per media fact item with its fitted alt; absent without items.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reference": { "type": "string" },
+              "alt": { "$ref": "#/$defs/nullableString" }
+            },
+            "required": ["reference", "alt"],
+            "additionalProperties": false
+          }
         }
       },
       "required": ["fields", "measurements", "changes", "media"],
@@ -129,7 +142,9 @@
         "utf8-bytes",
         "x-weighted",
         "mastodon-weighted",
-        "threads-weighted"
+        "threads-weighted",
+        "hashtags",
+        "mentions"
       ]
     },
     "measurement": {
@@ -140,10 +155,13 @@
         "value": { "$ref": "#/$defs/count" },
         "maximum": { "oneOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] },
         "block": { "description": "Index of the measured block, with item.", "$ref": "#/$defs/count" },
-        "item": { "description": "Index of the measured media item in the block.", "$ref": "#/$defs/count" }
+        "item": {
+          "description": "Index of the measured media item in the block, or in projection items outside the blocks/1 form.",
+          "$ref": "#/$defs/count"
+        }
       },
       "required": ["field", "unit", "value", "maximum"],
-      "dependentRequired": { "block": ["item"], "item": ["block"] },
+      "dependentRequired": { "block": ["item"] },
       "additionalProperties": false
     },
     "change": {
@@ -174,7 +192,10 @@
             "datetime",
             "angle_brackets",
             "text",
-            "title"
+            "title",
+            "target_url",
+            "hashtag",
+            "mention"
           ]
         },
         "reason": { "type": "string", "pattern": "^[a-z0-9_]+$" },
