@@ -16,7 +16,7 @@ use crate::document::{Document, Kind, Node, Provenance, Range};
 use crate::measure::{self, Fact};
 
 pub use crate::measure::{MediaKind, Placement, Unit};
-pub use change::{Change, Class, Feature, FieldName, Truncated};
+pub use change::{Change, Class, Feature, FieldName, Slot, Truncated};
 pub use entities::Entity;
 pub use facts::{Facts, Format, MediaFact};
 pub use fit::WINDOW;
@@ -87,11 +87,16 @@ pub struct Context<'a> {
     allowed: bool,
     items: &'a [MediaFact<'a>],
     anchors: Vec<Anchor>,
+    alts: Vec<(usize, Option<String>)>,
 }
 
 impl<'a> Context<'a> {
     pub fn items(&self) -> &[MediaFact<'_>] {
         self.items
+    }
+
+    pub fn published_alt(&mut self, item: usize, alt: Option<String>) {
+        self.alts.push((item, alt));
     }
 
     pub fn anchor(&mut self, node: Option<&Node>) {
@@ -136,7 +141,7 @@ impl<'a> Context<'a> {
 
     pub fn report_when(&mut self, feature: Feature, range: Option<Range>, when: Option<When>) {
         let (class, reason) = self.target.rule(feature).outcome(when);
-        self.changes.push(Change { class, feature, reason, field: self.field, range, truncated: None });
+        self.changes.push(Change { class, feature, reason, field: self.field, range, truncated: None, slot: None });
     }
 
     pub fn record(&mut self, change: Change) {
@@ -230,11 +235,12 @@ struct Rendered {
     styled: Vec<Styled>,
     changes: Vec<Change>,
     anchors: Vec<Anchor>,
+    alts: Vec<(usize, Option<String>)>,
 }
 
 impl Rendered {
     fn text(text: String) -> Self {
-        Rendered { text, links: vec![], styled: vec![], changes: vec![], anchors: vec![] }
+        Rendered { text, links: vec![], styled: vec![], changes: vec![], anchors: vec![], alts: vec![] }
     }
 }
 
@@ -257,6 +263,7 @@ fn render(
         allowed: facts.entities_allowed,
         items: facts.items,
         anchors: vec![],
+        alts: vec![],
     };
     draw(&mut context);
     let mut written = std::mem::replace(&mut context.writer, Writer::new(Escape::None)).finish();
@@ -277,7 +284,8 @@ fn render(
         Normalization::None => (written.text, written.links),
         Normalization::Nfc => normalized(&written.text, &written.links),
     };
-    let mut rendered = Rendered { text, links, styled, changes: context.changes, anchors: context.anchors };
+    let mut rendered =
+        Rendered { text, links, styled, changes: context.changes, anchors: context.anchors, alts: context.alts };
     cap_markers(target, field, &mut rendered);
     rendered
 }
@@ -294,8 +302,8 @@ fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendere
         };
         rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links);
         let (class, reason) = target.rule(feature).outcome(None);
-        let truncated = Truncated { unit, maximum: maximum as usize, value: markers.len(), exact: true };
-        rendered.changes.push(Change { class, feature, reason, field, range: None, truncated: Some(truncated) });
+        let truncated = Some(Truncated { unit, maximum, value: markers.len() as u32, exact: true });
+        rendered.changes.push(Change { class, feature, reason, field, range: None, truncated, slot: None });
     }
 }
 
@@ -380,7 +388,7 @@ impl Request<'_, '_> {
 
     fn change(&self, feature: Feature, range: Option<Range>, when: Option<When>) -> Change {
         let (class, reason) = self.target.rule(feature).outcome(when);
-        Change { class, feature, reason, field: self.spec.name, range, truncated: None }
+        Change { class, feature, reason, field: self.spec.name, range, truncated: None, slot: None }
     }
 
     fn limits(&self) -> Vec<Bound> {
@@ -500,7 +508,7 @@ impl Request<'_, '_> {
             probes.remove(&cut.key()).and_then(|(_, probe)| probe).expect("the kept cut was probed and fits");
         let (range, exact) = cut.dropped(outline.end());
         let mut change = self.change(Feature::Text, Some(range), None);
-        change.truncated = Some(Truncated { unit, maximum, value, exact });
+        change.truncated = Some(Truncated { unit, maximum: maximum as u32, value: value as u32, exact });
         rendered.changes.push(change);
         Fitted { rendered, measurements: self.measurements(&limits, &fitted) }
     }
@@ -619,6 +627,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     let mut changes = vec![];
     let mut required = vec![];
     let mut blocks = vec![];
+    let mut alts = vec![];
     let mut derived = false;
     for spec in target.fields(facts) {
         let request = Request { target, spec, facts, options };
@@ -671,6 +680,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             required.push(request.change(Feature::Title, None, Some(When::Empty)));
         }
         changes.append(&mut rendered.changes);
+        alts.append(&mut rendered.alts);
         measurements.extend(measured);
         if let (Some(form), Source::Body) = (target.form.blocks(), spec.source) {
             let laid = media::layout(target, form, facts, body, &rendered.text, &rendered.anchors);
@@ -700,6 +710,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             field,
             range: Some(Range { start: 0, end }),
             truncated: None,
+            slot: None,
         });
     } else {
         changes.append(&mut required);
@@ -708,6 +719,9 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     if target.form.blocks().is_none() {
         let attached = media::attach(target, facts, children);
         items = attached.items;
+        for (index, alt) in alts {
+            items[index].alt = alt;
+        }
         changes.extend(attached.changes);
         measurements.extend(attached.measurements);
     }

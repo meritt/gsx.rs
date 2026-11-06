@@ -76,7 +76,7 @@ export const load = (() => {
     return [ids, covers];
   }
 
-  const KINDS = { image: 1, video: 2 };
+  const KINDS = { image: 1, video: 2, gif: 3, audio: 4 };
   const FORMATS = { image: 0, gif: 1, video: 2, audio: 3 };
 
   function mediaFacts(items) {
@@ -167,7 +167,7 @@ export const load = (() => {
       const kind = facts.media == null ? 0 : KINDS[facts.media];
 
       if (kind === undefined) {
-        throw new TypeError("facts.media must be 'image', 'video', null or undefined");
+        throw new TypeError("facts.media must be 'image', 'video', 'gif', 'audio', null or undefined");
       }
 
       if (title !== null && (typeof title !== 'string' || !title.isWellFormed())) {

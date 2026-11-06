@@ -35,6 +35,7 @@ const MEDIA: Rule = Rule {
         Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
         Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" },
         Condition { when: When::Count, class: Omitted, reason: "media_count_exceeded" },
+        Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
         Condition { when: When::Inline, class: Blocked, reason: "media_inline_unavailable" },
         Condition { when: When::Blocks, class: Blocked, reason: "blocks_too_many" },
     ],

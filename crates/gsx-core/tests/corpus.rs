@@ -46,6 +46,8 @@ fn facts<'a>(json: &'a Json, items: &'a [MediaFact<'a>]) -> Facts<'a> {
             None => None,
             Some("image") => Some(MediaKind::Image),
             Some("video") => Some(MediaKind::Video),
+            Some("gif") => Some(MediaKind::Gif),
+            Some("audio") => Some(MediaKind::Audio),
             Some(other) => panic!("no media kind {other}"),
         },
         caption_limit: match json.get("captionLimit") {

@@ -30,7 +30,7 @@ One wire format for every binding: JSON of the `gsx/1` model, written by `gsx_co
 - Swift: `GSXFFI.xcframework` holds a universal static library for `arm64` and `x86_64`. `Package.swift` pins the release binary by URL and checksum.
 - Python: wheels `py3-none-<platform>` for macOS `universal2` and for `manylinux_2_28` and `musllinux_1_2` on `x86_64` and `aarch64`, each built in its PyPA image. No ABI tag, so any Python 3 loads them. musl links C statically by default, which rules out a cdylib, so the musl build turns `crt-static` off. CI runs the images with `docker run` rather than as job containers, because JavaScript actions cannot run in musl containers on Arm.
 - Release artifacts have fixed entry order, times and modes, and remap the workspace, Cargo home and Rust sources to `/gsx`, `/cargo` and `/rustc/<commit>`, so the checksum pinned in `Package.swift` before tagging is the checksum of the tagged build.
-- `gsx.wasm` has a gzip budget of 340 000 bytes, enforced by `cargo xtask replay`.
+- `gsx.wasm` has a gzip budget of 345 000 bytes, enforced by `cargo xtask replay`.
 
 ## Wire format
 
@@ -39,7 +39,7 @@ One wire format for every binding: JSON of the `gsx/1` model, written by `gsx_co
 - The writer maps the model with exhaustive matches: a model change fails to compile until the mapping and the schema follow.
 - `serialize(text, media)` returns `{"serialized":"…"}` or the parse error ([serialize.md](serialize.md)).
 - `project(text, target, facts, media)` parses and projects in one call and returns `{"projection":{"fields","measurements","changes","media"}}`, plus `"blocks"` for a blocks target, or the parse error. It takes text rather than a document because the bindings hold no Rust handles and a parse costs little next to a projection. A field carries `links` as UTF-16 ranges of its text and `entities` in the target's offset unit; a blocked change carries `code`.
-- Facts cross as plain values: a `gsx_facts` struct at the C ABI (negative limit, NULL title or alt for none); arguments in Wasm (media kind 0 none, 1 image, 2 video; media as parallel arrays of ids, formats 0 image, 1 GIF, 2 video, 3 audio, alts a string or `undefined`, flags bit 0 spoiler, bit 1 inline).
+- Facts cross as plain values: a `gsx_facts` struct at the C ABI (negative limit, NULL title or alt for none); arguments in Wasm (media kind 0 none, 1 image, 2 video, 3 GIF, 4 audio, the `GSX_MEDIA_*` values at the C ABI; media as parallel arrays of ids, formats 0 image, 1 GIF, 2 video, 3 audio, alts a string or `undefined`, flags bit 0 spoiler, bit 1 inline).
 - `targets()` returns `{"targets":[{"name","form","offsets","digest","manifest"}]}` in table order.
 - Every binding exposes the raw JSON (`parseJSON`, `parse_json`, `projectJSON`, `project_json`) beside the typed decoder. `cargo xtask replay` installs each package as a consumer, replays the corpus and compares the raw JSON with the Rust writer byte for byte. Projection cases are the corpus target inputs against every target, once without facts and once with every fact set.
 

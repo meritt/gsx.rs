@@ -11,11 +11,13 @@
 | `measurements` | one per limited field: unit, value, maximum; per-block limits carry the block index |
 | `changes` | every change, ordered by source position, uncapped |
 | `media` | selected items, covers, per-item changes |
-| `items` | targets outside `blocks`, when facts list media items: one `{reference, alt}` per item in fact order, with the alt fitted; a per-item measurement carries `item`, the index here, and no `block` |
+| `items` | targets outside `blocks`, when facts list media items: one `{reference, alt}` per item in fact order, with the alt as published (fitted, or on `telegram-html-rich` cut or dropped with its figcaption by the text budget); a per-item measurement carries `item`, the index here, and no `block` |
 
 Alt is fitted per item on every target that declares an `alt` limit for the item's kind: the longest grapheme prefix with an ellipsis that fits (`media_alt_truncated`); when not even the ellipsis fits, the alt is dropped (`omitted` `media_alt_omitted`). The Mastodon limit is the instance `descriptionLimit` fact; without it alt is measured and not fitted.
 
 Media appear as references (`media:<id>`); the caller resolves URLs and builds the request.
+
+A directive id absent from the `items` fact is a medium the caller dropped (a gateway rejection, a size or variant filter, an offline analysis). `telegram-html-rich` and `blocks` targets remove that id from its directive, and the directive itself when no id is left, with one `omitted` `media_missing` change per directive; the surrounding text closes up as if the directive were absent, with no empty section at an edge and one separator between its neighbours. A group left with one item is placed as a single item and reports no split. `media_inline_unavailable` stays blocking: it reports a listed item that is not `inline` or whose format the form cannot place.
 
 ## Changes
 
@@ -27,7 +29,7 @@ Media appear as references (`media:<id>`); the caller resolves URLs and builds t
 | `omitted` | the construct and its content are removed |
 | `blocked` | the projection cannot be published; carries a code |
 
-Native output is not reported. A change has `feature`, `reason`, `field` and the source range. Reasons are `<feature>_<outcome>`, one per cause, with no target prefix unless the cause is target-specific. An empty projection is one `blocked` change.
+Native output is not reported. A change has `feature`, `reason`, `field` and the source range; an alt change (`media_alt_truncated`, `media_alt_omitted`) also carries the item index, and on `blocks` targets the block index, as its alt measurement does, since items of one group share the group's range. Reasons are `<feature>_<outcome>`, one per cause, with no target prefix unless the cause is target-specific. An empty projection is one `blocked` change.
 
 - No change is silent: a datetime label, a nested quote on a `markdown` target, a code info string and the MAX spoiler each yield one.
 - Highlight keeps its content: `unwrapped`, never `omitted`.

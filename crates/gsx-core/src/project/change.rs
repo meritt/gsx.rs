@@ -88,12 +88,22 @@ impl Feature {
 
 pub use crate::measure::Field as FieldName;
 
+/// Counts are `u32`, like document ranges, so that a `Change` stays 56 bytes with no drop glue:
+/// fitting builds and drops every change once per probe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Truncated {
     pub unit: Unit,
-    pub maximum: usize,
-    pub value: usize,
+    pub maximum: u32,
+    pub value: u32,
     pub exact: bool,
+}
+
+/// The media item a change is about: its index in the block, or in projection items outside
+/// the blocks/1 form, and on blocks targets the block's index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slot {
+    pub block: Option<u32>,
+    pub item: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -104,6 +114,7 @@ pub struct Change {
     pub field: FieldName,
     pub range: Option<Range>,
     pub truncated: Option<Truncated>,
+    pub slot: Option<Slot>,
 }
 
 impl Change {

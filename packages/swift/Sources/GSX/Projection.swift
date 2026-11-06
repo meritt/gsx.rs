@@ -1,7 +1,16 @@
 import GSXFFI
 
 public enum MediaKind: String, Sendable, Hashable, Decodable {
-    case image, video
+    case image, video, gif, audio
+
+    var native: UInt32 {
+        switch self {
+        case .image: UInt32(GSX_MEDIA_IMAGE)
+        case .video: UInt32(GSX_MEDIA_VIDEO)
+        case .gif: UInt32(GSX_MEDIA_GIF)
+        case .audio: UInt32(GSX_MEDIA_AUDIO)
+        }
+    }
 }
 
 /// An attached media item, matched to media references by `id`.
@@ -201,9 +210,12 @@ public struct Change: Sendable, Hashable, Decodable {
     public let field: FieldName
     public let range: Range<Int>?
     public let truncated: Truncated?
+    /// Alt changes: the block and the item in it on blocks targets, else the index in `items`.
+    public let block: Int?
+    public let item: Int?
 
     enum CodingKeys: String, CodingKey {
-        case kind = "class", feature, reason, code, field, range, truncated
+        case kind = "class", feature, reason, code, field, range, truncated, block, item
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::document::{Kind, Layout, Node, Range};
 use crate::measure::{self, Fact, MediaKind, Placement};
 
-use super::change::{Change, Feature, FieldName, Truncated};
+use super::change::{Change, Feature, FieldName, Slot, Truncated};
 use super::facts::{Facts, Format, MediaFact};
 use super::table::{BlocksForm, Target, When};
 use super::{Measurement, shortened};
@@ -84,13 +84,17 @@ fn fit_alt(
     let change = worst.map(|worst| {
         let when = if text.is_some() { When::Truncated } else { When::Overflow };
         let (class, reason) = target.rule(Feature::Media).outcome(Some(when));
-        let truncated = Truncated {
-            unit: worst.unit,
-            maximum: worst.maximum.unwrap_or(0) as usize,
-            value: worst.value as usize,
-            exact: false,
-        };
-        Change { class, feature: Feature::Media, reason, field: FieldName::Alt, range, truncated: Some(truncated) }
+        let truncated =
+            Truncated { unit: worst.unit, maximum: worst.maximum.unwrap_or(0), value: worst.value, exact: false };
+        Change {
+            class,
+            feature: Feature::Media,
+            reason,
+            field: FieldName::Alt,
+            range,
+            truncated: Some(truncated),
+            slot: Some(Slot { block: block.map(|block| block as u32), item: item as u32 }),
+        }
     });
     Alt { text, measurements, change }
 }
@@ -133,7 +137,7 @@ fn kind(format: Format) -> Option<MediaKind> {
     match format {
         Format::Image | Format::Gif => Some(MediaKind::Image),
         Format::Video => Some(MediaKind::Video),
-        Format::Audio => None,
+        Format::Audio => Some(MediaKind::Audio),
     }
 }
 
@@ -147,7 +151,7 @@ struct Layouter {
 impl Layouter {
     fn change(&mut self, field: FieldName, range: Option<Range>, when: When) {
         let (class, reason) = self.target.rule(Feature::Media).outcome(Some(when));
-        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None };
+        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None, slot: None };
         if !self.laid.changes.contains(&change) {
             self.laid.changes.push(change);
         }
@@ -227,6 +231,11 @@ pub(super) fn layout(
     for fact in facts.items.iter().skip(maximum) {
         layouter.change(FieldName::Text, range_of(children, fact.id), When::Count);
     }
+    for node in children {
+        if placed(node).is_some_and(|ids| ids.iter().any(|id| facts.items.iter().all(|item| item.id != *id))) {
+            layouter.change(FieldName::Text, Some(node.range), When::Missing);
+        }
+    }
     let mut cursor = 0;
     for anchor in anchors {
         layouter.text(&text[cursor..anchor.at]);
@@ -243,10 +252,7 @@ pub(super) fn layout(
         for id in placed(node).unwrap_or_default() {
             match facts.items.iter().position(|item| item.id == id) {
                 Some(index) if index < maximum => kept.push(&facts.items[index]),
-                Some(_) => {}
-                None => {
-                    layouter.change(FieldName::Text, Some(node.range), When::Inline);
-                }
+                _ => {}
             }
         }
         layouter.media(&kept, Some(node), anchor.cut);

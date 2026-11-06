@@ -113,7 +113,7 @@ export interface WireError {
 export type Wire = { document: Document } | { error: WireError };
 
 export interface Facts {
-  media?: 'image' | 'video' | null;
+  media?: 'image' | 'video' | 'gif' | 'audio' | null;
   mediaCount?: number;
   title?: string | null;
   /** Appended after the body on targets that declare `target_url`; never cut. */
@@ -229,6 +229,9 @@ export interface Change {
   field: FieldName;
   range: Range | null;
   truncated: Truncated | null;
+  /** Alt changes: the block and the item in it on blocks targets, else the index in `items`. */
+  block?: number;
+  item?: number;
 }
 
 export interface Projection {

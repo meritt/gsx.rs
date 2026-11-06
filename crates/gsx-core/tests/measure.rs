@@ -110,6 +110,9 @@ fn selects_limits_by_field_and_context() {
     assert_eq!(maximum(POST), [Fixed(4096)]);
     assert_eq!(maximum(with(Placement::Post)), [Fixed(1024)]);
     assert_eq!(maximum(with(Placement::Story)), [Fixed(2048)]);
+    for media in [MediaKind::Video, MediaKind::Gif, MediaKind::Audio] {
+        assert_eq!(maximum(Context { placement: Placement::Post, media: Some(media) }), [Fixed(1024)]);
+    }
     assert!(telegram.applicable(Field::Text, POST).all(|limit| limit.rendering == Rendering::Visible));
     let bluesky = target("bluesky-entities").unwrap();
     let units: Vec<_> = bluesky.applicable(Field::Text, POST).map(|limit| limit.unit).collect();

@@ -2,8 +2,8 @@ use super::{media, wrapper};
 use crate::document::{Align, Kind, Layout, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
-    CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Truncated, When,
-    blank, href, marker, placed, referenced, shortened,
+    CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Slot, Truncated,
+    When, blank, href, marker, placed, referenced, shortened,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks: render, inline: render_inline };
@@ -46,7 +46,7 @@ struct Figure {
     end: usize,
     group: bool,
     range: Option<Range>,
-    alts: Vec<Option<String>>,
+    alts: Vec<(usize, Option<String>)>,
 }
 
 fn form(context: &Context) -> &'static HtmlForm {
@@ -419,12 +419,16 @@ impl Html {
 
     fn resolve(&self, context: &mut Context, node: &Node, ids: &[&str]) -> Vec<usize> {
         let mut kept = vec![];
+        let mut missing = false;
         for id in ids {
             match self.media.iter().position(|medium| medium.id == *id) {
                 Some(index) if index < self.limit() => kept.push(index),
                 Some(_) => {}
-                None => context.report_when(Feature::Media, Some(node.range), Some(When::Inline)),
+                None => missing = true,
             }
+        }
+        if missing {
+            context.report_when(Feature::Media, Some(node.range), Some(When::Missing));
         }
         kept
     }
@@ -446,7 +450,7 @@ impl Html {
         let markup = self.medium(index);
         context.writer().raw(&markup);
         let end = context.writer().mark();
-        let alts = vec![self.media[index].alt.clone()];
+        let alts = vec![(index, self.media[index].alt.clone())];
         self.figures.push(Figure { start, end, group: false, range, alts });
     }
 
@@ -474,7 +478,7 @@ impl Html {
                 }
                 let end = context.writer().mark();
                 context.writer().raw(&format!("</{name}>"));
-                let alts = indices.iter().map(|&index| self.media[index].alt.clone()).collect();
+                let alts = indices.iter().map(|&index| (index, self.media[index].alt.clone())).collect();
                 self.figures.push(Figure { start, end, group: true, range: Some(node.range), alts });
                 return;
             }
@@ -502,7 +506,7 @@ impl Html {
         let mut inserts = vec![];
         for figure in std::mem::take(&mut self.figures) {
             let mut entries: Vec<String> = vec![];
-            for (index, alt) in figure.alts.iter().enumerate() {
+            for (index, (item, alt)) in figure.alts.iter().enumerate() {
                 let Some(alt) = alt.as_deref().filter(|alt| !alt.trim().is_empty()) else { continue };
                 let prefix = if figure.group { format!("{}. ", index + 1) } else { String::new() };
                 let separator = if entries.is_empty() { "" } else { "\n" };
@@ -526,8 +530,10 @@ impl Html {
                         reason,
                         field: FieldName::Alt,
                         range: figure.range,
-                        truncated: Some(Truncated { unit, maximum: room, value, exact: false }),
+                        truncated: Some(Truncated { unit, maximum: room as u32, value: value as u32, exact: false }),
+                        slot: Some(Slot { block: None, item: *item as u32 }),
                     });
+                    context.published_alt(*item, Some(text.clone()).filter(|text| !text.is_empty()));
                 }
                 if !text.is_empty() {
                     remaining -= overhead + cost(&text);

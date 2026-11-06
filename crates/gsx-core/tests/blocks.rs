@@ -1,6 +1,6 @@
 use gsx_core::document::{Layout, Media, parse};
 use gsx_core::project::{
-    Block, Class, Facts, Feature, FieldName, Format, Item, MediaFact, MediaKind, Projection, project,
+    Block, Class, Facts, Feature, FieldName, Format, Item, MediaFact, MediaKind, Projection, Slot, project,
 };
 use gsx_core::targets::target;
 
@@ -100,6 +100,7 @@ fn alt_text_is_fitted_per_item() {
         (Class::Approximated, Feature::Media, "media_alt_truncated")
     );
     assert_eq!(change.field, FieldName::Alt);
+    assert_eq!(change.slot, Some(Slot { block: Some(0), item: 0 }));
     assert_eq!(change.truncated.map(|truncated| (truncated.value, truncated.maximum)), Some((1100, 1024)));
     let measured = projection.measurements.iter().find(|measured| measured.field == FieldName::Alt).unwrap();
     assert_eq!((measured.value, measured.maximum), (fitted.chars().count(), Some(1024)));
@@ -153,6 +154,28 @@ fn a_group_left_with_one_item_is_not_reported_as_split() {
     let expected: Vec<_> = ids[..10].iter().map(|id| single(id)).collect();
     assert_eq!(projection.blocks, expected);
     assert_eq!(reasons(&projection), [(Class::Omitted, Feature::Media, "media_count_exceeded")]);
+}
+
+#[test]
+fn missing_media_drop_their_anchor() {
+    const MISSING: [(Class, Feature, &str); 1] = [(Class::Omitted, Feature::Media, "media_missing")];
+    for name in ["discord-blocks", "slack-blocks"] {
+        let middle = run(name, "a\n\n::media{id=\"x\"}\n\nb", &[]);
+        assert_eq!(middle.blocks, [text("a\n\nb")]);
+        assert_eq!(reasons(&middle), MISSING);
+        assert_eq!(run(name, "::media{id=\"x\"}\n\na", &[]).blocks, [text("a")]);
+        assert_eq!(run(name, "a\n\n::media{id=\"x\"}", &[]).blocks, [text("a")]);
+        let layout = if name == "slack-blocks" { "slideshow" } else { "collage" };
+        let singleton = run(name, &format!("a\n\n::media{{ids=\"p,x\" layout=\"{layout}\"}}"), &[image("p")]);
+        assert_eq!(singleton.blocks, [text("a\n\n"), single("p")]);
+        assert_eq!(reasons(&singleton), MISSING);
+        let empty = run(name, &format!("a\n\n::media{{ids=\"x,y\" layout=\"{layout}\"}}\n\nb"), &[]);
+        assert_eq!(empty.blocks, [text("a\n\nb")]);
+        assert_eq!(reasons(&empty), MISSING);
+        let all = run(name, "::media{id=\"x\"}\n\n::media{id=\"y\"}", &[]);
+        assert_eq!(all.blocks, []);
+        assert_eq!(reasons(&all), [MISSING[0], (Class::Blocked, Feature::Text, "text_empty"), MISSING[0]]);
+    }
 }
 
 #[test]

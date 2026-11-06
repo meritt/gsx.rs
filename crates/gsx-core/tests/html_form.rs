@@ -1,5 +1,7 @@
 use gsx_core::document::{Media, parse};
-use gsx_core::project::{Facts, FieldName, Format, MediaFact, MediaKind, Options, Projection, project, project_with};
+use gsx_core::project::{
+    Facts, FieldName, Format, MediaFact, MediaKind, Options, Projection, Slot, project, project_with,
+};
 use gsx_core::targets::target;
 
 fn run(name: &str, markdown: &str) -> Projection {
@@ -177,10 +179,23 @@ fn rich_media_count_beyond_fifty_is_omitted() {
 }
 
 #[test]
-fn rich_unknown_media_blocks_the_projection() {
-    let projection = rich("a\n\n::media{id=\"x\"}", &[]);
-    assert_eq!(blocked(&projection), ["MEDIA_INLINE_UNAVAILABLE"]);
-    assert_eq!(text(&projection), "<p>a</p>");
+fn rich_missing_media_drop_their_anchor() {
+    const MISSING: (&str, &str, &str) = ("media", "omitted", "media_missing");
+    let middle = rich("a\n\n::media{id=\"x\"}\n\nb", &[]);
+    assert_eq!(text(&middle), "<p>a<br><br>b</p>");
+    assert_eq!(changes(&middle), [MISSING]);
+    assert_eq!(text(&rich("::media{id=\"x\"}\n\na", &[])), "<p>a</p>");
+    assert_eq!(text(&rich("a\n\n::media{id=\"x\"}", &[])), "<p>a</p>");
+    let singleton = rich("::media{ids=\"p,x\" layout=\"collage\"}", &[image("p", None)]);
+    assert_eq!(text(&singleton), "<img src=\"media:p\"/>");
+    assert_eq!(changes(&singleton), [MISSING]);
+    let empty = rich("a\n\n::media{ids=\"x,y\" layout=\"collage\"}\n\nb", &[]);
+    assert_eq!(text(&empty), "<p>a<br><br>b</p>");
+    assert_eq!(changes(&empty), [MISSING]);
+    let all = rich("::media{id=\"x\"}\n\n::media{id=\"y\"}", &[]);
+    assert_eq!(text(&all), "");
+    assert_eq!(blocked(&all), ["TEXT_EMPTY"]);
+    assert_eq!(changes(&all).iter().filter(|change| **change == MISSING).count(), 2);
 }
 
 #[test]
@@ -211,6 +226,19 @@ fn rich_alts_share_the_text_budget() {
     );
     let truncated = projection.changes[0].truncated.unwrap();
     assert_eq!((truncated.maximum, truncated.value), (1, 13));
+    let slots: Vec<_> = projection.changes.iter().map(|change| change.slot).collect();
+    assert_eq!(slots, [Some(Slot { block: None, item: 1 }), Some(Slot { block: None, item: 2 })]);
+    let alts: Vec<_> = projection.items.iter().map(|item| item.alt.as_deref()).collect();
+    assert_eq!(alts, [Some("abc def"), Some("…"), None]);
+}
+
+#[test]
+fn rich_items_carry_the_alt_left_out_of_the_text_budget() {
+    let body = format!("Ready.\n\n{}\n\n::media{{id=\"a\"}}", "x".repeat(32_760));
+    let projection = rich(&body, &[image("a", Some("Described"))]);
+    assert!(changes(&projection).contains(&("media", "omitted", "media_alt_omitted")));
+    assert!(!text(&projection).contains("figcaption"));
+    assert_eq!(projection.items[0].alt, None);
 }
 
 #[test]

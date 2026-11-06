@@ -95,6 +95,8 @@ unsafe fn optional_string<'a>(bytes: *const u8, len: usize, what: &str) -> Resul
 pub const GSX_MEDIA_NONE: u32 = 0;
 pub const GSX_MEDIA_IMAGE: u32 = 1;
 pub const GSX_MEDIA_VIDEO: u32 = 2;
+pub const GSX_MEDIA_GIF: u32 = 3;
+pub const GSX_MEDIA_AUDIO: u32 = 4;
 
 pub const GSX_FORMAT_IMAGE: u32 = 0;
 pub const GSX_FORMAT_GIF: u32 = 1;
@@ -173,6 +175,8 @@ impl Facts {
                 GSX_MEDIA_NONE => None,
                 GSX_MEDIA_IMAGE => Some(MediaKind::Image),
                 GSX_MEDIA_VIDEO => Some(MediaKind::Video),
+                GSX_MEDIA_GIF => Some(MediaKind::Gif),
+                GSX_MEDIA_AUDIO => Some(MediaKind::Audio),
                 other => return Err(format!("media kind {other} is not GSX_MEDIA_*")),
             },
             media_count: self.media_count,
@@ -451,8 +455,8 @@ mod tests {
             wire::project(text.as_bytes(), &[], youtube, &core)
         );
         assert_eq!(project(b"", "nope", None).unwrap_err(), r#"unknown target "nope""#);
-        let bad = Facts { media: 3, ..facts };
-        assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "media kind 3 is not GSX_MEDIA_*");
+        let bad = Facts { media: 5, ..facts };
+        assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "media kind 5 is not GSX_MEDIA_*");
         let bad = Facts { caption_limit: 1 << 32, ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "caption_limit 4294967296 is over 2^32 - 1");
 

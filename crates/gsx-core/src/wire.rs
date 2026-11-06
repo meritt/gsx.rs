@@ -5,7 +5,8 @@ use crate::document::{
     Range, Severity,
 };
 use crate::project::{
-    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Projection, Target, Truncated,
+    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Projection, Slot, Target,
+    Truncated,
 };
 use crate::targets::TARGETS;
 
@@ -411,7 +412,7 @@ impl Out {
     }
 
     fn change(&mut self, change: &Change) {
-        let Change { class, feature, reason, field, range, truncated } = change;
+        let Change { class, feature, reason, field, range, truncated, slot } = change;
         self.raw("{\"class\":");
         self.string(class.name());
         self.key("feature");
@@ -441,6 +442,14 @@ impl Out {
                 self.0.push('}');
             }
             None => self.raw("null"),
+        }
+        if let Some(Slot { block, item }) = slot {
+            if let Some(block) = block {
+                self.key("block");
+                self.number(block);
+            }
+            self.key("item");
+            self.number(item);
         }
         self.0.push('}');
     }
