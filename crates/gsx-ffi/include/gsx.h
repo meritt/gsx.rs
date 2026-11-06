@@ -50,6 +50,7 @@ typedef struct gsx_facts {
   int64_t max_characters;
   int64_t characters_reserved_per_url;
   int64_t caption_limit;
+  int64_t description_limit;
   bool entities_allowed;
   const struct gsx_media_fact *items;
   size_t items_len;

@@ -12,6 +12,7 @@ FACTS = {
     "maxCharacters": "max_characters",
     "charactersReservedPerUrl": "characters_reserved_per_url",
     "captionLimit": "caption_limit",
+    "descriptionLimit": "description_limit",
     "entitiesAllowed": "entities_allowed",
 }
 

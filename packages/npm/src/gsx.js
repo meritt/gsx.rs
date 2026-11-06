@@ -198,6 +198,7 @@ export const load = (() => {
         count(facts.maxCharacters, 'facts.maxCharacters'),
         count(facts.charactersReservedPerUrl, 'facts.charactersReservedPerUrl'),
         count(facts.captionLimit, 'facts.captionLimit'),
+        count(facts.descriptionLimit, 'facts.descriptionLimit'),
         entitiesAllowed,
         ...described
       );

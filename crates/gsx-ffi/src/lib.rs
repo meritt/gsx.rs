@@ -125,6 +125,7 @@ pub struct Facts {
     pub max_characters: i64,
     pub characters_reserved_per_url: i64,
     pub caption_limit: i64,
+    pub description_limit: i64,
     pub entities_allowed: bool,
     pub items: *const MediaFact,
     pub items_len: usize,
@@ -180,6 +181,7 @@ impl Facts {
             max_characters: limit(self.max_characters, "max_characters")?,
             characters_reserved_per_url: limit(self.characters_reserved_per_url, "characters_reserved_per_url")?,
             caption_limit: limit(self.caption_limit, "caption_limit")?,
+            description_limit: limit(self.description_limit, "description_limit")?,
             entities_allowed: self.entities_allowed,
             items,
         })
@@ -430,6 +432,7 @@ mod tests {
             max_characters: 100,
             characters_reserved_per_url: -1,
             caption_limit: -1,
+            description_limit: -1,
             entities_allowed: true,
             items: ptr::null(),
             items_len: 0,

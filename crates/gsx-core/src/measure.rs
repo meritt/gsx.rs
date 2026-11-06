@@ -8,7 +8,7 @@ use std::ops::Range;
 
 pub use grapheme::{Clusters, clusters};
 pub use rules::{Condition, Context, Field, Limit, Maximum, Measurement, MediaKind, Placement, Rendering};
-pub(crate) use rules::{limit, resolved, unlimited};
+pub(crate) use rules::{given, limit, resolved, unlimited};
 pub use tables::UNICODE_VERSION;
 
 pub const X_URL_WEIGHT: usize = 23;

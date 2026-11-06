@@ -3,7 +3,7 @@ mod support;
 use std::collections::HashMap;
 
 use gsx_core::document::{Media, parse};
-use gsx_core::project::{Facts, MediaKind};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind};
 use gsx_core::targets::target;
 use gsx_core::wire;
 use support::{Json, LONE_SURROGATE, difference, records};
@@ -16,7 +16,27 @@ fn media(case: &Json) -> Vec<Media<'_>> {
         .collect()
 }
 
-fn facts(json: &Json) -> Facts<'_> {
+fn items(json: &Json) -> Vec<MediaFact<'_>> {
+    json.get("items")
+        .array()
+        .iter()
+        .map(|item| MediaFact {
+            id: item.get("id").str().unwrap(),
+            format: match item.get("format").str() {
+                Some("image") => Format::Image,
+                Some("gif") => Format::Gif,
+                Some("video") => Format::Video,
+                Some("audio") => Format::Audio,
+                other => panic!("no media format {other:?}"),
+            },
+            alt: item.get("alt").str(),
+            spoiler: item.get("spoiler") == &Json::Bool(true),
+            inline: item.get("inline") == &Json::Bool(true),
+        })
+        .collect()
+}
+
+fn facts<'a>(json: &'a Json, items: &'a [MediaFact<'a>]) -> Facts<'a> {
     if let Json::Object(object) = json {
         let unknown: Vec<_> = object.keys().filter(|key| !KNOWN_FACTS.contains(&key.as_str())).collect();
         assert!(unknown.is_empty(), "facts not read by the corpus test: {unknown:?}");
@@ -33,12 +53,22 @@ fn facts(json: &Json) -> Facts<'_> {
             _ => None,
         },
         entities_allowed: json.get("entitiesAllowed") == &Json::Bool(true),
+        description_limit: match json.get("descriptionLimit") {
+            Json::Number(limit) => Some(*limit as u32),
+            _ => None,
+        },
         target_url: json.get("targetUrl").str(),
+        media_count: match json.get("mediaCount") {
+            Json::Number(count) => *count as usize,
+            _ => 0,
+        },
+        items,
         ..Facts::default()
     }
 }
 
-const KNOWN_FACTS: &[&str] = &["media", "captionLimit", "entitiesAllowed", "targetUrl"];
+const KNOWN_FACTS: &[&str] =
+    &["media", "mediaCount", "captionLimit", "descriptionLimit", "entitiesAllowed", "targetUrl", "items"];
 
 fn check(failures: &mut Vec<String>, label: &str, expected: &Json, actual: &str) {
     if let Some(found) = difference("", expected, &Json::parse(actual)) {
@@ -106,8 +136,9 @@ fn matches_target_corpus() {
                 continue;
             }
             compared += 1;
-            let facts =
-                facts(if record.get("facts") == &Json::Null { header.get("facts") } else { record.get("facts") });
+            let given = if record.get("facts") == &Json::Null { header.get("facts") } else { record.get("facts") };
+            let items = items(given);
+            let facts = facts(given, &items);
             let actual = wire::project(markdown.as_bytes(), &media(input), target, &facts);
             check(&mut failures, &format!("{name} {id} {}", record.get("facts")), record.get("expected"), &actual);
         }

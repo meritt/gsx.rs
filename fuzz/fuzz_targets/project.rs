@@ -60,6 +60,7 @@ fuzz_target!(|input: Input| {
         max_characters: input.max_characters.map(u32::from),
         characters_reserved_per_url: input.characters_reserved_per_url.map(u32::from),
         caption_limit: input.caption_limit.map(u32::from),
+        description_limit: input.caption_limit.map(u32::from),
         entities_allowed: input.entities_allowed,
         items: &items,
     };

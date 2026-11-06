@@ -42,6 +42,7 @@ public struct Facts: Sendable, Hashable {
     public var maxCharacters: UInt32?
     public var charactersReservedPerUrl: UInt32?
     public var captionLimit: UInt32?
+    public var descriptionLimit: UInt32?
     public var entitiesAllowed: Bool
     public var items: [MediaFact]
 
@@ -53,6 +54,7 @@ public struct Facts: Sendable, Hashable {
         maxCharacters: UInt32? = nil,
         charactersReservedPerUrl: UInt32? = nil,
         captionLimit: UInt32? = nil,
+        descriptionLimit: UInt32? = nil,
         entitiesAllowed: Bool = false,
         items: [MediaFact] = []
     ) {
@@ -63,6 +65,7 @@ public struct Facts: Sendable, Hashable {
         self.maxCharacters = maxCharacters
         self.charactersReservedPerUrl = charactersReservedPerUrl
         self.captionLimit = captionLimit
+        self.descriptionLimit = descriptionLimit
         self.entitiesAllowed = entitiesAllowed
         self.items = items
     }
@@ -75,6 +78,13 @@ public struct Projection: Sendable, Hashable, Decodable {
     public let media: [String]
     /// Present for targets of the `blocks/1` form only.
     public let blocks: [Block]?
+    /// Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items.
+    public let items: [Attachment]?
+}
+
+public struct Attachment: Sendable, Hashable, Decodable {
+    public let reference: String
+    public let alt: String?
 }
 
 public struct Item: Sendable, Hashable, Decodable {
@@ -142,7 +152,7 @@ public struct Measurement: Sendable, Hashable, Decodable {
     public let unit: Unit
     public let value: Int
     public let maximum: Int?
-    /// Indexes of the measured block and media item, for per-item limits of blocks targets.
+    /// Per-item limits: the block and the item in it on blocks targets, else the index in `items`.
     public let block: Int?
     public let item: Int?
 }

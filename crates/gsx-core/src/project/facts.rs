@@ -9,6 +9,7 @@ pub struct Facts<'a> {
     pub max_characters: Option<u32>,
     pub characters_reserved_per_url: Option<u32>,
     pub caption_limit: Option<u32>,
+    pub description_limit: Option<u32>,
     pub entities_allowed: bool,
     pub items: &'a [MediaFact<'a>],
 }

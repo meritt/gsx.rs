@@ -113,6 +113,7 @@ public enum GSX {
                                         max_characters: limit(facts.maxCharacters),
                                         characters_reserved_per_url: limit(facts.charactersReservedPerUrl),
                                         caption_limit: limit(facts.captionLimit),
+                                        description_limit: limit(facts.descriptionLimit),
                                         entities_allowed: facts.entitiesAllowed,
                                         items: items,
                                         items_len: itemCount

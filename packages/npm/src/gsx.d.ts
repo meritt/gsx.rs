@@ -121,6 +121,8 @@ export interface Facts {
   maxCharacters?: number | null;
   charactersReservedPerUrl?: number | null;
   captionLimit?: number | null;
+  /** Mastodon instance media description limit in code points; without it alt is not fitted. */
+  descriptionLimit?: number | null;
   entitiesAllowed?: boolean;
   items?: Iterable<MediaFact>;
 }
@@ -194,7 +196,7 @@ export interface Measurement {
   unit: Unit;
   value: number;
   maximum: number | null;
-  /** Indexes of the measured block and media item, for per-item limits of blocks targets. */
+  /** Per-item limits: the block and the item in it on blocks targets, else the index in `items`. */
   block?: number;
   item?: number;
 }
@@ -232,6 +234,13 @@ export interface Projection {
   media: string[];
   /** Present for targets of the `blocks/1` form only. */
   blocks?: Block[];
+  /** Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items. */
+  items?: Attachment[];
+}
+
+export interface Attachment {
+  reference: string;
+  alt: string | null;
 }
 
 export type ProjectionWire = { projection: Projection } | { error: WireError };

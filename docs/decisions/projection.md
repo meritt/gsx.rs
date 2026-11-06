@@ -11,6 +11,9 @@
 | `measurements` | one per limited field: unit, value, maximum; per-block limits carry the block index |
 | `changes` | every change, ordered by source position, uncapped |
 | `media` | selected items, covers, per-item changes |
+| `items` | targets outside `blocks`, when facts list media items: one `{reference, alt}` per item in fact order, with the alt fitted; a per-item measurement carries `item`, the index here, and no `block` |
+
+Alt is fitted per item on every target that declares an `alt` limit for the item's kind: the longest grapheme prefix with an ellipsis that fits (`media_alt_truncated`); when not even the ellipsis fits, the alt is dropped (`omitted` `media_alt_omitted`). The Mastodon limit is the instance `descriptionLimit` fact; without it alt is measured and not fitted.
 
 Media appear as references (`media:<id>`); the caller resolves URLs and builds the request.
 

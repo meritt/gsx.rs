@@ -173,6 +173,7 @@ fn outcome(
         max_characters: limit("maxCharacters"),
         characters_reserved_per_url: limit("charactersReservedPerUrl"),
         caption_limit: limit("captionLimit"),
+        description_limit: limit("descriptionLimit"),
         entities_allowed: matches!(facts.get("entitiesAllowed"), Json::Bool(true)),
         items: &items,
     };
@@ -189,7 +190,7 @@ fn outcome(
 
 const FACTS: [&str; 2] = [
     "{}",
-    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"entitiesAllowed":true}"#,
+    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"entitiesAllowed":true}"#,
 ];
 
 pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> Result {

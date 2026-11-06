@@ -22,7 +22,7 @@ A Mastodon mention counts as `@local`: the projection passes `@domain` as an eli
 
 ## Rule table
 
-Every `Target` declares its `limits` beside its rules and form in `crates/gsx-core/src/targets/`; the manifest lists them per field. Fields follow [projection.md](projection.md): `text`, `title`, `description`, plus `alt` per media item. A `Limit` is field, placements, media condition (any, without media, with media, only images or only videos; for `alt` the item's kind), rendering, unit and maximum; `Target::measure` runs exactly the limits that apply. `Rendering::Visible` measures text with markup removed and entities decoded, as the provider counts it; `Payload` measures the field value as sent. `Maximum::Resolved` names a provider fact (Mastodon instance, Telegram channel-story capabilities) and its default.
+Every `Target` declares its `limits` beside its rules and form in `crates/gsx-core/src/targets/`; the manifest lists them per field. Fields follow [projection.md](projection.md): `text`, `title`, `description`, plus `alt` per media item. A `Limit` is field, placements, media condition (any, without media, with media, only images or only videos; for `alt` the item's kind), rendering, unit and maximum; `Target::measure` runs exactly the limits that apply. `Rendering::Visible` measures text with markup removed and entities decoded, as the provider counts it; `Payload` measures the field value as sent. `Maximum::Resolved` names a provider fact (Mastodon instance, Telegram channel-story capabilities) and its default; `Maximum::Given` names a fact with no default, unlimited when the fact is absent (Mastodon `descriptionLimit`).
 
 | Target | Field (context) | Unit | Maximum |
 | --- | --- | --- | --- |

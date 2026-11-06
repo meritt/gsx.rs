@@ -1,6 +1,6 @@
 use super::limits::{
     Alt, CodePoints, Description, Fact, Image, Limit, MastodonWeighted, Only, Post, Text, Title, Utf8Bytes,
-    Utf16CodeUnits, Video, XWeighted, limit, resolved, unlimited,
+    Utf16CodeUnits, Video, XWeighted, given, limit, resolved, unlimited,
 };
 use super::{DEFAULT, Rules, rule};
 use crate::forms::plain::RENDERER;
@@ -60,10 +60,7 @@ pub static MASTODON: Target = text(
     "mastodon-plain",
     plain!(&[]),
     BODY,
-    &[
-        resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500),
-        resolved(Alt, CodePoints, Fact::DescriptionLimit, 1500),
-    ],
+    &[resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500), given(Alt, CodePoints, Fact::DescriptionLimit)],
 );
 
 pub static LINKEDIN: Target = text(

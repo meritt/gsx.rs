@@ -15,6 +15,7 @@ struct Case: Decodable {
         let maxCharacters: UInt32?
         let charactersReservedPerUrl: UInt32?
         let captionLimit: UInt32?
+        let descriptionLimit: UInt32?
         let entitiesAllowed: Bool?
         let items: [MediaFact]?
     }
@@ -53,6 +54,7 @@ for file in arguments.dropFirst() {
             maxCharacters: given?.maxCharacters,
             charactersReservedPerUrl: given?.charactersReservedPerUrl,
             captionLimit: given?.captionLimit,
+            descriptionLimit: given?.descriptionLimit,
             entitiesAllowed: given?.entitiesAllowed ?? false,
             items: given?.items ?? []
         )

@@ -205,6 +205,7 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
         max_characters: setup.max_characters,
         characters_reserved_per_url: setup.characters_reserved_per_url,
         caption_limit: setup.caption_limit,
+        description_limit: setup.caption_limit,
         entities_allowed: setup.entities_allowed,
         items: &items,
     };

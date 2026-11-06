@@ -5,7 +5,7 @@ use crate::document::{
     Range, Severity,
 };
 use crate::project::{
-    self, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Projection, Target, Truncated,
+    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Projection, Target, Truncated,
 };
 use crate::targets::TARGETS;
 
@@ -38,7 +38,7 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
         Ok(document) => document,
         Err(out) => return out,
     };
-    let Projection { fields, measurements, changes, media, blocks } = project::project(&document, target, facts);
+    let Projection { fields, measurements, changes, media, blocks, items } = project::project(&document, target, facts);
     let mut out = Out(String::with_capacity(256));
     out.raw("{\"projection\":{\"fields\":");
     out.list(&fields, Out::field);
@@ -51,6 +51,17 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
     if target.form.blocks().is_some() {
         out.raw(",\"blocks\":");
         out.list(&blocks, Out::block);
+    }
+    if !items.is_empty() {
+        out.raw(",\"items\":");
+        out.list(&items, |out, item| {
+            let Attachment { reference, alt } = item;
+            out.raw("{\"reference\":");
+            out.string(reference);
+            out.key("alt");
+            out.optional(alt.as_deref());
+            out.0.push('}');
+        });
     }
     out.raw("}}");
     out.0
@@ -388,9 +399,11 @@ impl Out {
         self.number(value);
         self.key("maximum");
         self.maximum(maximum);
-        if let (Some(block), Some(item)) = (block, item) {
+        if let Some(block) = block {
             self.key("block");
             self.number(block);
+        }
+        if let Some(item) = item {
             self.key("item");
             self.number(item);
         }

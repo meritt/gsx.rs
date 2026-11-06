@@ -63,6 +63,7 @@ pub enum Rendering {
 pub enum Maximum {
     Fixed(u32),
     Resolved(Fact, u32),
+    Given(Fact),
     Unlimited,
 }
 
@@ -104,6 +105,7 @@ impl Limit {
         match self.maximum {
             Maximum::Fixed(value) => Some(value),
             Maximum::Resolved(fact, default) => Some(facts.resolved(fact).unwrap_or(default)),
+            Maximum::Given(fact) => facts.resolved(fact),
             Maximum::Unlimited => None,
         }
     }
@@ -132,6 +134,10 @@ pub(crate) const fn unlimited(field: Field, unit: Unit) -> Limit {
 
 pub(crate) const fn resolved(field: Field, unit: Unit, fact: Fact, default: u32) -> Limit {
     Limit { maximum: Maximum::Resolved(fact, default), ..limit(field, unit, 0) }
+}
+
+pub(crate) const fn given(field: Field, unit: Unit, fact: Fact) -> Limit {
+    Limit { maximum: Maximum::Given(fact), ..limit(field, unit, 0) }
 }
 
 impl Limit {

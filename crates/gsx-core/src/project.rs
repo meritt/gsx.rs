@@ -23,7 +23,7 @@ pub use fit::WINDOW;
 pub(crate) use layout::blank;
 pub use layout::{CELL, ELLIPSIS, RULE, Writer, marker, single_line};
 pub use links::href;
-pub use media::{Block, Item, placed, referenced};
+pub use media::{Attachment, Block, Item, placed, referenced};
 pub use table::{
     BlocksForm, Condition, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm, LineStart,
     MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Structure, Style, Target, Truncation,
@@ -59,6 +59,7 @@ pub struct Projection {
     pub changes: Vec<Change>,
     pub media: Vec<String>,
     pub blocks: Vec<Block>,
+    pub items: Vec<Attachment>,
 }
 
 impl Projection {
@@ -314,17 +315,21 @@ struct Request<'a, 'b> {
     options: &'a Options,
 }
 
+fn resolved(facts: &Facts) -> Vec<(Fact, u32)> {
+    [
+        (Fact::MaxCharacters, facts.max_characters),
+        (Fact::CharactersReservedPerUrl, facts.characters_reserved_per_url),
+        (Fact::CaptionLimit, facts.caption_limit),
+        (Fact::DescriptionLimit, facts.description_limit),
+    ]
+    .into_iter()
+    .filter_map(|(fact, value)| value.map(|value| (fact, value)))
+    .collect()
+}
+
 impl Request<'_, '_> {
     fn resolved(&self) -> Vec<(Fact, u32)> {
-        let facts = self.facts;
-        [
-            (Fact::MaxCharacters, facts.max_characters),
-            (Fact::CharactersReservedPerUrl, facts.characters_reserved_per_url),
-            (Fact::CaptionLimit, facts.caption_limit),
-        ]
-        .into_iter()
-        .filter_map(|(fact, value)| value.map(|value| (fact, value)))
-        .collect()
+        resolved(self.facts)
     }
 
     fn measure(&self, unit: Unit, rendered: &Rendered) -> usize {
@@ -660,10 +665,17 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     } else {
         changes.append(&mut required);
     }
+    let mut items = vec![];
+    if target.form.blocks().is_none() {
+        let attached = media::attach(target, facts, children);
+        items = attached.items;
+        changes.extend(attached.changes);
+        measurements.extend(attached.measurements);
+    }
     changes.sort_by_key(|change| change.range.map(|range| range.start));
     let mut references = vec![];
     media(children, &mut references);
-    Projection { fields, measurements, changes, media: references, blocks }
+    Projection { fields, measurements, changes, media: references, blocks, items }
 }
 
 fn explicit_title(request: &Request, title: &str) -> Fitted {

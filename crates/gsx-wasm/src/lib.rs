@@ -63,6 +63,7 @@ pub fn project(
     max_characters: Option<u32>,
     characters_reserved_per_url: Option<u32>,
     caption_limit: Option<u32>,
+    description_limit: Option<u32>,
     entities_allowed: bool,
     item_ids: Vec<String>,
     item_formats: Vec<u8>,
@@ -100,6 +101,7 @@ pub fn project(
         max_characters,
         characters_reserved_per_url,
         caption_limit,
+        description_limit,
         entities_allowed,
         items: &items,
     };
