@@ -145,6 +145,7 @@ public enum Unit: String, Sendable, Hashable, Decodable {
     case xWeighted = "x-weighted"
     case mastodonWeighted = "mastodon-weighted"
     case threadsWeighted = "threads-weighted"
+    case hashtags, mentions
 }
 
 public struct Measurement: Sendable, Hashable, Decodable {
@@ -181,6 +182,7 @@ public enum Feature: String, Sendable, Hashable, Decodable {
     case angleBrackets = "angle_brackets"
     case text, title
     case targetUrl = "target_url"
+    case hashtag, mention
 }
 
 public struct Truncated: Sendable, Hashable, Decodable {

@@ -49,6 +49,8 @@ pub enum Feature {
     Text,
     Title,
     TargetUrl,
+    Hashtag,
+    Mention,
 }
 
 impl Feature {
@@ -78,6 +80,8 @@ impl Feature {
             Feature::Text => "text",
             Feature::Title => "title",
             Feature::TargetUrl => "target_url",
+            Feature::Hashtag => "hashtag",
+            Feature::Mention => "mention",
         }
     }
 }

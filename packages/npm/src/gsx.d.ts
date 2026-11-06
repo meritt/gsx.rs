@@ -147,7 +147,9 @@ export type Unit =
   | 'utf8-bytes'
   | 'x-weighted'
   | 'mastodon-weighted'
-  | 'threads-weighted';
+  | 'threads-weighted'
+  | 'hashtags'
+  | 'mentions';
 
 export type Class = 'approximated' | 'textual_fallback' | 'unwrapped' | 'omitted' | 'blocked';
 
@@ -175,7 +177,9 @@ export type Feature =
   | 'angle_brackets'
   | 'text'
   | 'title'
-  | 'target_url';
+  | 'target_url'
+  | 'hashtag'
+  | 'mention';
 
 /** Entity ranges are in the target's `offsets` unit; links are UTF-16 ranges of the field text. */
 export interface Entity {

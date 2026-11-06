@@ -17,6 +17,7 @@ How each target counts text against its limits. Code: `crates/gsx-core/src/measu
 | `x-weighted` | twitter-text v3 config: URL span 23; longest RGI_Emoji match 2; U+0000–10FF, U+2000–200D, U+2010–201F, U+2032–2037 1; any other code point 2 |
 | `mastodon-weighted` | Mastodon `StatusLengthValidator`: graphemes of the text with each URL span replaced by `x` and each elided span removed, plus `characters_reserved_per_url − 1` per URL; 0 reserved removes the URL |
 | `threads-weighted` | graphemes; a cluster that is exactly an RGI_Emoji sequence or one Emoji_Presentation code point counts its UTF-8 bytes |
+| `hashtags`, `mentions` | markers counted as in [projection.md](projection.md#fields); caps, never cut points |
 
 A Mastodon mention counts as `@local`: the projection passes `@domain` as an elided span.
 
@@ -33,7 +34,7 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 | `telegram-entities` | text (story) | utf16 | caption limit, 200 |
 | `max-html` | text, visible | code points | 4000 |
 | `discord-markdown`, `discord-blocks` | text; alt | code points | 2000; 1024 |
-| `slack-markdown` | text | code points | 12000 |
+| `slack-markdown` | text; alt (image) | code points | 12000; 1000 |
 | `slack-plain` | text (file comment); alt (image) | code points | none; 1000 |
 | `slack-blocks` | text; alt | code points | 12000; 2000 |
 | `bluesky-entities` | text | graphemes and utf8 | 300 and 3000 |
@@ -41,10 +42,11 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 | `threads-entities` | text | threads-weighted | 500 |
 | `x-plain` | text | x-weighted | 280 |
 | `mastodon-plain` | text | mastodon-weighted | max characters, 500 |
-| | alt | code points | description limit, 1500 |
+| | alt | code points | description limit, none |
 | `linkedin-plain` | text; alt | code points | 3000; 4086 |
 | `facebook-plain` | text | code points | 63206 |
 | `instagram-plain` | text; alt | code points | 2200; 1000 |
+| | text | hashtags; mentions | 30; 20 |
 | `vk-plain` | text; title (video name); alt (video); alt (image) | code points | none; 128; 5000; 2048 |
 | `youtube-plain` | title; description | code points; utf8 | 100; 5000 |
 | `tiktok-plain` | text (video); text (photo post); title (photo post) | utf16 | 2200; 4000; 90 |

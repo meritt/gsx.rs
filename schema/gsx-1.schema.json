@@ -142,7 +142,9 @@
         "utf8-bytes",
         "x-weighted",
         "mastodon-weighted",
-        "threads-weighted"
+        "threads-weighted",
+        "hashtags",
+        "mentions"
       ]
     },
     "measurement": {
@@ -191,7 +193,9 @@
             "angle_brackets",
             "text",
             "title",
-            "target_url"
+            "target_url",
+            "hashtag",
+            "mention"
           ]
         },
         "reason": { "type": "string", "pattern": "^[a-z0-9_]+$" },

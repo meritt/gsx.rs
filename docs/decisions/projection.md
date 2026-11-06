@@ -55,6 +55,8 @@ A derived field (YouTube title, TikTok photo title, VK video name) declares its 
 
 A target URL (Threads reply or quote target) is appended to the body after a blank line, or replaces an empty body, and is never cut: the body is fitted with the URL counted, and the change is `textual_fallback` `target_url_as_text`. When `…`, a blank line and the URL alone exceed a limit, nothing is appended and the change is `omitted` `target_url_omitted`. Targets without a `target_url` rule ignore the fact.
 
+Instagram counts hashtags (`#` after the start or whitespace, then letters, digits or `_`) and mentions (`@`, then ASCII letters, digits, `.` or `_`) in each rendered probe, before measuring. Beyond the 30th hashtag or the 20th mention the sigil is removed and the word kept, with one `approximated` change per cap (`hashtag_limit_exceeded`, `mention_limit_exceeded`) carrying unit `hashtags` or `mentions`, the cap and the count. The caps are `text` limits in those units, so they are measured and never drive the cut.
+
 Generated ellipsis, cut position and the gap before a block are node fields. A truncated literal stays literal: escaping and entity detection treat it as authored text.
 
 ## Fitting

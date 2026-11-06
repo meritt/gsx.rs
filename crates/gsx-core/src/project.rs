@@ -273,11 +273,47 @@ fn render(
         }
         None => vec![],
     };
-    let (text, links) = match target.normalization {
+    let (mut text, mut links) = match target.normalization {
         Normalization::None => (written.text, written.links),
         Normalization::Nfc => normalized(&written.text, &written.links),
     };
+    for (unit, feature) in [(Unit::Hashtags, Feature::Hashtag), (Unit::Mentions, Feature::Mention)] {
+        let cap = target.limits.iter().find(|limit| limit.field == context.field && limit.unit == unit);
+        let Some(maximum) = cap.and_then(|limit| limit.maximum(&measure::Facts::default())) else {
+            continue;
+        };
+        let markers = measure::markers(unit, &text);
+        let Some(dropped) = markers.get(maximum as usize..).filter(|dropped| !dropped.is_empty()) else {
+            continue;
+        };
+        text = without_sigils(&text, dropped, &mut links);
+        let (class, reason) = target.rule(feature).outcome(None);
+        let truncated = Truncated { unit, maximum: maximum as usize, value: markers.len(), exact: true };
+        context.changes.push(Change {
+            class,
+            feature,
+            reason,
+            field: context.field,
+            range: None,
+            truncated: Some(truncated),
+        });
+    }
     Rendered { text, links, styled, changes: context.changes, anchors: context.anchors }
+}
+
+fn without_sigils(text: &str, sigils: &[usize], links: &mut [Span<usize>]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0;
+    for &at in sigils {
+        out.push_str(&text[cursor..at]);
+        cursor = at + 1;
+    }
+    out.push_str(&text[cursor..]);
+    let shift = |offset: usize| offset - sigils.iter().take_while(|&&at| at < offset).count();
+    for link in links {
+        *link = shift(link.start)..shift(link.end);
+    }
+    out
 }
 
 fn normalized(text: &str, links: &[Span<usize>]) -> (String, Vec<Span<usize>>) {
@@ -428,7 +464,12 @@ impl Request<'_, '_> {
         if outline.is_empty() {
             return overflow(full);
         }
-        let least = limits.iter().filter_map(|limit| limit.maximum).min().unwrap_or(maximum);
+        let least = limits
+            .iter()
+            .filter(|limit| !limit.unit.counts_markers())
+            .filter_map(|limit| limit.maximum)
+            .min()
+            .unwrap_or(maximum);
         let upper = bounded.then(|| outline.upper(least)).flatten().unwrap_or_else(|| outline.units() - 1);
         let load = |values: &[usize]| {
             limits

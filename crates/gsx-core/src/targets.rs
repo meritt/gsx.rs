@@ -101,7 +101,8 @@ mod limits {
     pub(super) use crate::measure::MediaKind::{Image, Video};
     pub(super) use crate::measure::Placement::{Post, Reel, Story};
     pub(super) use crate::measure::Unit::{
-        CodePoints, Graphemes, MastodonWeighted, ThreadsWeighted, Utf8Bytes, Utf16CodeUnits, XWeighted,
+        CodePoints, Graphemes, Hashtags, MastodonWeighted, Mentions, ThreadsWeighted, Utf8Bytes, Utf16CodeUnits,
+        XWeighted,
     };
     pub(super) use crate::measure::{Fact, Limit, given, limit, resolved, unlimited};
 }
