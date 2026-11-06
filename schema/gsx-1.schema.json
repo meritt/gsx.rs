@@ -220,9 +220,15 @@
             },
             { "type": "null" }
           ]
+        },
+        "block": { "description": "Index of the block of the changed alt, with item.", "$ref": "#/$defs/count" },
+        "item": {
+          "description": "Index of the media item whose alt changed: in the block, or in projection items outside the blocks/1 form.",
+          "$ref": "#/$defs/count"
         }
       },
       "required": ["class", "feature", "reason", "code", "field", "range", "truncated"],
+      "dependentRequired": { "block": ["item"] },
       "additionalProperties": false
     },
     "target": {

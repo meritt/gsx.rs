@@ -100,6 +100,7 @@ fn alt_text_is_fitted_per_item() {
         (Class::Approximated, Feature::Media, "media_alt_truncated")
     );
     assert_eq!(change.field, FieldName::Alt);
+    assert_eq!((change.block, change.item), (Some(0), Some(0)));
     assert_eq!(change.truncated.map(|truncated| (truncated.value, truncated.maximum)), Some((1100, 1024)));
     let measured = projection.measurements.iter().find(|measured| measured.field == FieldName::Alt).unwrap();
     assert_eq!((measured.value, measured.maximum), (fitted.chars().count(), Some(1024)));

@@ -104,6 +104,8 @@ pub struct Change {
     pub field: FieldName,
     pub range: Option<Range>,
     pub truncated: Option<Truncated>,
+    pub block: Option<usize>,
+    pub item: Option<usize>,
 }
 
 impl Change {

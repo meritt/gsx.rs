@@ -411,7 +411,7 @@ impl Out {
     }
 
     fn change(&mut self, change: &Change) {
-        let Change { class, feature, reason, field, range, truncated } = change;
+        let Change { class, feature, reason, field, range, truncated, block, item } = change;
         self.raw("{\"class\":");
         self.string(class.name());
         self.key("feature");
@@ -441,6 +441,14 @@ impl Out {
                 self.0.push('}');
             }
             None => self.raw("null"),
+        }
+        if let Some(block) = block {
+            self.key("block");
+            self.number(block);
+        }
+        if let Some(item) = item {
+            self.key("item");
+            self.number(item);
         }
         self.0.push('}');
     }

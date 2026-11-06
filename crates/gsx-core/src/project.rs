@@ -141,7 +141,16 @@ impl<'a> Context<'a> {
 
     pub fn report_when(&mut self, feature: Feature, range: Option<Range>, when: Option<When>) {
         let (class, reason) = self.target.rule(feature).outcome(when);
-        self.changes.push(Change { class, feature, reason, field: self.field, range, truncated: None });
+        self.changes.push(Change {
+            class,
+            feature,
+            reason,
+            field: self.field,
+            range,
+            truncated: None,
+            block: None,
+            item: None,
+        });
     }
 
     pub fn record(&mut self, change: Change) {
@@ -303,7 +312,16 @@ fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendere
         rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links);
         let (class, reason) = target.rule(feature).outcome(None);
         let truncated = Truncated { unit, maximum: maximum as usize, value: markers.len(), exact: true };
-        rendered.changes.push(Change { class, feature, reason, field, range: None, truncated: Some(truncated) });
+        rendered.changes.push(Change {
+            class,
+            feature,
+            reason,
+            field,
+            range: None,
+            truncated: Some(truncated),
+            block: None,
+            item: None,
+        });
     }
 }
 
@@ -388,7 +406,7 @@ impl Request<'_, '_> {
 
     fn change(&self, feature: Feature, range: Option<Range>, when: Option<When>) -> Change {
         let (class, reason) = self.target.rule(feature).outcome(when);
-        Change { class, feature, reason, field: self.spec.name, range, truncated: None }
+        Change { class, feature, reason, field: self.spec.name, range, truncated: None, block: None, item: None }
     }
 
     fn limits(&self) -> Vec<Bound> {
@@ -710,6 +728,8 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             field,
             range: Some(Range { start: 0, end }),
             truncated: None,
+            block: None,
+            item: None,
         });
     } else {
         changes.append(&mut required);

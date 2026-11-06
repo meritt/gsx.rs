@@ -224,6 +224,8 @@ fn rich_alts_share_the_text_budget() {
     );
     let truncated = projection.changes[0].truncated.unwrap();
     assert_eq!((truncated.maximum, truncated.value), (1, 13));
+    let indices: Vec<_> = projection.changes.iter().map(|change| (change.block, change.item)).collect();
+    assert_eq!(indices, [(None, Some(1)), (None, Some(2))]);
     let alts: Vec<_> = projection.items.iter().map(|item| item.alt.as_deref()).collect();
     assert_eq!(alts, [Some("abc def"), Some("…"), None]);
 }

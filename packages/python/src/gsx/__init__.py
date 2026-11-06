@@ -342,6 +342,8 @@ class Change:
     field: str
     range: Optional[Range]
     truncated: Optional[Truncated]
+    block: Optional[int] = None
+    item: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -497,6 +499,8 @@ def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Medi
                 item["field"],
                 _range(item["range"]),
                 None if item["truncated"] is None else Truncated(**item["truncated"]),
+                item.get("block"),
+                item.get("item"),
             )
             for item in projection["changes"]
         ],

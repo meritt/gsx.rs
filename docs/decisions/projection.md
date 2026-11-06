@@ -29,7 +29,7 @@ A directive id absent from the `items` fact is a medium the caller dropped (a ga
 | `omitted` | the construct and its content are removed |
 | `blocked` | the projection cannot be published; carries a code |
 
-Native output is not reported. A change has `feature`, `reason`, `field` and the source range. Reasons are `<feature>_<outcome>`, one per cause, with no target prefix unless the cause is target-specific. An empty projection is one `blocked` change.
+Native output is not reported. A change has `feature`, `reason`, `field` and the source range; an alt change (`media_alt_truncated`, `media_alt_omitted`) also carries the item index, and on `blocks` targets the block index, as its alt measurement does, since items of one group share the group's range. Reasons are `<feature>_<outcome>`, one per cause, with no target prefix unless the cause is target-specific. An empty projection is one `blocked` change.
 
 - No change is silent: a datetime label, a nested quote on a `markdown` target, a code info string and the MAX spoiler each yield one.
 - Highlight keeps its content: `unwrapped`, never `omitted`.

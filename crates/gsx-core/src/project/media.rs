@@ -90,7 +90,16 @@ fn fit_alt(
             value: worst.value as usize,
             exact: false,
         };
-        Change { class, feature: Feature::Media, reason, field: FieldName::Alt, range, truncated: Some(truncated) }
+        Change {
+            class,
+            feature: Feature::Media,
+            reason,
+            field: FieldName::Alt,
+            range,
+            truncated: Some(truncated),
+            block,
+            item: Some(item),
+        }
     });
     Alt { text, measurements, change }
 }
@@ -147,7 +156,8 @@ struct Layouter {
 impl Layouter {
     fn change(&mut self, field: FieldName, range: Option<Range>, when: When) {
         let (class, reason) = self.target.rule(Feature::Media).outcome(Some(when));
-        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None };
+        let change =
+            Change { class, feature: Feature::Media, reason, field, range, truncated: None, block: None, item: None };
         if !self.laid.changes.contains(&change) {
             self.laid.changes.push(change);
         }

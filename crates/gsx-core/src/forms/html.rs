@@ -531,6 +531,8 @@ impl Html {
                         field: FieldName::Alt,
                         range: figure.range,
                         truncated: Some(Truncated { unit, maximum: room, value, exact: false }),
+                        block: None,
+                        item: Some(*item),
                     });
                     context.published_alt(*item, Some(text.clone()).filter(|text| !text.is_empty()));
                 }

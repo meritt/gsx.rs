@@ -229,6 +229,9 @@ export interface Change {
   field: FieldName;
   range: Range | null;
   truncated: Truncated | null;
+  /** Alt changes: the block and the item in it on blocks targets, else the index in `items`. */
+  block?: number;
+  item?: number;
 }
 
 export interface Projection {
