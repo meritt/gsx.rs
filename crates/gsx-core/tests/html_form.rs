@@ -224,6 +224,17 @@ fn rich_alts_share_the_text_budget() {
     );
     let truncated = projection.changes[0].truncated.unwrap();
     assert_eq!((truncated.maximum, truncated.value), (1, 13));
+    let alts: Vec<_> = projection.items.iter().map(|item| item.alt.as_deref()).collect();
+    assert_eq!(alts, [Some("abc def"), Some("…"), None]);
+}
+
+#[test]
+fn rich_items_carry_the_alt_left_out_of_the_text_budget() {
+    let body = format!("Ready.\n\n{}\n\n::media{{id=\"a\"}}", "x".repeat(32_760));
+    let projection = rich(&body, &[image("a", Some("Described"))]);
+    assert!(changes(&projection).contains(&("media", "omitted", "media_alt_omitted")));
+    assert!(!text(&projection).contains("figcaption"));
+    assert_eq!(projection.items[0].alt, None);
 }
 
 #[test]

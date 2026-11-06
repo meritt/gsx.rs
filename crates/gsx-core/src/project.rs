@@ -87,11 +87,16 @@ pub struct Context<'a> {
     allowed: bool,
     items: &'a [MediaFact<'a>],
     anchors: Vec<Anchor>,
+    alts: Vec<(usize, Option<String>)>,
 }
 
 impl<'a> Context<'a> {
     pub fn items(&self) -> &[MediaFact<'_>] {
         self.items
+    }
+
+    pub fn published_alt(&mut self, item: usize, alt: Option<String>) {
+        self.alts.push((item, alt));
     }
 
     pub fn anchor(&mut self, node: Option<&Node>) {
@@ -230,11 +235,12 @@ struct Rendered {
     styled: Vec<Styled>,
     changes: Vec<Change>,
     anchors: Vec<Anchor>,
+    alts: Vec<(usize, Option<String>)>,
 }
 
 impl Rendered {
     fn text(text: String) -> Self {
-        Rendered { text, links: vec![], styled: vec![], changes: vec![], anchors: vec![] }
+        Rendered { text, links: vec![], styled: vec![], changes: vec![], anchors: vec![], alts: vec![] }
     }
 }
 
@@ -257,6 +263,7 @@ fn render(
         allowed: facts.entities_allowed,
         items: facts.items,
         anchors: vec![],
+        alts: vec![],
     };
     draw(&mut context);
     let mut written = std::mem::replace(&mut context.writer, Writer::new(Escape::None)).finish();
@@ -277,7 +284,8 @@ fn render(
         Normalization::None => (written.text, written.links),
         Normalization::Nfc => normalized(&written.text, &written.links),
     };
-    let mut rendered = Rendered { text, links, styled, changes: context.changes, anchors: context.anchors };
+    let mut rendered =
+        Rendered { text, links, styled, changes: context.changes, anchors: context.anchors, alts: context.alts };
     cap_markers(target, field, &mut rendered);
     rendered
 }
@@ -619,6 +627,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     let mut changes = vec![];
     let mut required = vec![];
     let mut blocks = vec![];
+    let mut alts = vec![];
     let mut derived = false;
     for spec in target.fields(facts) {
         let request = Request { target, spec, facts, options };
@@ -671,6 +680,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             required.push(request.change(Feature::Title, None, Some(When::Empty)));
         }
         changes.append(&mut rendered.changes);
+        alts.append(&mut rendered.alts);
         measurements.extend(measured);
         if let (Some(form), Source::Body) = (target.form.blocks(), spec.source) {
             let laid = media::layout(target, form, facts, body, &rendered.text, &rendered.anchors);
@@ -708,6 +718,9 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     if target.form.blocks().is_none() {
         let attached = media::attach(target, facts, children);
         items = attached.items;
+        for (index, alt) in alts {
+            items[index].alt = alt;
+        }
         changes.extend(attached.changes);
         measurements.extend(attached.measurements);
     }
