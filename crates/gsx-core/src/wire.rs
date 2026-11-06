@@ -429,7 +429,7 @@ impl Out {
             None => self.raw("null"),
         }
         self.key("truncated");
-        match truncated.as_deref() {
+        match truncated {
             Some(Truncated { unit, maximum, value, exact }) => {
                 self.raw("{\"unit\":");
                 self.string(unit.name());
@@ -443,7 +443,7 @@ impl Out {
             }
             None => self.raw("null"),
         }
-        if let Some(Slot { block, item }) = slot.as_deref() {
+        if let Some(Slot { block, item }) = slot {
             if let Some(block) = block {
                 self.key("block");
                 self.number(block);

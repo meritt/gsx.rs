@@ -530,8 +530,8 @@ impl Html {
                         reason,
                         field: FieldName::Alt,
                         range: figure.range,
-                        truncated: Some(Box::new(Truncated { unit, maximum: room, value, exact: false })),
-                        slot: Some(Box::new(Slot { block: None, item: *item })),
+                        truncated: Some(Truncated { unit, maximum: room as u32, value: value as u32, exact: false }),
+                        slot: Some(Slot { block: None, item: *item as u32 }),
                     });
                     context.published_alt(*item, Some(text.clone()).filter(|text| !text.is_empty()));
                 }

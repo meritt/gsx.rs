@@ -302,8 +302,7 @@ fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendere
         };
         rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links);
         let (class, reason) = target.rule(feature).outcome(None);
-        let truncated = Truncated { unit, maximum: maximum as usize, value: markers.len(), exact: true };
-        let truncated = Some(Box::new(truncated));
+        let truncated = Some(Truncated { unit, maximum, value: markers.len() as u32, exact: true });
         rendered.changes.push(Change { class, feature, reason, field, range: None, truncated, slot: None });
     }
 }
@@ -509,7 +508,7 @@ impl Request<'_, '_> {
             probes.remove(&cut.key()).and_then(|(_, probe)| probe).expect("the kept cut was probed and fits");
         let (range, exact) = cut.dropped(outline.end());
         let mut change = self.change(Feature::Text, Some(range), None);
-        change.truncated = Some(Box::new(Truncated { unit, maximum, value, exact }));
+        change.truncated = Some(Truncated { unit, maximum: maximum as u32, value: value as u32, exact });
         rendered.changes.push(change);
         Fitted { rendered, measurements: self.measurements(&limits, &fitted) }
     }

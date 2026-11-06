@@ -224,9 +224,9 @@ fn rich_alts_share_the_text_budget() {
         changes(&projection),
         [("media", "approximated", "media_alt_truncated"), ("media", "omitted", "media_alt_omitted")]
     );
-    let truncated = projection.changes[0].truncated.as_deref().unwrap();
+    let truncated = projection.changes[0].truncated.unwrap();
     assert_eq!((truncated.maximum, truncated.value), (1, 13));
-    let slots: Vec<_> = projection.changes.iter().map(|change| change.slot.as_deref().copied()).collect();
+    let slots: Vec<_> = projection.changes.iter().map(|change| change.slot).collect();
     assert_eq!(slots, [Some(Slot { block: None, item: 1 }), Some(Slot { block: None, item: 2 })]);
     let alts: Vec<_> = projection.items.iter().map(|item| item.alt.as_deref()).collect();
     assert_eq!(alts, [Some("abc def"), Some("…"), None]);

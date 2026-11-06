@@ -84,20 +84,16 @@ fn fit_alt(
     let change = worst.map(|worst| {
         let when = if text.is_some() { When::Truncated } else { When::Overflow };
         let (class, reason) = target.rule(Feature::Media).outcome(Some(when));
-        let truncated = Truncated {
-            unit: worst.unit,
-            maximum: worst.maximum.unwrap_or(0) as usize,
-            value: worst.value as usize,
-            exact: false,
-        };
+        let truncated =
+            Truncated { unit: worst.unit, maximum: worst.maximum.unwrap_or(0), value: worst.value, exact: false };
         Change {
             class,
             feature: Feature::Media,
             reason,
             field: FieldName::Alt,
             range,
-            truncated: Some(Box::new(truncated)),
-            slot: Some(Box::new(Slot { block, item })),
+            truncated: Some(truncated),
+            slot: Some(Slot { block: block.map(|block| block as u32), item: item as u32 }),
         }
     });
     Alt { text, measurements, change }
