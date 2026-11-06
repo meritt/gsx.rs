@@ -1,0 +1,1448 @@
+{
+  "environment": {
+    "cpu": "Intel(R) Core(TM) i9-10910 CPU @ 3.60GHz",
+    "date": "2026-11-06T09:03:07Z",
+    "platform": "macos 24.6.0 x86_64",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
+  },
+  "memory": "peak heap growth of one parse, counting allocator",
+  "reference": {
+    "commit": "15f3837bb23a22c41f5937ee6677a63f633235bc",
+    "dirty": false,
+    "implementation": "gsx-native"
+  },
+  "results": [
+    {
+      "documents": 91,
+      "group": "typical",
+      "id": "typical",
+      "memory": {
+        "allocations": 8224,
+        "deltaKiB": 158.302
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 2.461,
+        "min": 2.417,
+        "p95": 2.742,
+        "samples": 100
+      },
+      "units": 112950
+    },
+    {
+      "documents": 1,
+      "group": "long",
+      "id": "long-4k",
+      "memory": {
+        "allocations": 4923,
+        "deltaKiB": 500.93,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 1.07,
+        "min": 1.007,
+        "p95": 1.154,
+        "samples": 100
+      },
+      "projections": {
+        "bluesky-entities": {
+          "fitted": true,
+          "median": 0.282,
+          "min": 0.276,
+          "p95": 0.363,
+          "samples": 20
+        },
+        "discord-blocks": {
+          "fitted": true,
+          "median": 0.964,
+          "min": 0.884,
+          "p95": 1.024,
+          "samples": 20
+        },
+        "discord-markdown": {
+          "fitted": true,
+          "median": 0.953,
+          "min": 0.909,
+          "p95": 1.021,
+          "samples": 20
+        },
+        "facebook-plain": {
+          "fitted": false,
+          "median": 0.026,
+          "min": 0.026,
+          "p95": 0.027,
+          "samples": 20
+        },
+        "instagram-plain": {
+          "fitted": true,
+          "median": 0.623,
+          "min": 0.595,
+          "p95": 0.658,
+          "samples": 20
+        },
+        "linkedin-plain": {
+          "fitted": false,
+          "median": 0.048,
+          "min": 0.046,
+          "p95": 0.048,
+          "samples": 20
+        },
+        "mastodon-plain": {
+          "fitted": true,
+          "median": 1.331,
+          "min": 1.258,
+          "p95": 1.407,
+          "samples": 20
+        },
+        "max-html": {
+          "fitted": false,
+          "median": 0.06,
+          "min": 0.059,
+          "p95": 0.061,
+          "samples": 20
+        },
+        "slack-blocks": {
+          "fitted": false,
+          "median": 0.091,
+          "min": 0.089,
+          "p95": 0.092,
+          "samples": 20
+        },
+        "slack-markdown": {
+          "fitted": false,
+          "median": 0.091,
+          "min": 0.089,
+          "p95": 0.093,
+          "samples": 20
+        },
+        "slack-plain": {
+          "fitted": false,
+          "median": 0.034,
+          "min": 0.034,
+          "p95": 0.037,
+          "samples": 20
+        },
+        "telegram-entities": {
+          "fitted": true,
+          "median": 0.118,
+          "min": 0.116,
+          "p95": 0.12,
+          "samples": 20
+        },
+        "telegram-html": {
+          "fitted": false,
+          "median": 0.075,
+          "min": 0.074,
+          "p95": 0.076,
+          "samples": 20
+        },
+        "telegram-html-rich": {
+          "fitted": false,
+          "median": 0.087,
+          "min": 0.085,
+          "p95": 0.089,
+          "samples": 20
+        },
+        "threads-entities": {
+          "fitted": true,
+          "median": 0.427,
+          "min": 0.422,
+          "p95": 0.437,
+          "samples": 20
+        },
+        "tiktok-plain": {
+          "fitted": false,
+          "median": 0.026,
+          "min": 0.025,
+          "p95": 0.029,
+          "samples": 20
+        },
+        "tiktok-plain-photo": {
+          "fitted": false,
+          "median": 0.03,
+          "min": 0.029,
+          "p95": 0.03,
+          "samples": 20
+        },
+        "vk-plain": {
+          "fitted": false,
+          "median": 0.026,
+          "min": 0.026,
+          "p95": 0.028,
+          "samples": 20
+        },
+        "x-plain": {
+          "fitted": true,
+          "median": 0.605,
+          "min": 0.581,
+          "p95": 0.649,
+          "samples": 20
+        },
+        "youtube-plain": {
+          "fitted": false,
+          "median": 0.036,
+          "min": 0.035,
+          "p95": 0.042,
+          "samples": 20
+        }
+      },
+      "scaling": {
+        "exponent": 0.87,
+        "fullMs": 1.004,
+        "halfMs": 0.482,
+        "halfOutcome": "accepted",
+        "halfUnits": 1650
+      },
+      "units": 3850
+    },
+    {
+      "documents": 1,
+      "group": "long",
+      "id": "long-32k",
+      "memory": {
+        "allocations": 40339,
+        "deltaKiB": 4212.016,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 9.197,
+        "min": 8.505,
+        "p95": 10.424,
+        "samples": 100
+      },
+      "projections": {
+        "bluesky-entities": {
+          "fitted": true,
+          "median": 1.687,
+          "min": 1.122,
+          "p95": 1.994,
+          "samples": 20
+        },
+        "discord-blocks": {
+          "fitted": true,
+          "median": 2.415,
+          "min": 2.243,
+          "p95": 2.917,
+          "samples": 20
+        },
+        "discord-markdown": {
+          "fitted": true,
+          "median": 2.252,
+          "min": 2.144,
+          "p95": 2.501,
+          "samples": 20
+        },
+        "facebook-plain": {
+          "fitted": false,
+          "median": 0.435,
+          "min": 0.391,
+          "p95": 0.497,
+          "samples": 20
+        },
+        "instagram-plain": {
+          "fitted": true,
+          "median": 1.336,
+          "min": 0.854,
+          "p95": 1.423,
+          "samples": 20
+        },
+        "linkedin-plain": {
+          "fitted": true,
+          "median": 1.962,
+          "min": 1.721,
+          "p95": 2.096,
+          "samples": 20
+        },
+        "mastodon-plain": {
+          "fitted": true,
+          "median": 5.275,
+          "min": 4.932,
+          "p95": 5.671,
+          "samples": 20
+        },
+        "max-html": {
+          "fitted": true,
+          "median": 2.003,
+          "min": 1.919,
+          "p95": 2.162,
+          "samples": 20
+        },
+        "slack-blocks": {
+          "fitted": true,
+          "median": 4.695,
+          "min": 4.351,
+          "p95": 5.71,
+          "samples": 20
+        },
+        "slack-markdown": {
+          "fitted": true,
+          "median": 4.717,
+          "min": 4.403,
+          "p95": 4.976,
+          "samples": 20
+        },
+        "slack-plain": {
+          "fitted": false,
+          "median": 0.494,
+          "min": 0.458,
+          "p95": 0.676,
+          "samples": 20
+        },
+        "telegram-entities": {
+          "fitted": true,
+          "median": 0.779,
+          "min": 0.624,
+          "p95": 0.906,
+          "samples": 20
+        },
+        "telegram-html": {
+          "fitted": true,
+          "median": 2.675,
+          "min": 2.474,
+          "p95": 2.835,
+          "samples": 20
+        },
+        "telegram-html-rich": {
+          "fitted": false,
+          "median": 0.9,
+          "min": 0.714,
+          "p95": 0.945,
+          "samples": 20
+        },
+        "threads-entities": {
+          "fitted": true,
+          "median": 1.447,
+          "min": 1.287,
+          "p95": 1.637,
+          "samples": 20
+        },
+        "tiktok-plain": {
+          "fitted": false,
+          "median": 0.419,
+          "min": 0.395,
+          "p95": 0.531,
+          "samples": 20
+        },
+        "tiktok-plain-photo": {
+          "fitted": true,
+          "median": 1.695,
+          "min": 1.45,
+          "p95": 1.766,
+          "samples": 20
+        },
+        "vk-plain": {
+          "fitted": false,
+          "median": 0.424,
+          "min": 0.408,
+          "p95": 0.517,
+          "samples": 20
+        },
+        "x-plain": {
+          "fitted": true,
+          "median": 2.724,
+          "min": 2.518,
+          "p95": 3.152,
+          "samples": 20
+        },
+        "youtube-plain": {
+          "fitted": true,
+          "median": 1.707,
+          "min": 1.646,
+          "p95": 1.739,
+          "samples": 20
+        }
+      },
+      "scaling": {
+        "exponent": 1.0,
+        "fullMs": 8.609,
+        "halfMs": 4.234,
+        "halfOutcome": "accepted",
+        "halfUnits": 15950
+      },
+      "units": 32450
+    },
+    {
+      "documents": 1,
+      "group": "long",
+      "id": "long-128k",
+      "memory": {
+        "allocations": 162095,
+        "deltaKiB": 16984.621,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 48.188,
+        "min": 45.077,
+        "p95": 54.093,
+        "samples": 100
+      },
+      "projections": {
+        "bluesky-entities": {
+          "fitted": true,
+          "median": 5.438,
+          "min": 4.857,
+          "p95": 6.591,
+          "samples": 20
+        },
+        "discord-blocks": {
+          "fitted": true,
+          "median": 5.961,
+          "min": 5.564,
+          "p95": 6.392,
+          "samples": 20
+        },
+        "discord-markdown": {
+          "fitted": true,
+          "median": 5.964,
+          "min": 5.722,
+          "p95": 6.444,
+          "samples": 20
+        },
+        "facebook-plain": {
+          "fitted": true,
+          "median": 10.588,
+          "min": 9.867,
+          "p95": 12.03,
+          "samples": 20
+        },
+        "instagram-plain": {
+          "fitted": true,
+          "median": 2.651,
+          "min": 2.31,
+          "p95": 3.681,
+          "samples": 20
+        },
+        "linkedin-plain": {
+          "fitted": true,
+          "median": 3.794,
+          "min": 3.536,
+          "p95": 4.118,
+          "samples": 20
+        },
+        "mastodon-plain": {
+          "fitted": true,
+          "median": 18.413,
+          "min": 17.075,
+          "p95": 18.89,
+          "samples": 20
+        },
+        "max-html": {
+          "fitted": true,
+          "median": 5.06,
+          "min": 3.954,
+          "p95": 5.591,
+          "samples": 20
+        },
+        "slack-blocks": {
+          "fitted": true,
+          "median": 8.623,
+          "min": 8.136,
+          "p95": 9.043,
+          "samples": 20
+        },
+        "slack-markdown": {
+          "fitted": true,
+          "median": 8.615,
+          "min": 8.01,
+          "p95": 9.265,
+          "samples": 20
+        },
+        "slack-plain": {
+          "fitted": false,
+          "median": 1.615,
+          "min": 1.42,
+          "p95": 2.323,
+          "samples": 20
+        },
+        "telegram-entities": {
+          "fitted": true,
+          "median": 2.212,
+          "min": 1.924,
+          "p95": 2.531,
+          "samples": 20
+        },
+        "telegram-html": {
+          "fitted": true,
+          "median": 5.754,
+          "min": 4.822,
+          "p95": 6.42,
+          "samples": 20
+        },
+        "telegram-html-rich": {
+          "fitted": true,
+          "median": 19.652,
+          "min": 17.032,
+          "p95": 21.464,
+          "samples": 20
+        },
+        "threads-entities": {
+          "fitted": true,
+          "median": 4.75,
+          "min": 4.244,
+          "p95": 5.465,
+          "samples": 20
+        },
+        "tiktok-plain": {
+          "fitted": false,
+          "median": 1.294,
+          "min": 1.21,
+          "p95": 1.473,
+          "samples": 20
+        },
+        "tiktok-plain-photo": {
+          "fitted": true,
+          "median": 2.75,
+          "min": 2.222,
+          "p95": 3.113,
+          "samples": 20
+        },
+        "vk-plain": {
+          "fitted": false,
+          "median": 1.369,
+          "min": 1.238,
+          "p95": 2.089,
+          "samples": 20
+        },
+        "x-plain": {
+          "fitted": true,
+          "median": 3.655,
+          "min": 3.373,
+          "p95": 3.793,
+          "samples": 20
+        },
+        "youtube-plain": {
+          "fitted": true,
+          "median": 3.247,
+          "min": 2.961,
+          "p95": 6.459,
+          "samples": 20
+        }
+      },
+      "scaling": {
+        "exponent": 1.11,
+        "fullMs": 38.363,
+        "halfMs": 17.801,
+        "halfOutcome": "accepted",
+        "halfUnits": 65450
+      },
+      "units": 130900
+    },
+    {
+      "documents": 1,
+      "group": "long",
+      "id": "prose-128k",
+      "memory": {
+        "allocations": 61,
+        "deltaKiB": 1642.717,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 2.049,
+        "min": 1.872,
+        "p95": 2.312,
+        "samples": 100
+      },
+      "projections": {
+        "bluesky-entities": {
+          "fitted": true,
+          "median": 11.01,
+          "min": 10.649,
+          "p95": 11.762,
+          "samples": 20
+        },
+        "discord-blocks": {
+          "fitted": true,
+          "median": 9.209,
+          "min": 8.908,
+          "p95": 9.47,
+          "samples": 20
+        },
+        "discord-markdown": {
+          "fitted": true,
+          "median": 9.143,
+          "min": 8.512,
+          "p95": 9.499,
+          "samples": 20
+        },
+        "facebook-plain": {
+          "fitted": true,
+          "median": 6.963,
+          "min": 6.792,
+          "p95": 7.636,
+          "samples": 20
+        },
+        "instagram-plain": {
+          "fitted": true,
+          "median": 7.097,
+          "min": 6.776,
+          "p95": 7.611,
+          "samples": 20
+        },
+        "linkedin-plain": {
+          "fitted": true,
+          "median": 8.405,
+          "min": 7.836,
+          "p95": 8.714,
+          "samples": 20
+        },
+        "mastodon-plain": {
+          "fitted": true,
+          "median": 9.804,
+          "min": 9.266,
+          "p95": 10.223,
+          "samples": 20
+        },
+        "max-html": {
+          "fitted": true,
+          "median": 7.873,
+          "min": 7.339,
+          "p95": 8.136,
+          "samples": 20
+        },
+        "slack-blocks": {
+          "fitted": true,
+          "median": 7.861,
+          "min": 7.337,
+          "p95": 8.491,
+          "samples": 20
+        },
+        "slack-markdown": {
+          "fitted": true,
+          "median": 8.138,
+          "min": 7.722,
+          "p95": 8.478,
+          "samples": 20
+        },
+        "slack-plain": {
+          "fitted": false,
+          "median": 0.34,
+          "min": 0.339,
+          "p95": 0.343,
+          "samples": 20
+        },
+        "telegram-entities": {
+          "fitted": true,
+          "median": 7.243,
+          "min": 6.607,
+          "p95": 7.925,
+          "samples": 20
+        },
+        "telegram-html": {
+          "fitted": true,
+          "median": 8.199,
+          "min": 7.611,
+          "p95": 8.631,
+          "samples": 20
+        },
+        "telegram-html-rich": {
+          "fitted": true,
+          "median": 8.595,
+          "min": 8.018,
+          "p95": 10.578,
+          "samples": 20
+        },
+        "threads-entities": {
+          "fitted": true,
+          "median": 10.36,
+          "min": 9.845,
+          "p95": 10.79,
+          "samples": 20
+        },
+        "tiktok-plain": {
+          "fitted": false,
+          "median": 0.02,
+          "min": 0.02,
+          "p95": 0.02,
+          "samples": 20
+        },
+        "tiktok-plain-photo": {
+          "fitted": true,
+          "median": 7.708,
+          "min": 7.144,
+          "p95": 8.112,
+          "samples": 20
+        },
+        "vk-plain": {
+          "fitted": false,
+          "median": 0.031,
+          "min": 0.03,
+          "p95": 0.031,
+          "samples": 20
+        },
+        "x-plain": {
+          "fitted": true,
+          "median": 8.859,
+          "min": 8.542,
+          "p95": 9.433,
+          "samples": 20
+        },
+        "youtube-plain": {
+          "fitted": true,
+          "median": 15.11,
+          "min": 13.989,
+          "p95": 17.162,
+          "samples": 20
+        }
+      },
+      "scaling": {
+        "exponent": 0.99,
+        "fullMs": 1.796,
+        "halfMs": 0.901,
+        "halfOutcome": "accepted",
+        "halfUnits": 65487
+      },
+      "units": 131057
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "lines-text",
+      "memory": {
+        "allocations": 49418,
+        "deltaKiB": 14433.045,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 20.25,
+        "min": 18.572,
+        "p95": 22.46,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.12,
+        "fullMs": 16.285,
+        "halfMs": 7.488,
+        "halfOutcome": "accepted",
+        "halfUnits": 16382
+      },
+      "units": 32766
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "lines-blank",
+      "memory": {
+        "allocations": 164013,
+        "deltaKiB": 12254.941,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 33.511,
+        "min": 30.889,
+        "p95": 37.809,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.06,
+        "fullMs": 28.217,
+        "halfMs": 13.526,
+        "halfOutcome": "accepted",
+        "halfUnits": 12285
+      },
+      "units": 24573
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "lines-heading",
+      "memory": {
+        "allocations": 278712,
+        "deltaKiB": 32128.051,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 66.49,
+        "min": 62.703,
+        "p95": 69.986,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.31,
+        "fullMs": 60.65,
+        "halfMs": 24.513,
+        "halfOutcome": "accepted",
+        "halfUnits": 32764
+      },
+      "units": 65532
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "hard-breaks",
+      "memory": {
+        "allocations": 7408,
+        "deltaKiB": 1192.927,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 2.236,
+        "min": 2.035,
+        "p95": 2.45,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.0,
+        "fullMs": 2.294,
+        "halfMs": 1.147,
+        "halfOutcome": "accepted",
+        "halfUnits": 2045
+      },
+      "units": 4093
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "emphasis-delimiters",
+      "memory": {
+        "allocations": 2166,
+        "deltaKiB": 540.65,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 19.495,
+        "min": 12.845,
+        "p95": 21.092,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.02,
+        "fullMs": 23.047,
+        "halfMs": 11.122,
+        "halfOutcome": "accepted",
+        "halfUnits": 63042
+      },
+      "units": 129086
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "label-starts",
+      "memory": {
+        "allocations": 40745,
+        "deltaKiB": 3452.828,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 14.208,
+        "min": 13.135,
+        "p95": 15.285,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.0,
+        "fullMs": 13.923,
+        "halfMs": 6.958,
+        "halfOutcome": "accepted",
+        "halfUnits": 60010
+      },
+      "units": 120020
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "escapes",
+      "memory": {
+        "allocations": 24728,
+        "deltaKiB": 4124.499,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 4.743,
+        "min": 4.298,
+        "p95": 5.537,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.17,
+        "fullMs": 4.092,
+        "halfMs": 1.824,
+        "halfOutcome": "accepted",
+        "halfUnits": 6141
+      },
+      "units": 12285
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "list-items",
+      "memory": {
+        "allocations": 213193,
+        "deltaKiB": 21446.175,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 52.633,
+        "min": 48.106,
+        "p95": 58.688,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.1,
+        "fullMs": 42.686,
+        "halfMs": 19.908,
+        "halfOutcome": "accepted",
+        "halfUnits": 16380
+      },
+      "units": 32764
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "container-depth",
+      "memory": {
+        "allocations": 3521,
+        "deltaKiB": 43175.055,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 42.184,
+        "min": 36.921,
+        "p95": 46.131,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.21,
+        "fullMs": 35.471,
+        "halfMs": 15.351,
+        "halfOutcome": "accepted",
+        "halfUnits": 64000
+      },
+      "units": 128000
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "table-cells",
+      "memory": {
+        "allocations": 116352,
+        "deltaKiB": 11663.785,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 25.07,
+        "min": 22.939,
+        "p95": 30.529,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.1,
+        "fullMs": 21.189,
+        "halfMs": 9.877,
+        "halfOutcome": "accepted",
+        "halfUnits": 13524
+      },
+      "units": 27024
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "paired-highlight",
+      "memory": {
+        "allocations": 13445,
+        "deltaKiB": 1991.222,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 2.719,
+        "min": 2.347,
+        "p95": 3.178,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.26,
+        "fullMs": 2.432,
+        "halfMs": 1.012,
+        "halfOutcome": "accepted",
+        "halfUnits": 3066
+      },
+      "units": 6138
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "paired-spoiler",
+      "memory": {
+        "allocations": 13445,
+        "deltaKiB": 1991.222,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 2.669,
+        "min": 2.352,
+        "p95": 3.087,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.26,
+        "fullMs": 2.41,
+        "halfMs": 1.005,
+        "halfOutcome": "accepted",
+        "halfUnits": 3066
+      },
+      "units": 6138
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "math-literals",
+      "memory": {
+        "allocations": 7248,
+        "deltaKiB": 865.284,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 1.396,
+        "min": 1.339,
+        "p95": 1.542,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 0.6,
+        "fullMs": 1.463,
+        "halfMs": 0.965,
+        "halfOutcome": "accepted",
+        "halfUnits": 3066
+      },
+      "units": 6138
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "label-ends",
+      "memory": {
+        "allocations": 59,
+        "deltaKiB": 3.632,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 0.01,
+        "min": 0.01,
+        "p95": 0.01,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 0.26,
+        "fullMs": 0.01,
+        "halfMs": 0.009,
+        "halfOutcome": "accepted",
+        "halfUnits": 256
+      },
+      "units": 512
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "escaped-code-ticks",
+      "memory": {
+        "allocations": 24742,
+        "deltaKiB": 4140.972,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 4.991,
+        "min": 4.372,
+        "p95": 5.557,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.11,
+        "fullMs": 4.471,
+        "halfMs": 2.069,
+        "halfOutcome": "accepted",
+        "halfUnits": 8192
+      },
+      "units": 16384
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "quote-paragraphs",
+      "memory": {
+        "allocations": 213190,
+        "deltaKiB": 22253.596,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 49.119,
+        "min": 46.273,
+        "p95": 52.342,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.09,
+        "fullMs": 42.018,
+        "halfMs": 19.705,
+        "halfOutcome": "accepted",
+        "halfUnits": 20475
+      },
+      "units": 40955
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "setext-headings",
+      "memory": {
+        "allocations": 213176,
+        "deltaKiB": 18272.262,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 44.679,
+        "min": 40.706,
+        "p95": 47.737,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.15,
+        "fullMs": 40.833,
+        "halfMs": 18.461,
+        "halfOutcome": "accepted",
+        "halfUnits": 16380
+      },
+      "units": 32764
+    },
+    {
+      "documents": 1,
+      "group": "budget",
+      "id": "nested-list-items",
+      "memory": {
+        "allocations": 237819,
+        "deltaKiB": 24785.055,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 58.319,
+        "min": 55.15,
+        "p95": 61.959,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.14,
+        "fullMs": 51.407,
+        "halfMs": 23.291,
+        "halfOutcome": "accepted",
+        "halfUnits": 20480
+      },
+      "units": 40960
+    },
+    {
+      "documents": 1,
+      "group": "unbounded",
+      "id": "html-comment-opens",
+      "memory": {
+        "allocations": 74,
+        "deltaKiB": 9282.584,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 4.165,
+        "min": 3.948,
+        "p95": 4.633,
+        "samples": 10
+      },
+      "scaling": {
+        "exponent": 0.99,
+        "fullMs": 3.315,
+        "halfMs": 1.664,
+        "halfOutcome": "accepted",
+        "halfUnits": 32770
+      },
+      "units": 65538
+    },
+    {
+      "documents": 1,
+      "group": "unbounded",
+      "id": "html-instruction-opens",
+      "memory": {
+        "allocations": 73,
+        "deltaKiB": 4674.581,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.719,
+        "min": 3.431,
+        "p95": 4.079,
+        "samples": 10
+      },
+      "scaling": {
+        "exponent": 0.99,
+        "fullMs": 3.052,
+        "halfMs": 1.533,
+        "halfOutcome": "accepted",
+        "halfUnits": 32769
+      },
+      "units": 65535
+    },
+    {
+      "documents": 1,
+      "group": "unbounded",
+      "id": "html-comment-tags",
+      "memory": {
+        "allocations": 73,
+        "deltaKiB": 4674.586,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.263,
+        "min": 3.114,
+        "p95": 3.475,
+        "samples": 10
+      },
+      "scaling": {
+        "exponent": 1.0,
+        "fullMs": 2.872,
+        "halfMs": 1.434,
+        "halfOutcome": "accepted",
+        "halfUnits": 32770
+      },
+      "units": 65540
+    },
+    {
+      "documents": 1,
+      "group": "unbounded",
+      "id": "code-tick-ramp",
+      "memory": {
+        "allocations": 77,
+        "deltaKiB": 370.35,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.342,
+        "min": 3.255,
+        "p95": 3.437,
+        "samples": 10
+      },
+      "scaling": {
+        "exponent": 0.98,
+        "fullMs": 3.092,
+        "halfMs": 0.801,
+        "halfOutcome": "accepted",
+        "halfUnits": 31625
+      },
+      "units": 125750
+    },
+    {
+      "documents": 1,
+      "group": "unbounded",
+      "id": "http-run",
+      "memory": {
+        "allocations": 73,
+        "deltaKiB": 4738.582,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 2.65,
+        "min": 2.45,
+        "p95": 2.718,
+        "samples": 10
+      },
+      "scaling": {
+        "exponent": 0.99,
+        "fullMs": 2.288,
+        "halfMs": 1.153,
+        "halfOutcome": "accepted",
+        "halfUnits": 65536
+      },
+      "units": 131072
+    },
+    {
+      "documents": 1,
+      "group": "unbounded",
+      "id": "scheme-separator-run",
+      "memory": {
+        "allocations": 74,
+        "deltaKiB": 9314.582,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 4.174,
+        "min": 3.945,
+        "p95": 4.329,
+        "samples": 10
+      },
+      "scaling": {
+        "exponent": 0.99,
+        "fullMs": 3.4,
+        "halfMs": 1.714,
+        "halfOutcome": "accepted",
+        "halfUnits": 49152
+      },
+      "units": 98304
+    },
+    {
+      "documents": 1,
+      "group": "unbounded",
+      "id": "www-run",
+      "memory": {
+        "allocations": 71,
+        "deltaKiB": 321.215,
+        "outcome": "accepted"
+      },
+      "outcome": "accepted",
+      "parse": {
+        "median": 2.744,
+        "min": 2.451,
+        "p95": 2.821,
+        "samples": 10
+      },
+      "scaling": {
+        "exponent": 0.99,
+        "fullMs": 2.439,
+        "halfMs": 1.225,
+        "halfOutcome": "accepted",
+        "halfUnits": 65536
+      },
+      "units": 131072
+    },
+    {
+      "documents": 1,
+      "group": "reject",
+      "id": "reject-lines",
+      "memory": {
+        "allocations": 18,
+        "deltaKiB": 768.0,
+        "outcome": "MARKDOWN_TOO_COMPLEX"
+      },
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.516,
+        "min": 0.487,
+        "p95": 0.566,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 0.92,
+        "fullMs": 0.295,
+        "halfMs": 0.156,
+        "halfOutcome": "MARKDOWN_TOO_COMPLEX",
+        "halfUnits": 65536
+      },
+      "units": 131072
+    },
+    {
+      "documents": 1,
+      "group": "reject",
+      "id": "reject-empty-items",
+      "memory": {
+        "allocations": 17,
+        "deltaKiB": 384.0,
+        "outcome": "MARKDOWN_TOO_COMPLEX"
+      },
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.436,
+        "min": 0.398,
+        "p95": 0.484,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 0.93,
+        "fullMs": 0.205,
+        "halfMs": 0.107,
+        "halfOutcome": "MARKDOWN_TOO_COMPLEX",
+        "halfUnits": 43690
+      },
+      "units": 87380
+    },
+    {
+      "documents": 1,
+      "group": "reject",
+      "id": "reject-delimiters",
+      "memory": {
+        "allocations": 69,
+        "deltaKiB": 695.777,
+        "outcome": "MARKDOWN_TOO_COMPLEX"
+      },
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.94,
+        "min": 0.525,
+        "p95": 1.016,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": 1.35,
+        "fullMs": 0.988,
+        "halfMs": 0.386,
+        "halfOutcome": "MARKDOWN_TOO_COMPLEX",
+        "halfUnits": 60000
+      },
+      "units": 120000
+    },
+    {
+      "documents": 1,
+      "group": "reject",
+      "id": "reject-label-ends",
+      "memory": {
+        "allocations": 44,
+        "deltaKiB": 3.634,
+        "outcome": "MARKDOWN_TOO_COMPLEX"
+      },
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.007,
+        "min": 0.007,
+        "p95": 0.007,
+        "samples": 100
+      },
+      "scaling": {
+        "exponent": null,
+        "fullMs": 0.007,
+        "halfMs": 0.009,
+        "halfOutcome": "accepted",
+        "halfUnits": 256
+      },
+      "units": 514
+    }
+  ],
+  "targets": [
+    "x-plain",
+    "mastodon-plain",
+    "linkedin-plain",
+    "facebook-plain",
+    "instagram-plain",
+    "vk-plain",
+    "youtube-plain",
+    "tiktok-plain",
+    "slack-plain",
+    "bluesky-entities",
+    "threads-entities",
+    "telegram-entities",
+    "telegram-html",
+    "telegram-html-rich",
+    "max-html",
+    "discord-markdown",
+    "slack-markdown",
+    "discord-blocks",
+    "slack-blocks",
+    "tiktok-plain-photo"
+  ]
+}

@@ -1,0 +1,75 @@
+# Measure
+
+How each target counts text against its limits. Code: `crates/gsx-core/src/measure`.
+
+## API
+
+`measure(unit, text, &Facts) -> u32` is the one counting entry point; `clusters(text)` yields grapheme clusters for the fitting outline; each target's `limits` are its per-field table. `Facts` carries URL spans, elided spans and resolved provider facts. Spans are byte ranges of the measured string, in order; empty, reversed, out-of-bounds, non-boundary and overlapping spans are ignored. `measure` detects nothing: URL and mention ranges come from the projection that rendered or detected them. X text is NFC-normalized by the projection before it is measured.
+
+## Units
+
+| Unit | Count |
+| --- | --- |
+| `graphemes` | extended grapheme clusters, UAX #29 |
+| `code-points` | Unicode scalar values |
+| `utf16-code-units` | UTF-16 code units |
+| `utf8-bytes` | UTF-8 bytes |
+| `x-weighted` | twitter-text v3 config: URL span 23; longest RGI_Emoji match 2; U+0000–10FF, U+2000–200D, U+2010–201F, U+2032–2037 1; any other code point 2 |
+| `mastodon-weighted` | Mastodon `StatusLengthValidator`: graphemes of the text with each URL span replaced by `x` and each elided span removed, plus `characters_reserved_per_url − 1` per URL; 0 reserved removes the URL |
+| `threads-weighted` | graphemes; a cluster that is exactly an RGI_Emoji sequence or one Emoji_Presentation code point counts its UTF-8 bytes |
+
+A Mastodon mention counts as `@local`: the projection passes `@domain` as an elided span.
+
+## Rule table
+
+Every `Target` declares its `limits` beside its rules and form in `crates/gsx-core/src/targets/`; the manifest lists them per field. Fields follow [projection.md](projection.md): `text`, `title`, `description`, plus `alt` per media item. A `Limit` is field, placements, media condition (any, without media, with media, only images or only videos; for `alt` the item's kind), rendering, unit and maximum; `Target::measure` runs exactly the limits that apply. `Rendering::Visible` measures text with markup removed and entities decoded, as the provider counts it; `Payload` measures the field value as sent. `Maximum::Resolved` names a provider fact (Mastodon instance, Telegram channel-story capabilities) and its default.
+
+| Target | Field (context) | Unit | Maximum |
+| --- | --- | --- | --- |
+| `telegram-html` | text (post without media), visible | utf16 | 4096 |
+| | text (post or reel with media), visible | utf16 | 1024 |
+| | text (story), visible | utf16 | 2048 |
+| `telegram-html-rich` | text (post), visible | code points | 32768 |
+| `telegram-entities` | text (story) | utf16 | caption limit, 200 |
+| `max-html` | text, visible | code points | 4000 |
+| `discord-markdown`, `discord-blocks` | text; alt | code points | 2000; 1024 |
+| `slack-markdown` | text | code points | 12000 |
+| `slack-plain` | text (file comment); alt (image) | code points | none; 1000 |
+| `slack-blocks` | text; alt | code points | 12000; 2000 |
+| `bluesky-entities` | text | graphemes and utf8 | 300 and 3000 |
+| | alt (image); alt (video) | graphemes and utf8 | 2000 and 20000; 1000 and 10000 |
+| `threads-entities` | text | threads-weighted | 500 |
+| `x-plain` | text | x-weighted | 280 |
+| `mastodon-plain` | text | mastodon-weighted | max characters, 500 |
+| | alt | code points | description limit, 1500 |
+| `linkedin-plain` | text; alt | code points | 3000; 4086 |
+| `facebook-plain` | text | code points | 63206 |
+| `instagram-plain` | text; alt | code points | 2200; 1000 |
+| `vk-plain` | text; title (video name); alt (video); alt (image) | code points | none; 128; 5000; 2048 |
+| `youtube-plain` | title; description | code points; utf8 | 100; 5000 |
+| `tiktok-plain` | text (video); text (photo post); title (photo post) | utf16 | 2200; 4000; 90 |
+
+Not measured here: Telegram rich structure limits (blocks, nesting, media, table columns), hashtag, mention and media counts, NFC normalization before X counting, URL and mention detection.
+
+## Unicode
+
+Unicode 17.0.0, the version of ICU 78 in Node.js 26.13.0. `tools/measure/tables.mjs` generates `crates/gsx-core/src/measure/tables.rs` from the UCD (Grapheme_Cluster_Break, Extended_Pictographic, InCB, Emoji_Presentation, RGI_Emoji) and checks every sequence against Node's `\p{RGI_Emoji}`; it also writes the UAX #29 test file. Run `node tools/measure/tables.mjs [ucd-directory]`; without a directory it fetches the pinned version. NFC before X counting comes from `icu_normalizer` 2.2, on the same Unicode version; `node tools/unicode/normalization.mjs [ucd-directory]` writes its conformance cases to `crates/gsx-core/tests/project/NormalizationTest.txt`.
+
+No dependency: neither `unicode-segmentation` nor ICU4X's segmenter carries RGI_Emoji, which X and Threads need, so the tables are generated in-tree.
+
+## Choices
+
+| Case | Rule |
+| --- | --- |
+| `bluesky-entities` | graphemes and UTF-8 bytes both reported, each against its own maximum |
+| `mastodon-plain`, instance unresolved | vanilla Mastodon: 500, 23 per URL, 1500 alt |
+| `telegram-entities`, capabilities resolved | UTF-16 against the resolved maximum; unverified against tdlib |
+| `facebook-plain` | 63 206 code points, the documented post limit |
+
+VK and `slack-plain` text stay unlimited until a primary source documents a limit.
+
+## Verification
+
+- `GraphemeBreakTest.txt` 17.0.0: every line.
+- Corpus: every measurement in `testdata/corpus/targets/*.jsonl` replays exactly. X URL ranges and Mastodon URL and mention ranges are pinned by `crates/gsx-core/tests/project/twitter-urls.jsonl` and `mastodon-entities.jsonl`.
+- Properties: arbitrary spans never panic; clusters partition the text and each is one cluster; every unit adds across a control character; a URL span weighs its reserved length; every cluster weighs at least 1 in `x-weighted` and `threads-weighted`.

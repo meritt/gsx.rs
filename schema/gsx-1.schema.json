@@ -1,0 +1,470 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/meritt/gsx.rs/schema/gsx-1.schema.json",
+  "title": "gsx/1 wire result",
+  "description": "Wire format of gsx-core::wire: a parse result, a serialize result (the canonical gsx/1 source), a projection result or the target listing. Document offsets are UTF-16 code units of the normalized input; a range is [start, end).",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": { "document": { "$ref": "#/$defs/document" } },
+      "required": ["document"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": { "serialized": { "type": "string" } },
+      "required": ["serialized"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": { "projection": { "$ref": "#/$defs/projection" } },
+      "required": ["projection"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": { "targets": { "type": "array", "items": { "$ref": "#/$defs/target" } } },
+      "required": ["targets"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": { "error": { "$ref": "#/$defs/error" } },
+      "required": ["error"],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "offset": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "range": {
+      "type": "array",
+      "prefixItems": [{ "$ref": "#/$defs/offset" }, { "$ref": "#/$defs/offset" }],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "nullableString": { "type": ["string", "null"] },
+    "count": { "type": "integer", "minimum": 0 },
+    "projection": {
+      "type": "object",
+      "properties": {
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
+        "measurements": { "type": "array", "items": { "$ref": "#/$defs/measurement" } },
+        "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
+        "media": { "type": "array", "items": { "type": "string" } },
+        "blocks": {
+          "description": "Present for targets of the blocks/1 form only: text and media laid out in order.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/block" }
+        }
+      },
+      "required": ["fields", "measurements", "changes", "media"],
+      "additionalProperties": false
+    },
+    "block": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "text": { "type": "string" } },
+          "required": ["text"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "reference": { "type": "string" },
+                  "alt": { "$ref": "#/$defs/nullableString" },
+                  "spoiler": { "type": "boolean" }
+                },
+                "required": ["reference", "alt", "spoiler"],
+                "additionalProperties": false
+              }
+            },
+            "layout": { "enum": ["collage", "slideshow", null] }
+          },
+          "required": ["items", "layout"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "fieldName": { "enum": ["text", "title", "description", "alt"] },
+    "field": {
+      "type": "object",
+      "properties": {
+        "name": { "$ref": "#/$defs/fieldName" },
+        "text": { "type": "string" },
+        "links": {
+          "description": "UTF-16 ranges of links in the field text.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/range" }
+        },
+        "entities": { "type": "array", "items": { "$ref": "#/$defs/entity" } }
+      },
+      "required": ["name", "text", "links", "entities"],
+      "additionalProperties": false
+    },
+    "entity": {
+      "type": "object",
+      "properties": {
+        "style": { "enum": ["bold", "italic", "underline", "strikethrough", "spoiler", "code", "link", "tag"] },
+        "range": {
+          "description": "Range in the field text, in the target's offsets unit (see the target listing).",
+          "$ref": "#/$defs/range"
+        },
+        "value": { "$ref": "#/$defs/nullableString" }
+      },
+      "required": ["style", "range", "value"],
+      "additionalProperties": false
+    },
+    "unit": {
+      "enum": [
+        "graphemes",
+        "code-points",
+        "utf16-code-units",
+        "utf8-bytes",
+        "x-weighted",
+        "mastodon-weighted",
+        "threads-weighted"
+      ]
+    },
+    "measurement": {
+      "type": "object",
+      "properties": {
+        "field": { "$ref": "#/$defs/fieldName" },
+        "unit": { "$ref": "#/$defs/unit" },
+        "value": { "$ref": "#/$defs/count" },
+        "maximum": { "oneOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] },
+        "block": { "description": "Index of the measured block, with item.", "$ref": "#/$defs/count" },
+        "item": { "description": "Index of the measured media item in the block.", "$ref": "#/$defs/count" }
+      },
+      "required": ["field", "unit", "value", "maximum"],
+      "dependentRequired": { "block": ["item"], "item": ["block"] },
+      "additionalProperties": false
+    },
+    "change": {
+      "type": "object",
+      "properties": {
+        "class": { "enum": ["approximated", "textual_fallback", "unwrapped", "omitted", "blocked"] },
+        "feature": {
+          "enum": [
+            "heading",
+            "thematic_break",
+            "blockquote",
+            "bullet_list",
+            "ordered_list",
+            "compound_list",
+            "code_block",
+            "table",
+            "task_list",
+            "media",
+            "emphasis",
+            "strong",
+            "strikethrough",
+            "underline",
+            "highlight",
+            "spoiler",
+            "inline_code",
+            "link",
+            "link_title",
+            "datetime",
+            "angle_brackets",
+            "text",
+            "title"
+          ]
+        },
+        "reason": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "code": {
+          "description": "The reason in upper case when the class is blocked, else null.",
+          "oneOf": [{ "type": "string", "pattern": "^[A-Z0-9_]+$" }, { "type": "null" }]
+        },
+        "field": { "$ref": "#/$defs/fieldName" },
+        "range": { "oneOf": [{ "$ref": "#/$defs/range" }, { "type": "null" }] },
+        "truncated": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "unit": { "$ref": "#/$defs/unit" },
+                "maximum": { "$ref": "#/$defs/count" },
+                "value": { "$ref": "#/$defs/count" },
+                "exact": { "type": "boolean" }
+              },
+              "required": ["unit", "maximum", "value", "exact"],
+              "additionalProperties": false
+            },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": ["class", "feature", "reason", "code", "field", "range", "truncated"],
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "form": { "enum": ["plain/1", "entities/1", "html/1", "markdown/1", "blocks/1"] },
+        "offsets": { "enum": ["utf8", "utf16", null] },
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+        "manifest": { "type": "string" }
+      },
+      "required": ["name", "form", "offsets", "digest", "manifest"],
+      "additionalProperties": false
+    },
+    "document": {
+      "type": "object",
+      "properties": {
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "markers": { "type": "array", "items": { "$ref": "#/$defs/marker" } },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } }
+      },
+      "required": ["children", "markers", "diagnostics"],
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/$defs/diagnosticCode" },
+        "range": { "oneOf": [{ "$ref": "#/$defs/range" }, { "type": "null" }] },
+        "details": { "$ref": "#/$defs/details" }
+      },
+      "required": ["code", "range", "details"],
+      "additionalProperties": false
+    },
+    "diagnostic": {
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/$defs/diagnosticCode" },
+        "severity": { "enum": ["warning", "error"] },
+        "range": { "$ref": "#/$defs/range" },
+        "details": { "$ref": "#/$defs/details" }
+      },
+      "required": ["code", "severity", "range", "details"],
+      "additionalProperties": false
+    },
+    "diagnosticCode": {
+      "enum": [
+        "DATETIME_INVALID",
+        "DATETIME_TIMEZONE_REQUIRED",
+        "LINK_LITERALIZED",
+        "MARKDOWN_INVALID_TEXT",
+        "MARKDOWN_MALFORMED",
+        "MARKDOWN_TOO_COMPLEX",
+        "MEDIA_DIRECTIVE_INVALID",
+        "MEDIA_REFERENCE_CONTEXT_UNSUPPORTED",
+        "MEDIA_REFERENCE_COVER",
+        "MEDIA_REFERENCE_DUPLICATE",
+        "MEDIA_REFERENCE_UNKNOWN"
+      ]
+    },
+    "details": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "maxProperties": 0 },
+        {
+          "type": "object",
+          "properties": { "scheme": { "enum": ["http", "https", "relative", "unsupported"] } },
+          "required": ["scheme"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "id": { "type": "string" }, "index": { "$ref": "#/$defs/offset" } },
+          "required": ["id"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "enum": [
+                "blockDelimiters",
+                "blockLabels",
+                "blockLabelEnds",
+                "containerDepth",
+                "documentEscapes",
+                "documentHardBreaks",
+                "documentLines",
+                "documentListItems",
+                "documentMathLiterals",
+                "documentPairedDelimiters",
+                "documentTableCells"
+              ]
+            },
+            "maximum": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["limit", "maximum"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "codePoint": { "type": "integer", "minimum": 0, "maximum": 1114111 } },
+          "required": ["codePoint"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "marker": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "emphasis",
+            "strong",
+            "strikethrough",
+            "spoiler",
+            "underline",
+            "highlight",
+            "codeText",
+            "codeFence",
+            "heading",
+            "thematicBreak",
+            "blockQuote",
+            "listItem",
+            "taskCheck",
+            "tableDelimiter",
+            "link",
+            "autolink",
+            "escape",
+            "characterReference",
+            "hardBreak",
+            "directive",
+            "media"
+          ]
+        },
+        "range": { "$ref": "#/$defs/range" }
+      },
+      "required": ["kind", "range"],
+      "additionalProperties": false
+    },
+    "node": {
+      "type": "object",
+      "properties": {
+        "range": { "$ref": "#/$defs/range" },
+        "provenance": { "const": "literal" },
+        "gapBefore": { "$ref": "#/$defs/offset" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" }, "minItems": 1 }
+      },
+      "required": ["type", "range"],
+      "oneOf": [
+        { "$ref": "#/$defs/bareNode" },
+        { "$ref": "#/$defs/headingNode" },
+        { "$ref": "#/$defs/listNode" },
+        { "$ref": "#/$defs/listItemNode" },
+        { "$ref": "#/$defs/codeNode" },
+        { "$ref": "#/$defs/tableNode" },
+        { "$ref": "#/$defs/valueNode" },
+        { "$ref": "#/$defs/linkNode" },
+        { "$ref": "#/$defs/datetimeNode" },
+        { "$ref": "#/$defs/mediaReferenceNode" },
+        { "$ref": "#/$defs/mediaGroupNode" }
+      ],
+      "unevaluatedProperties": false
+    },
+    "bareNode": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "paragraph",
+            "thematicBreak",
+            "blockquote",
+            "tableRow",
+            "tableCell",
+            "emphasis",
+            "strong",
+            "delete",
+            "underline",
+            "highlight",
+            "spoiler",
+            "break"
+          ]
+        }
+      }
+    },
+    "headingNode": {
+      "type": "object",
+      "properties": { "type": { "const": "heading" }, "depth": { "type": "integer", "minimum": 1, "maximum": 6 } },
+      "required": ["depth"]
+    },
+    "listNode": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "list" },
+        "ordered": { "type": "boolean" },
+        "start": { "oneOf": [{ "$ref": "#/$defs/offset" }, { "type": "null" }] },
+        "spread": { "type": "boolean" }
+      },
+      "required": ["ordered", "start", "spread"]
+    },
+    "listItemNode": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "listItem" },
+        "spread": { "type": "boolean" },
+        "checked": { "type": ["boolean", "null"] }
+      },
+      "required": ["spread", "checked"]
+    },
+    "codeNode": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "code" },
+        "lang": { "$ref": "#/$defs/nullableString" },
+        "meta": { "$ref": "#/$defs/nullableString" },
+        "value": { "type": "string" }
+      },
+      "required": ["lang", "meta", "value"]
+    },
+    "tableNode": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "table" },
+        "align": { "type": "array", "items": { "enum": ["left", "right", "center", null] } }
+      },
+      "required": ["align"]
+    },
+    "valueNode": {
+      "type": "object",
+      "properties": { "type": { "enum": ["text", "inlineCode"] }, "value": { "type": "string" } },
+      "required": ["value"]
+    },
+    "linkNode": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "link" },
+        "url": { "type": "string" },
+        "source": { "type": "string" },
+        "title": { "$ref": "#/$defs/nullableString" }
+      },
+      "required": ["url", "source", "title"]
+    },
+    "datetimeNode": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "datetime" },
+        "datetime": { "$ref": "#/$defs/nullableString" },
+        "unix": { "type": "integer" }
+      },
+      "required": ["datetime", "unix"]
+    },
+    "mediaReferenceNode": {
+      "type": "object",
+      "properties": { "type": { "const": "mediaReference" }, "mediaId": { "type": "string" } },
+      "required": ["mediaId"]
+    },
+    "mediaGroupNode": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "mediaGroup" },
+        "mediaIds": { "type": "array", "items": { "type": "string" } },
+        "layout": { "enum": ["collage", "slideshow"] }
+      },
+      "required": ["mediaIds", "layout"]
+    }
+  }
+}

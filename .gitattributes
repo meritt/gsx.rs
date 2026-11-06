@@ -1,0 +1,2 @@
+/testdata/**/*.jsonl linguist-generated
+/testdata/bench/** -linguist-generated

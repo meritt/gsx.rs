@@ -1,0 +1,21 @@
+language = "C"
+include_guard = "GSX_H"
+cpp_compat = true
+no_includes = true
+sys_includes = ["stdbool.h", "stddef.h", "stdint.h"]
+usize_is_size_t = true
+style = "both"
+documentation = false
+
+[export]
+exclude = ["VERSION"]
+
+[export.rename]
+"Output" = "gsx_output"
+"Error" = "gsx_error"
+"Media" = "gsx_media"
+"Facts" = "gsx_facts"
+"MediaFact" = "gsx_media_fact"
+
+[fn]
+args = "auto"

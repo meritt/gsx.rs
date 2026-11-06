@@ -1,0 +1,60 @@
+# Projection
+
+## Contract
+
+`project(document, target, facts) -> Projection` is pure. Every input that changes the output is a declared fact: media, instance limits, the channel-story caption limit, whether entities are allowed, an appended target URL, an explicit title. No ambient context reaches a projection.
+
+| Field | Content |
+| --- | --- |
+| `fields` | named text outputs (`text`, `title`, `description`, `alt`), each with its links or entities |
+| `blocks` | `blocks` targets only: ordered text and media blocks; text blocks are rendered by the platform's `markdown` target |
+| `measurements` | one per limited field: unit, value, maximum; per-block limits carry the block index |
+| `changes` | every change, ordered by source position, uncapped |
+| `media` | selected items, covers, per-item changes |
+
+Media appear as references (`media:<id>`); the caller resolves URLs and builds the request.
+
+## Changes
+
+| Class | Meaning |
+| --- | --- |
+| `approximated` | same meaning through another native construct |
+| `textual_fallback` | the construct is rendered as visible text |
+| `unwrapped` | the construct is removed, its content kept |
+| `omitted` | the construct and its content are removed |
+| `blocked` | the projection cannot be published; carries a code |
+
+Native output is not reported. A change has `feature`, `reason`, `field` and the source range. Reasons are `<feature>_<outcome>`, one per cause, with no target prefix unless the cause is target-specific. An empty projection is one `blocked` change.
+
+- No change is silent: a datetime label, a nested quote on a `markdown` target, a code info string and the MAX spoiler each yield one.
+- Highlight keeps its content: `unwrapped`, never `omitted`.
+- A change belongs to the field that produced it.
+
+## Target table
+
+`feature → { class, reason, conditions: [{ when, class, reason }] }`, plus form configuration, measure rules per field and facts. The renderer reads only the table and the configuration; the manifest, capabilities and digest derive from it. The digest hashes the table, the form version and the measure rules, never a hand-bumped revision. `tests/targets.rs` checks every emitted `(feature, class, reason)` against the table.
+
+## Forms
+
+| Form | Configuration |
+| --- | --- |
+| `plain` | escape (none, LinkedIn reserved set, HTML entities, angle substitution); link `label (href)`, label omitted when equal to `href` |
+| `entities` | offset unit (UTF-16, UTF-8); node → range kind; exclusive groups; code splits ranges; range cap with overflow class; empty-label policy |
+| `markdown` | delimiter map; escape set; provider-owned spans; line-start neutralisers; fence and info policy; native block set; datetime template; quote nesting |
+| `html` | tag map; native block set; newline form; nesting constraints; `href` schemes; empty-element removal |
+| `blocks` | text segments rendered by the platform's `markdown` target; media grouping; per-item alt limit; block ceiling |
+
+All forms share block layout: one list-marker set, continuation lines indented by the marker width, a quote prefix on every line including blank ones, one table cell separator. A target overrides a rule only where the platform renders differently. In `entities` targets a range nested in a range of the same style is dropped.
+
+## Fields
+
+A derived field (YouTube title, TikTok photo title, VK video name) declares its source (explicit fact, leading heading, first line), whether it leaves the body, its unit, maximum and truncation (ellipsis or hard). Every limited field is measured and fitted on its own; fitting one never cuts another.
+
+Generated ellipsis, cut position and the gap before a block are node fields. A truncated literal stays literal: escaping and entity detection treat it as authored text.
+
+## Fitting
+
+- One outline per document: grapheme segments over inline flows; cuts snap back out of URLs, mentions, hashtags and emails.
+- Per field, a lower bound from the retained segments, then a monotone search: a gallop from the point the overflow ratio predicts (upper bound × maximum / measured value), a binary search, and a rescan of up to 64 units.
+- A later cut measures less than an earlier one only when the earlier cut sits inside an inline container (link, datetime, styled span render differently when cut) or keeps a partial word (ellipsis back-off depends on closing punctuation; X and Mastodon weigh completed URLs and mentions differently). Above such cuts lengths only grow, so the rescan stops at the first clean cut above the boundary and scans the whole window only when that cut fits.
+- Every target uses the monotone search: O(log n) renders of the document plus at most 64 rescan probes. `tests/fit.rs` checks it against exhaustive search for every target on the corpus and generated inputs.

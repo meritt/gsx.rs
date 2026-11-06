@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "blocks": {
+    "section": "## Раздел 🚀\n\nАбзац с **жирным**, *курсивом*, ~~зачёркнутым~~, ++подчёркнутым++, ==выделением== и ||спойлером||. Ссылка на [документацию](https://example.com/docs \"Заголовок\") и `inline code`. Встреча :time[в пятницу]{datetime=\"2026-11-06T18:00:00Z\"}, а ещё https://example.org/page и #тег.\n\n- Пункт первый\n- Пункт второй с **выделением**\n  1. Вложенный\n  2. Ещё один\n\n- [x] Задача сделана\n- [ ] Задача не сделана\n\n> Цитата с *курсивом*\n> и продолжением.\n\n```js\nconst answer = 42;\n```\n\n| Колонка | Значение |\n| --- | ---: |\n| a | 1 |\n| b | 2 |\n\n---\n\n",
+    "prose": "Корвин смотрит на огни гавани Амбера, пока Рэндом пересказывает новости из Ардена. "
+  },
+  "cases": [
+    { "id": "long-4k", "group": "long", "source": { "repeat": { "block": "section" }, "until": 4096 } },
+    { "id": "long-32k", "group": "long", "source": { "repeat": { "block": "section" }, "until": 32768 } },
+    { "id": "long-128k", "group": "long", "source": { "repeat": { "block": "section" }, "until": 131072 } },
+    { "id": "prose-128k", "group": "long", "source": { "repeat": { "block": "prose" }, "until": 131072 } },
+
+    { "id": "lines-text", "group": "budget", "source": { "repeat": "a\n", "times": 16383 } },
+    { "id": "lines-blank", "group": "budget", "source": { "repeat": "a\n\n", "times": 8191 } },
+    { "id": "lines-heading", "group": "budget", "source": { "repeat": "# a\n", "times": 16383 } },
+    { "id": "hard-breaks", "group": "budget", "source": { "concat": [{ "repeat": "a  \n", "times": 1023 }, "a"] } },
+    {
+      "id": "emphasis-delimiters",
+      "group": "budget",
+      "source": { "repeat": { "concat": [{ "repeat": "*a ", "times": 1000 }, "\n\n"] }, "until": 131072 }
+    },
+    {
+      "id": "label-starts",
+      "group": "budget",
+      "source": { "repeat": { "concat": [{ "repeat": "[a ", "times": 4000 }, "\n\n"] }, "until": 131072 }
+    },
+    { "id": "escapes", "group": "budget", "source": { "repeat": "\\*a", "times": 4095 } },
+    { "id": "list-items", "group": "budget", "source": { "repeat": "- a\n", "times": 8191 } },
+    {
+      "id": "container-depth",
+      "group": "budget",
+      "source": { "repeat": { "concat": [{ "repeat": "> ", "times": 63 }, "a\n"] }, "times": 1000 }
+    },
+    {
+      "id": "table-cells",
+      "group": "budget",
+      "source": { "concat": ["| a | b |\n| --- | --- |\n", { "repeat": "| a | b |\n", "times": 2700 }] }
+    },
+    { "id": "paired-highlight", "group": "budget", "source": { "repeat": "==a== ", "times": 1023 } },
+    { "id": "paired-spoiler", "group": "budget", "source": { "repeat": "||a|| ", "times": 1023 } },
+    { "id": "math-literals", "group": "budget", "source": { "repeat": "$a=b$ ", "times": 1023 } },
+    { "id": "label-ends", "group": "budget", "source": { "repeat": "a]", "times": 256 } },
+    { "id": "escaped-code-ticks", "group": "budget", "source": { "repeat": "\\`` ", "times": 4096 } },
+    { "id": "quote-paragraphs", "group": "budget", "source": { "repeat": "> a\n\n", "times": 8191 } },
+    { "id": "setext-headings", "group": "budget", "source": { "repeat": "a\n=\n", "times": 8191 } },
+    { "id": "nested-list-items", "group": "budget", "source": { "repeat": "- a\n  - b\n", "times": 4096 } },
+
+    { "id": "html-comment-opens", "group": "unbounded", "source": { "concat": ["</", { "repeat": "<!--", "times": 16384 }] } },
+    {
+      "id": "html-instruction-opens",
+      "group": "unbounded",
+      "source": { "concat": ["-1", { "repeat": "<?x", "times": 21844 }, "y"] }
+    },
+    { "id": "html-comment-tags", "group": "unbounded", "source": { "repeat": "!-- <", "times": 13108 } },
+    { "id": "code-tick-ramp", "group": "unbounded", "source": { "ramp": { "pre": "e", "step": "`", "from": 1 }, "times": 500 } },
+    { "id": "http-run", "group": "unbounded", "source": { "repeat": "http", "times": 32768 } },
+    { "id": "scheme-separator-run", "group": "unbounded", "source": { "repeat": "://", "times": 32768 } },
+    { "id": "www-run", "group": "unbounded", "source": { "repeat": "www.", "times": 32768 } },
+
+    { "id": "reject-lines", "group": "reject", "source": { "repeat": "a\n", "times": 65536 } },
+    { "id": "reject-empty-items", "group": "reject", "source": { "repeat": "-\n", "times": 43690 } },
+    { "id": "reject-delimiters", "group": "reject", "source": { "repeat": "*a ", "times": 40000 } },
+    { "id": "reject-label-ends", "group": "reject", "source": { "repeat": "a]", "times": 257 } }
+  ]
+}

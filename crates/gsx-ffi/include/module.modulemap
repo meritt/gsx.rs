@@ -1,0 +1,4 @@
+module GSXFFI {
+    header "gsx.h"
+    export *
+}

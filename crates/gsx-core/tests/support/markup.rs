@@ -1,0 +1,103 @@
+use proptest::prelude::*;
+
+pub const FRAGMENTS: &[&str] = &[
+    "a",
+    "word ",
+    "й",
+    "🚀",
+    "\u{301}",
+    " ",
+    "  ",
+    "    ",
+    "\t",
+    "\n",
+    "\n\n",
+    "  \n",
+    "\r\n",
+    "\r",
+    "\u{feff}",
+    "\u{0}",
+    "*",
+    "**",
+    "_",
+    "__",
+    "~~",
+    "++",
+    "==",
+    "||",
+    "$",
+    "`",
+    "``",
+    "```",
+    "~~~",
+    "\\",
+    "\\`",
+    "&amp;",
+    "&#x1F680;",
+    "&",
+    "[",
+    "]",
+    "(",
+    ")",
+    "<",
+    ">",
+    "</",
+    "<!--",
+    "-->",
+    "<?",
+    "<![CDATA[",
+    "<div>",
+    "<a href=\"x\">",
+    "\"",
+    "'",
+    "!",
+    "#",
+    "# ",
+    "###### ",
+    "=",
+    "-",
+    "- ",
+    "* ",
+    "+ ",
+    "1. ",
+    "1) ",
+    "0*1",
+    "> ",
+    "---",
+    "***",
+    "|",
+    "| a | b |\n| --- | :-: |\n",
+    "- [ ] ",
+    "- [x] ",
+    "[a]: https://example.com\n",
+    "[a](https://example.com \"t\")",
+    "![a](b)",
+    "https://example.com/path?q=1",
+    "www.example.org",
+    "user@example.com",
+    "<https://example.com>",
+    ":time[",
+    "]{datetime=\"2026-11-06T18:00:00Z\"}",
+    "]{unix=\"1785423600\"}",
+    "::media{id=\"a\"}",
+    "::media{id=\"b\"}",
+    "::media{ids=\"a,b\" layout=\"collage\"}",
+    "::media{}",
+    "{",
+    "}",
+];
+
+pub fn markup() -> impl Strategy<Value = String> {
+    prop::collection::vec(prop::sample::select(FRAGMENTS), 0..96).prop_map(|parts| parts.concat())
+}
+
+pub fn boundaries(text: &str) -> Vec<bool> {
+    let mut boundaries = vec![false; text.encode_utf16().count() + 1];
+    let mut offset = 0;
+    for char in text.chars() {
+        boundaries[offset] = true;
+        offset += char.len_utf16();
+    }
+    boundaries[offset] = true;
+    boundaries
+}

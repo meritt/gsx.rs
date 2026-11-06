@@ -1,0 +1,20 @@
+[package]
+name = "gsx-ffi"
+description = "C ABI of gsx, for Swift and other native callers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "gsx_ffi"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+gsx-core.workspace = true

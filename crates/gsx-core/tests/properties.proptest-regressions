@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc bb9ddd12ae79d541ba43cd429996429238cc7922be660eab91daa0d5e0b38d35 # shrinks to text = "*:time[[:time[| a | b |\n| --- | :-: |\nauser@example.com]{datetime=\"2026-11-06T18:00:00Z\"}"
+cc 40ba0b1fd3114b63eae1b227b5eb0b96742ada44da3844a2df1ebedd270ffc82 # shrinks to text = "*:time[\r\n\u{feff}"
+cc d4293b0b91f5d2f3577429ba876a9eb6c182e4d943ce61e500c80540caeaa2fe # shrinks to text = "a:time[-->\n\u{feff}user@example.coma]{datetime=\"2026-11-06T18:00:00Z\"}"

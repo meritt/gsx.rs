@@ -1,0 +1,124 @@
+mod support;
+
+use std::collections::HashMap;
+
+use gsx_core::document::{Media, parse};
+use gsx_core::project::{Facts, MediaKind};
+use gsx_core::targets::target;
+use gsx_core::wire;
+use support::{Json, LONE_SURROGATE, difference, records};
+
+fn media(case: &Json) -> Vec<Media<'_>> {
+    case.get("media")
+        .array()
+        .iter()
+        .map(|item| Media { id: item.get("id").str().unwrap(), cover: item.get("cover").str() })
+        .collect()
+}
+
+fn facts(json: &Json) -> Facts<'static> {
+    if let Json::Object(object) = json {
+        let unknown: Vec<_> =
+            object.keys().filter(|key| !["media", "captionLimit", "entitiesAllowed"].contains(&key.as_str())).collect();
+        assert!(unknown.is_empty(), "facts not read by the corpus test: {unknown:?}");
+    }
+    Facts {
+        media: match json.get("media").str() {
+            None => None,
+            Some("image") => Some(MediaKind::Image),
+            Some("video") => Some(MediaKind::Video),
+            Some(other) => panic!("no media kind {other}"),
+        },
+        caption_limit: match json.get("captionLimit") {
+            Json::Number(limit) => Some(*limit as u32),
+            _ => None,
+        },
+        entities_allowed: json.get("entitiesAllowed") == &Json::Bool(true),
+        ..Facts::default()
+    }
+}
+
+fn check(failures: &mut Vec<String>, label: &str, expected: &Json, actual: &str) {
+    if let Some(found) = difference("", expected, &Json::parse(actual)) {
+        failures.push(format!("{label}\n    {found}"));
+    }
+}
+
+fn report(failures: &[String], compared: usize) {
+    assert!(
+        failures.is_empty(),
+        "{} of {compared} cases differ; after an intended change run `cargo xtask corpus` and review the diff:\n{}",
+        failures.len(),
+        failures.iter().take(40).cloned().collect::<Vec<_>>().join("\n")
+    );
+}
+
+fn matches_parse_corpus(file: &str) {
+    let mut failures = vec![];
+    let mut compared = 0;
+    for case in records(file) {
+        let markdown = case.get("markdown").str().unwrap();
+        if markdown.contains(LONE_SURROGATE) {
+            continue;
+        }
+        compared += 1;
+        let actual = wire::parse(markdown.as_bytes(), &media(&case));
+        check(&mut failures, &format!("{} {markdown:?}", case.get("id")), case.get("expected"), &actual);
+    }
+    report(&failures, compared);
+}
+
+#[test]
+fn matches_document_corpus() {
+    matches_parse_corpus("document.jsonl");
+}
+
+#[test]
+fn matches_diagnostics_corpus() {
+    matches_parse_corpus("diagnostics.jsonl");
+}
+
+#[test]
+fn matches_target_corpus() {
+    let inputs: HashMap<String, Json> = records("document.jsonl")
+        .into_iter()
+        .chain(records("diagnostics.jsonl"))
+        .map(|case| (case.get("id").str().unwrap().to_owned(), case))
+        .collect();
+    let dir = format!("{}/../../testdata/corpus/targets", env!("CARGO_MANIFEST_DIR"));
+    let mut files: Vec<_> = std::fs::read_dir(dir).unwrap().map(|entry| entry.unwrap().path()).collect();
+    files.sort();
+    let mut failures = vec![];
+    let mut compared = 0;
+    for file in files {
+        let text = std::fs::read_to_string(&file).unwrap();
+        let header = Json::parse(text.lines().next().unwrap());
+        let name = header.get("target").str().unwrap();
+        let target = target(name).unwrap();
+        for line in text.lines().skip(1).filter(|line| !line.is_empty()) {
+            let record = Json::parse(line);
+            let id = record.get("id").str().unwrap();
+            let input = if record.get("markdown").str().is_some() { &record } else { &inputs[id] };
+            let markdown = input.get("markdown").str().unwrap();
+            if markdown.contains(LONE_SURROGATE) {
+                continue;
+            }
+            compared += 1;
+            let facts =
+                facts(if record.get("facts") == &Json::Null { header.get("facts") } else { record.get("facts") });
+            let actual = wire::project(markdown.as_bytes(), &media(input), target, &facts);
+            check(&mut failures, &format!("{name} {id} {}", record.get("facts")), record.get("expected"), &actual);
+        }
+    }
+    report(&failures, compared);
+}
+
+#[test]
+fn prefixes_do_not_panic() {
+    for case in records("document.jsonl").iter().take(400) {
+        let markdown = case.get("markdown").str().unwrap();
+        for end in (0..=markdown.len()).filter(|&end| markdown.is_char_boundary(end)) {
+            let _ = parse(&markdown[..end], &[]);
+        }
+    }
+}
