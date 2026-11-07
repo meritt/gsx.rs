@@ -142,6 +142,24 @@ fn attached_media_report_only_listed_items() {
 }
 
 #[test]
+fn media_after_the_cut_still_report_their_change() {
+    let markdown = format!("{}\n\n::media{{id=\"c\"}}", "word ".repeat(2000));
+    let items = [MediaFact { id: "c", format: Format::Image, alt: None, spoiler: false, inline: false }];
+    let facts = Facts { media: Some(MediaKind::Image), media_count: 1, items: Some(&items), ..Facts::default() };
+    let mut cut = vec![];
+    for target in TARGETS.iter().filter(|target| target.form.blocks().is_none() && target.name != "telegram-html-rich")
+    {
+        let projection = run(target.name, &markdown, &facts);
+        let reasons: Vec<_> = projection.changes.iter().map(|change| change.reason).collect();
+        if reasons.contains(&"text_truncated") {
+            cut.push(target.name);
+            assert!(reasons.contains(&"media_attached"), "{}: {reasons:?}", target.name);
+        }
+    }
+    assert!(cut.contains(&"x-plain") && cut.contains(&"telegram-html") && cut.contains(&"discord-markdown"), "{cut:?}");
+}
+
+#[test]
 fn telegram_limits_count_code_points() {
     let emoji = "\u{1F600}";
     let cases = [

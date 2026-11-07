@@ -8,11 +8,11 @@ pub const RENDERER: Renderer = Renderer { blocks, inline };
 pub fn blocks(context: &mut Context, nodes: &[Node]) {
     let mut first = true;
     for node in nodes {
-        if context.done() {
-            break;
-        }
         if media(node) {
             context.report_media(node);
+            continue;
+        }
+        if context.done() {
             continue;
         }
         if !first {

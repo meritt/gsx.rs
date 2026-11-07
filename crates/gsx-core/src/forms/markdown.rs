@@ -16,11 +16,11 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
 fn blocks_at(context: &mut Context, nodes: &[Node], depth: u32) {
     let mut first = true;
     for node in nodes {
-        if context.done() {
-            break;
-        }
         if media(node) {
             context.report_media(node);
+            continue;
+        }
+        if context.done() {
             continue;
         }
         if !first {
