@@ -78,7 +78,10 @@ pub static THREADS: Target = entities(
             feature: Feature::TargetUrl,
             class: TextualFallback,
             reason: "target_url_as_text",
-            conditions: &[Condition { when: When::Overflow, class: Omitted, reason: "target_url_omitted" }],
+            conditions: &[
+                Condition { when: When::Overflow, class: Omitted, reason: "target_url_omitted" },
+                Condition { when: When::Refused, class: Omitted, reason: "target_url_refused" },
+            ],
         },
     ),
     &THREADS_FORM,

@@ -642,7 +642,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         rendered
     };
 
-    let target_url = facts.target_url.filter(|_| target.handles(Feature::TargetUrl));
+    let target_url = facts.target_url.filter(|_| target.handles(Feature::TargetUrl)).map(links::accepted);
 
     let mut fields = vec![];
     let mut measurements = vec![];
@@ -655,7 +655,10 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         let request = Request { target, spec, facts, options };
         let fitted = match (spec.source, explicit, titled) {
             (Source::Body, ..) => {
-                let suffix = target_url.filter(|_| !derived).filter(|url| {
+                if !derived && matches!(target_url, Some(None)) {
+                    changes.push(request.change(Feature::TargetUrl, None, Some(When::Refused)));
+                }
+                let suffix = target_url.as_ref().and_then(Option::as_deref).filter(|_| !derived).filter(|url| {
                     let blank = measure::blank(&target.form.visible(&draw_body(spec.name, None).text));
                     let least = if blank { (*url).to_owned() } else { format!("{ELLIPSIS}\n\n{url}") };
                     let fits = request.fits(&Rendered::text(least));

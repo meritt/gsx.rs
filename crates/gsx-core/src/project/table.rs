@@ -28,6 +28,7 @@ pub enum When {
     Count,
     Spoiler,
     Truncated,
+    Refused,
 }
 
 impl When {
@@ -51,6 +52,7 @@ impl When {
             When::Count => "count",
             When::Spoiler => "spoiler",
             When::Truncated => "truncated",
+            When::Refused => "refused",
         }
     }
 }
