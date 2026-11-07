@@ -7,6 +7,7 @@ import gsx
 FACTS = {
     "media": "media",
     "mediaCount": "media_count",
+    "placement": "placement",
     "title": "title",
     "targetUrl": "target_url",
     "maxCharacters": "max_characters",

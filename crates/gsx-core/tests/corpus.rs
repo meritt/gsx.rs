@@ -3,7 +3,7 @@ mod support;
 use std::collections::HashMap;
 
 use gsx_core::document::{Media, parse};
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Placement};
 use gsx_core::targets::target;
 use gsx_core::wire;
 use support::{Json, LONE_SURROGATE, difference, records};
@@ -64,13 +64,20 @@ fn facts<'a>(json: &'a Json, items: &'a [MediaFact<'a>]) -> Facts<'a> {
             Json::Number(count) => *count as usize,
             _ => 0,
         },
+        placement: match json.get("placement").str() {
+            None => None,
+            Some("post") => Some(Placement::Post),
+            Some("reel") => Some(Placement::Reel),
+            Some("story") => Some(Placement::Story),
+            Some(other) => panic!("no placement {other}"),
+        },
         items,
         ..Facts::default()
     }
 }
 
 const KNOWN_FACTS: &[&str] =
-    &["media", "mediaCount", "captionLimit", "descriptionLimit", "entitiesAllowed", "targetUrl", "items"];
+    &["media", "mediaCount", "placement", "captionLimit", "descriptionLimit", "entitiesAllowed", "targetUrl", "items"];
 
 fn check(failures: &mut Vec<String>, label: &str, expected: &Json, actual: &str) {
     if let Some(found) = difference("", expected, &Json::parse(actual)) {

@@ -405,9 +405,14 @@ impl Request<'_, '_> {
 
     fn limits(&self) -> Vec<Bound> {
         let field = self.spec.name;
-        let placement = [Placement::Post, Placement::Reel, Placement::Story].into_iter().find(|&placement| {
-            self.target.applicable(field, measure::Context { placement, media: self.facts.media }).next().is_some()
-        });
+        let placement = self
+            .facts
+            .placement
+            .into_iter()
+            .chain([Placement::Post, Placement::Reel, Placement::Story])
+            .find(|&placement| {
+                self.target.applicable(field, measure::Context { placement, media: self.facts.media }).next().is_some()
+            });
         let Some(placement) = placement else {
             return vec![];
         };

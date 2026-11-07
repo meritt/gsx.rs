@@ -77,6 +77,7 @@ export const load = (() => {
   }
 
   const KINDS = { image: 1, video: 2, gif: 3, audio: 4 };
+  const PLACEMENTS = { post: 1, reel: 2, story: 3 };
   const FORMATS = { image: 0, gif: 1, video: 2, audio: 3 };
 
   function mediaFacts(items) {
@@ -170,6 +171,12 @@ export const load = (() => {
         throw new TypeError("facts.media must be 'image', 'video', 'gif', 'audio', null or undefined");
       }
 
+      const placement = facts.placement == null ? 0 : PLACEMENTS[facts.placement];
+
+      if (placement === undefined) {
+        throw new TypeError("facts.placement must be 'post', 'reel', 'story', null or undefined");
+      }
+
       if (title !== null && (typeof title !== 'string' || !title.isWellFormed())) {
         throw new TypeError('facts.title must be a well-formed string or null');
       }
@@ -193,6 +200,7 @@ export const load = (() => {
         target,
         kind,
         count(facts.mediaCount, 'facts.mediaCount') ?? 0,
+        placement,
         title ?? undefined,
         targetUrl ?? undefined,
         count(facts.maxCharacters, 'facts.maxCharacters'),

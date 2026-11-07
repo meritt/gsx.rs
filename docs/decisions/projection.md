@@ -2,7 +2,7 @@
 
 ## Contract
 
-`project(document, target, facts) -> Projection` is pure. Every input that changes the output is a declared fact: media, instance limits, the channel-story caption limit, whether entities are allowed, an appended target URL, an explicit title. No ambient context reaches a projection.
+`project(document, target, facts) -> Projection` is pure. Every input that changes the output is a declared fact: media, the placement (post, reel or story), instance limits, the channel-story caption limit, whether entities are allowed, an appended target URL, an explicit title. No ambient context reaches a projection.
 
 | Field | Content |
 | --- | --- |

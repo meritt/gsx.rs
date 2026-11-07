@@ -2,7 +2,7 @@ mod support;
 
 use gsx_core::document::{Media, Range, parse};
 use gsx_core::project::{
-    Class, Facts, Format, MediaFact, MediaKind, Offsets, Options, Projection, Target, project_with,
+    Class, Facts, Format, MediaFact, MediaKind, Offsets, Options, Placement, Projection, Target, project_with,
 };
 use gsx_core::targets::TARGETS;
 use proptest::prelude::*;
@@ -66,11 +66,13 @@ const MEDIA: [Media<'static>; 4] = [
     Media { id: "e", cover: None },
 ];
 const FORMATS: [Format; 4] = [Format::Image, Format::Gif, Format::Video, Format::Audio];
+const PLACEMENTS: [Placement; 3] = [Placement::Post, Placement::Reel, Placement::Story];
 
 #[derive(Clone, Debug)]
 struct Setup {
     media: usize,
     video: bool,
+    placement: Option<Placement>,
     items: Vec<(usize, bool, bool, bool)>,
     title: Option<String>,
     max_characters: Option<u32>,
@@ -90,7 +92,7 @@ fn setup() -> impl Strategy<Value = Setup> {
         prop::collection::vec((0..FORMATS.len(), any::<bool>(), any::<bool>(), any::<bool>()), MEDIA.len()),
         prop::option::of("[a-zé🚀 ]{0,24}"),
         (prop::option::of(1..1000u32), prop::option::of(0..64u32), prop::option::of(1..2000u32)),
-        (any::<bool>(), prop::option::of(0..160usize)),
+        (any::<bool>(), prop::option::of(0..160usize), prop::option::of(prop::sample::select(&PLACEMENTS[..]))),
     )
         .prop_map(
             |(
@@ -98,11 +100,12 @@ fn setup() -> impl Strategy<Value = Setup> {
                 items,
                 title,
                 (max_characters, characters_reserved_per_url, caption_limit),
-                (entities_allowed, maximum),
+                (entities_allowed, maximum, placement),
             )| {
                 Setup {
                     media,
                     video,
+                    placement,
                     items,
                     title,
                     max_characters,
@@ -200,6 +203,7 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
     let facts = Facts {
         media: (setup.media > 0).then_some(if setup.video { MediaKind::Video } else { MediaKind::Image }),
         media_count: setup.media,
+        placement: setup.placement,
         title: setup.title.as_deref(),
         target_url: None,
         max_characters: setup.max_characters,

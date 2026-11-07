@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use gsx_core::document::{Document, parse};
 use gsx_core::project::{
-    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Projection, Style, Target, Unit, project,
-    project_with,
+    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Placement, Projection, Style, Target,
+    Unit, project, project_with,
 };
 use gsx_core::targets::{TARGETS, target};
 
@@ -157,6 +157,25 @@ fn telegram_limits_count_code_points() {
         assert_eq!(text(&over, FieldName::Text), format!("{}…", emoji.repeat(maximum - 1)), "{name}");
         assert!(reasons(&over).contains(&(Class::Approximated, Feature::Text, "text_truncated")), "{name}");
     }
+}
+
+#[test]
+fn placement_selects_limits() {
+    let body = "word ".repeat(300);
+    let image = |placement| Facts { media: Some(MediaKind::Image), media_count: 1, placement, ..Facts::default() };
+    let maximum = |name, facts: &Facts| {
+        let projection = run(name, &body, facts);
+        projection.measurements.iter().find(|item| item.field == FieldName::Text).unwrap().maximum
+    };
+    assert_eq!(maximum("telegram-html", &image(None)), Some(1024));
+    assert_eq!(maximum("telegram-html", &image(Some(Placement::Post))), Some(1024));
+    assert_eq!(maximum("telegram-html", &image(Some(Placement::Story))), Some(2048));
+    let story = run("telegram-html", &body, &image(Some(Placement::Story)));
+    assert_eq!(text(&story, FieldName::Text), body.trim_end());
+    assert_eq!(
+        maximum("telegram-entities", &Facts { placement: Some(Placement::Post), ..Facts::default() }),
+        Some(200)
+    );
 }
 
 #[test]

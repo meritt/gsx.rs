@@ -1,5 +1,5 @@
 use gsx_core::document::Media;
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Placement};
 use gsx_core::{targets, wire};
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
@@ -58,6 +58,7 @@ pub fn project(
     target: &str,
     kind: u8,
     count: u32,
+    placement: u8,
     title: Option<String>,
     target_url: Option<String>,
     max_characters: Option<u32>,
@@ -98,6 +99,13 @@ pub fn project(
             _ => return Err(JsError::new(&format!("media kind {kind} is not 0, 1, 2, 3 or 4"))),
         },
         media_count: count as usize,
+        placement: match placement {
+            0 => None,
+            1 => Some(Placement::Post),
+            2 => Some(Placement::Reel),
+            3 => Some(Placement::Story),
+            _ => return Err(JsError::new(&format!("placement {placement} is not 0, 1, 2 or 3"))),
+        },
         title: title.as_deref(),
         target_url: target_url.as_deref(),
         max_characters,

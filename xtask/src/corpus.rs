@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use gsx_core::document::Media;
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Target};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Placement, Target};
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire;
 
@@ -170,6 +170,13 @@ fn outcome(
             Some(other) => return Err(format!("{place}: no media kind {other}")),
         },
         media_count: limit("mediaCount").unwrap_or(0) as usize,
+        placement: match facts.get("placement").string().as_deref() {
+            None => None,
+            Some("post") => Some(Placement::Post),
+            Some("reel") => Some(Placement::Reel),
+            Some("story") => Some(Placement::Story),
+            Some(other) => return Err(format!("{place}: no placement {other}")),
+        },
         title: title.as_deref(),
         target_url: target_url.as_deref(),
         max_characters: limit("maxCharacters"),
@@ -192,7 +199,7 @@ fn outcome(
 
 const FACTS: [&str; 2] = [
     "{}",
-    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"entitiesAllowed":true}"#,
+    r#"{"media":"image","mediaCount":1,"placement":"story","title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"entitiesAllowed":true}"#,
 ];
 
 pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> Result {

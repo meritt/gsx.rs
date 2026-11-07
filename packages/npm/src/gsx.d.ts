@@ -115,6 +115,8 @@ export type Wire = { document: Document } | { error: WireError };
 export interface Facts {
   media?: 'image' | 'video' | 'gif' | 'audio' | null;
   mediaCount?: number;
+  /** Selects the limits declared for this placement; without it, or when the target declares none there, the first of post, reel, story that declares one. */
+  placement?: 'post' | 'reel' | 'story' | null;
   title?: string | null;
   /** Appended after the body, or replacing a blank body, on targets that declare `target_url`; never cut. */
   targetUrl?: string | null;

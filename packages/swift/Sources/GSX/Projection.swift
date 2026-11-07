@@ -13,6 +13,20 @@ public enum MediaKind: String, Sendable, Hashable, Decodable {
     }
 }
 
+/// Selects the limits declared for this placement; without it, or when the target declares none
+/// there, the first of post, reel, story that declares one.
+public enum Placement: String, Sendable, Hashable, Decodable {
+    case post, reel, story
+
+    var native: UInt32 {
+        switch self {
+        case .post: UInt32(GSX_PLACEMENT_POST)
+        case .reel: UInt32(GSX_PLACEMENT_REEL)
+        case .story: UInt32(GSX_PLACEMENT_STORY)
+        }
+    }
+}
+
 /// An attached media item, matched to media references by `id`.
 public struct MediaFact: Sendable, Hashable, Decodable {
     public enum Format: String, Sendable, Hashable, Decodable {
@@ -46,6 +60,7 @@ public struct MediaFact: Sendable, Hashable, Decodable {
 public struct Facts: Sendable, Hashable {
     public var media: MediaKind?
     public var mediaCount: Int
+    public var placement: Placement?
     public var title: String?
     public var targetUrl: String?
     public var maxCharacters: UInt32?
@@ -58,6 +73,7 @@ public struct Facts: Sendable, Hashable {
     public init(
         media: MediaKind? = nil,
         mediaCount: Int = 0,
+        placement: Placement? = nil,
         title: String? = nil,
         targetUrl: String? = nil,
         maxCharacters: UInt32? = nil,
@@ -69,6 +85,7 @@ public struct Facts: Sendable, Hashable {
     ) {
         self.media = media
         self.mediaCount = mediaCount
+        self.placement = placement
         self.title = title
         self.targetUrl = targetUrl
         self.maxCharacters = maxCharacters

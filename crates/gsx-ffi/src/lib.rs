@@ -6,7 +6,7 @@ use std::ptr;
 use std::sync::LazyLock;
 
 use gsx_core::document::Media as CoreMedia;
-use gsx_core::project::{Facts as CoreFacts, Format, MediaFact as CoreMediaFact, MediaKind};
+use gsx_core::project::{Facts as CoreFacts, Format, MediaFact as CoreMediaFact, MediaKind, Placement};
 use gsx_core::{targets, wire};
 
 pub use gsx_core::VERSION;
@@ -98,6 +98,11 @@ pub const GSX_MEDIA_VIDEO: u32 = 2;
 pub const GSX_MEDIA_GIF: u32 = 3;
 pub const GSX_MEDIA_AUDIO: u32 = 4;
 
+pub const GSX_PLACEMENT_NONE: u32 = 0;
+pub const GSX_PLACEMENT_POST: u32 = 1;
+pub const GSX_PLACEMENT_REEL: u32 = 2;
+pub const GSX_PLACEMENT_STORY: u32 = 3;
+
 pub const GSX_FORMAT_IMAGE: u32 = 0;
 pub const GSX_FORMAT_GIF: u32 = 1;
 pub const GSX_FORMAT_VIDEO: u32 = 2;
@@ -120,6 +125,7 @@ pub struct MediaFact {
 pub struct Facts {
     pub media: u32,
     pub media_count: usize,
+    pub placement: u32,
     pub title: *const u8,
     pub title_len: usize,
     pub target_url: *const u8,
@@ -180,6 +186,13 @@ impl Facts {
                 other => return Err(format!("media kind {other} is not GSX_MEDIA_*")),
             },
             media_count: self.media_count,
+            placement: match self.placement {
+                GSX_PLACEMENT_NONE => None,
+                GSX_PLACEMENT_POST => Some(Placement::Post),
+                GSX_PLACEMENT_REEL => Some(Placement::Reel),
+                GSX_PLACEMENT_STORY => Some(Placement::Story),
+                other => return Err(format!("placement {other} is not GSX_PLACEMENT_*")),
+            },
             title,
             target_url,
             max_characters: limit(self.max_characters, "max_characters")?,
@@ -429,6 +442,7 @@ mod tests {
         let facts = Facts {
             media: GSX_MEDIA_VIDEO,
             media_count: 1,
+            placement: GSX_PLACEMENT_STORY,
             title: title.as_ptr(),
             title_len: title.len(),
             target_url: ptr::null(),
@@ -444,6 +458,7 @@ mod tests {
         let core = CoreFacts {
             media: Some(MediaKind::Video),
             media_count: 1,
+            placement: Some(Placement::Story),
             title: Some(title),
             max_characters: Some(100),
             entities_allowed: true,
@@ -457,6 +472,8 @@ mod tests {
         assert_eq!(project(b"", "nope", None).unwrap_err(), r#"unknown target "nope""#);
         let bad = Facts { media: 5, ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "media kind 5 is not GSX_MEDIA_*");
+        let bad = Facts { placement: 4, ..facts };
+        assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "placement 4 is not GSX_PLACEMENT_*");
         let bad = Facts { caption_limit: 1 << 32, ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "caption_limit 4294967296 is over 2^32 - 1");
 

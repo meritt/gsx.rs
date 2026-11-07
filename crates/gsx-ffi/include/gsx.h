@@ -15,6 +15,14 @@
 
 #define GSX_MEDIA_AUDIO 4
 
+#define GSX_PLACEMENT_NONE 0
+
+#define GSX_PLACEMENT_POST 1
+
+#define GSX_PLACEMENT_REEL 2
+
+#define GSX_PLACEMENT_STORY 3
+
 #define GSX_FORMAT_IMAGE 0
 
 #define GSX_FORMAT_GIF 1
@@ -47,6 +55,7 @@ typedef struct gsx_media_fact {
 typedef struct gsx_facts {
   uint32_t media;
   size_t media_count;
+  uint32_t placement;
   const uint8_t *title;
   size_t title_len;
   const uint8_t *target_url;

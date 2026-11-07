@@ -104,6 +104,7 @@ public enum GSX {
                                     var native = gsx_facts(
                                         media: facts.media?.native ?? UInt32(GSX_MEDIA_NONE),
                                         media_count: facts.mediaCount,
+                                        placement: facts.placement?.native ?? UInt32(GSX_PLACEMENT_NONE),
                                         title: title,
                                         title_len: titleCount,
                                         target_url: targetUrl,

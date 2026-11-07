@@ -1,9 +1,10 @@
-use crate::measure::MediaKind;
+use crate::measure::{MediaKind, Placement};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Facts<'a> {
     pub media: Option<MediaKind>,
     pub media_count: usize,
+    pub placement: Option<Placement>,
     pub title: Option<&'a str>,
     pub target_url: Option<&'a str>,
     pub max_characters: Option<u32>,
