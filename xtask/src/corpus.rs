@@ -199,8 +199,9 @@ fn outcome(
 
 const FACTS: [&str; 2] = [
     "{}",
-    r#"{"media":"image","mediaCount":1,"placement":"story","title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"entitiesAllowed":true}"#,
+    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"entitiesAllowed":true}"#,
 ];
+const PLACEMENTS: [&str; 3] = ["post", "reel", "story"];
 
 pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> Result {
     let mut sources = std::collections::HashMap::new();
@@ -249,11 +250,14 @@ pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> 
     let mut lines = vec!["{\"corpus\":\"gsx-projection\"}".to_owned()];
     for target in TARGETS {
         for facts in FACTS {
-            for id in &ids {
+            for (index, id) in ids.iter().enumerate() {
                 let (input, items) =
                     sources.get(id).ok_or_else(|| format!("{}: no input for {id}", selection.display()))?;
                 let facts = match facts.strip_suffix('}') {
-                    Some(given) if facts != "{}" => format!("{given},\"items\":[{items}]}}"),
+                    Some(given) if facts != "{}" => {
+                        let placement = PLACEMENTS[index % PLACEMENTS.len()];
+                        format!("{given},\"placement\":\"{placement}\",\"items\":[{items}]}}")
+                    }
                     _ => facts.to_owned(),
                 };
                 lines.push(format!(
