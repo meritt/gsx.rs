@@ -11,8 +11,10 @@ fn runs_inputs_at_the_depth_limits_within_a_thread_stack() {
     let mixed: String = (0..containers / 2).map(|level| format!("{}- > a\n", "    ".repeat(level))).collect();
     let inline = format!("{}a{}", "**".repeat(inlines), "**".repeat(inlines));
     let link = format!("[{}![a](https://e.com/i){}](https://e.com)", "**".repeat(inlines - 2), "**".repeat(inlines - 2));
+    let directives = format!("{}a{}", ":x[**".repeat(inlines / 2), "**]".repeat(inlines / 2));
     let inputs = [
         format!("{}{link}", "> ".repeat(containers)),
+        format!("{}{directives}", "> ".repeat(containers)),
         format!("{lists}{}- {inline}\n", "  ".repeat(containers - 1)),
         format!("{mixed}{}- > {inline}\n", "    ".repeat(containers / 2)),
     ];

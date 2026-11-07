@@ -52,6 +52,7 @@ fn inline(name: Name) -> bool {
             | Name::GsxUnderline
             | Name::GsxHighlight
             | Name::GsxSpoiler
+            | Name::GsxDirectiveText
             | Name::Link
             | Name::Image
     )

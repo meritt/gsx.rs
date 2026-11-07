@@ -42,7 +42,7 @@ Exceeding any limit rejects the document with MARKDOWN_TOO_COMPLEX and the range
 | `documentUnits` | 262144 | UTF-16 code units of the input; eight times the largest field limit (Telegram rich messages, 32768) | Before any other work on the input |
 | `documentLines` | 16384 | Lines: line endings plus one | Before tokenizing |
 | `containerDepth` | 32 | Nested block quotes, list items and footnote definitions | Document tokenizer; no deeper container opens |
-| `inlineDepth` | 16 | Nested emphasis, strong, strikethrough, underline, highlight, spoiler, links and images | Final events |
+| `inlineDepth` | 16 | Nested emphasis, strong, strikethrough, underline, highlight, spoiler, text directives, links and images | Final events |
 | `blockDelimiters` | 1024 | Characters of `*`, `_`, `~` sequences that reach attention, per paragraph, heading or cell | Inline tokenizer; later sequences stay text |
 | `blockLabels` | 4096 | `[`, `![`, `[^` label starts, per paragraph, heading or cell | Inline tokenizer; later starts stay text |
 | `blockLabelEnds` | 256 | `]` reached by text, per paragraph, heading or cell | Inline tokenizer; later ends stay text |

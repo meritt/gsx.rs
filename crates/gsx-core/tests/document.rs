@@ -220,6 +220,7 @@ fn enforces_budgets_where_exceeded() {
         (table("| a |\n", 4096), Some((Limit::DocumentTableCells, 24_590, 24_595))),
         (format!("{}a{}", "*".repeat(32), "*".repeat(32)), None),
         (format!("{}a{}", "*".repeat(34), "*".repeat(34)), Some((Limit::InlineDepth, 32, 37))),
+        (format!("{}a{}", ":x[".repeat(17), "]".repeat(17)), Some((Limit::InlineDepth, 48, 53))),
         ("a".repeat(262_144), None),
         ("a".repeat(262_145), Some((Limit::DocumentUnits, 262_144, 262_145))),
         ("é".repeat(262_144), None),
