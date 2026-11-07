@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use gsx_core::document::{Document, parse};
 use gsx_core::project::{
-    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Projection, Style, Target, project,
+    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Projection, Style, Target, Unit, project,
     project_with,
 };
 use gsx_core::targets::{TARGETS, target};
@@ -135,6 +135,27 @@ fn attached_media_report_only_listed_items() {
             .map(|change| (change.range.unwrap().start, (change.class, change.reason)))
             .collect();
         assert_eq!(media, [(6, missing), (23, missing), (23, attached), (60, attached)], "{}", target.name);
+    }
+}
+
+#[test]
+fn telegram_limits_count_code_points() {
+    let emoji = "\u{1F600}";
+    let cases = [
+        ("telegram-html", Facts { media: Some(MediaKind::Image), media_count: 1, ..Facts::default() }, 1024),
+        ("telegram-entities", Facts { caption_limit: Some(200), ..Facts::default() }, 200),
+    ];
+    for (name, facts, maximum) in cases {
+        let full = run(name, &emoji.repeat(maximum), &facts);
+        assert_eq!(text(&full, FieldName::Text), emoji.repeat(maximum), "{name}");
+        let measurement = full.measurements.iter().find(|item| item.field == FieldName::Text).unwrap();
+        assert_eq!(
+            (measurement.unit, measurement.value, measurement.maximum),
+            (Unit::CodePoints, maximum, Some(maximum))
+        );
+        let over = run(name, &emoji.repeat(maximum + 1), &facts);
+        assert_eq!(text(&over, FieldName::Text), format!("{}…", emoji.repeat(maximum - 1)), "{name}");
+        assert!(reasons(&over).contains(&(Class::Approximated, Feature::Text, "text_truncated")), "{name}");
     }
 }
 

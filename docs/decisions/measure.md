@@ -27,11 +27,11 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 
 | Target | Field (context) | Unit | Maximum |
 | --- | --- | --- | --- |
-| `telegram-html` | text (post without media), visible | utf16 | 4096 |
-| | text (post or reel with media), visible | utf16 | 1024 |
-| | text (story), visible | utf16 | 2048 |
+| `telegram-html` | text (post without media), visible | code points | 4096 |
+| | text (post or reel with media), visible | code points | 1024 |
+| | text (story), visible | code points | 2048 |
 | `telegram-html-rich` | text (post), visible | code points | 32768 |
-| `telegram-entities` | text (story) | utf16 | caption limit, 200 |
+| `telegram-entities` | text (story) | code points | caption limit, 200 |
 | `max-html` | text, visible | code points | 4000 |
 | `discord-markdown`, `discord-blocks` | text; alt | code points | 2000; 1024 |
 | `slack-markdown` | text; alt (image) | code points | 12000; 1000 |
@@ -65,7 +65,8 @@ No dependency: neither `unicode-segmentation` nor ICU4X's segmenter carries RGI_
 | --- | --- |
 | `bluesky-entities` | graphemes and UTF-8 bytes both reported, each against its own maximum |
 | `mastodon-plain`, instance unresolved | vanilla Mastodon: 500, 23 per URL; alt is measured without a maximum and not fitted until the `descriptionLimit` fact gives the instance's limit |
-| `telegram-entities`, capabilities resolved | UTF-16 against the resolved maximum; unverified against tdlib |
+| Telegram text and caption lengths | code points, though entity offsets are UTF-16. The Bot API gives "characters after entities parsing"; the MTProto config documents `caption_length_limit_*` and `story_caption_length_limit_*` as "UTF-8 length", which TDLib's `utf8_length` counts as characters, the unit it checks bot texts and captions and cuts reply quotes in |
+| `telegram-entities`, capabilities resolved | code points against the resolved maximum |
 | `facebook-plain` | 63 206 code points, the documented post limit |
 
 VK and `slack-plain` text stay unlimited until a primary source documents a limit.

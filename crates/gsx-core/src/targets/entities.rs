@@ -1,5 +1,5 @@
 use super::limits::{
-    Alt, Fact, Graphemes, Image, Limit, Only, Story, Text, ThreadsWeighted, Utf8Bytes, Utf16CodeUnits, Video, limit,
+    Alt, CodePoints, Fact, Graphemes, Image, Limit, Only, Story, Text, ThreadsWeighted, Utf8Bytes, Video, limit,
     resolved,
 };
 use super::plain::BODY;
@@ -141,5 +141,5 @@ pub static TELEGRAM: Target = entities(
         ..DEFAULT
     }),
     &TELEGRAM_FORM,
-    &[resolved(Text, Utf16CodeUnits, Fact::CaptionLimit, 200).on(&[Story])],
+    &[resolved(Text, CodePoints, Fact::CaptionLimit, 200).on(&[Story])],
 );

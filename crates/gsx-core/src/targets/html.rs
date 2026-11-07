@@ -1,4 +1,4 @@
-use super::limits::{CodePoints, Limit, Post, Reel, Story, Text, Utf16CodeUnits, With, Without, limit};
+use super::limits::{CodePoints, Limit, Post, Reel, Story, Text, With, Without, limit};
 use super::plain::BODY;
 use super::{TEXT, rule};
 use crate::forms::html::RENDERER;
@@ -110,9 +110,9 @@ pub static TELEGRAM: Target = html(
     ],
     &TELEGRAM_FORM,
     &[
-        limit(Text, Utf16CodeUnits, 4096).on(&[Post]).when(Without).visible(),
-        limit(Text, Utf16CodeUnits, 1024).on(&[Post, Reel]).when(With).visible(),
-        limit(Text, Utf16CodeUnits, 2048).on(&[Story]).visible(),
+        limit(Text, CodePoints, 4096).on(&[Post]).when(Without).visible(),
+        limit(Text, CodePoints, 1024).on(&[Post, Reel]).when(With).visible(),
+        limit(Text, CodePoints, 2048).on(&[Story]).visible(),
     ],
 );
 
