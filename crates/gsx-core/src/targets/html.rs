@@ -157,6 +157,7 @@ pub static TELEGRAM_RICH: Target = html(
                 Condition { when: When::Empty, class: Omitted, reason: "media_alt_omitted" },
                 Condition { when: When::Count, class: Omitted, reason: "media_count_exceeded" },
                 Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
+                Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" },
             ],
         },
         rule(Feature::Link, Omitted, "link_label_invisible"),

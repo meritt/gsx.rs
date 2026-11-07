@@ -152,7 +152,7 @@ fn rich_places_media_inline_with_unreferenced_items_first() {
         "<img src=\"media:p\"/><br><video src=\"media:g\"></video><br><p>a</p><br><br>\
          <video src=\"media:v\" tg-spoiler></video><br><br><p>b</p><br><br><audio src=\"media:a\"></audio>"
     );
-    assert_eq!(changes(&projection), []);
+    assert_eq!(changes(&projection), [("media", "omitted", "media_spoiler_omitted")]);
     assert_eq!(text(&rich("", &[image("p", None)])), "<img src=\"media:p\"/>");
     assert_eq!(blocked(&rich("", &[image("p", None)])), [] as [String; 0]);
 }
@@ -210,6 +210,23 @@ fn rich_alts_become_figcaptions() {
          <figcaption>1. one<br>two<br>3. s</figcaption></tg-collage>"
     );
     assert_eq!(group.measurements[0].value, "1. one\ntwo\n3. s".chars().count());
+}
+
+#[test]
+fn rich_reports_the_spoiler_it_cannot_put_on_audio() {
+    let items = [
+        MediaFact { format: Format::Audio, spoiler: true, ..image("a", None) },
+        MediaFact { spoiler: true, ..image("p", None) },
+    ];
+    let projection = rich("::media{id=\"a\"}\n\n::media{id=\"p\"}", &items);
+    assert_eq!(text(&projection), "<audio src=\"media:a\"></audio><br><br><img src=\"media:p\" tg-spoiler/>");
+    let spoilers: Vec<_> = projection
+        .changes
+        .iter()
+        .filter(|change| change.reason == "media_spoiler_omitted")
+        .map(|change| (change.class.name(), change.slot))
+        .collect();
+    assert_eq!(spoilers, [("omitted", Some(Slot { block: None, item: 0 }))]);
 }
 
 #[test]
