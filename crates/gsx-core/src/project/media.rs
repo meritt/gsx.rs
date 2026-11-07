@@ -164,12 +164,14 @@ fn kind(format: Format) -> Option<MediaKind> {
     }
 }
 
+type Reported = (&'static str, Option<Range>, &'static str, Option<(Option<u32>, u32)>);
+
 struct Layouter {
     target: &'static Target,
     form: &'static BlocksForm,
     resolved: Vec<(Fact, u32)>,
     laid: Laid,
-    seen: HashSet<(&'static str, Option<Range>, &'static str, Option<(Option<u32>, u32)>)>,
+    seen: HashSet<Reported>,
 }
 
 impl Layouter {
@@ -275,7 +277,8 @@ pub(super) fn layout(
     for anchor in anchors {
         layouter.text(&text[cursor..anchor.at]);
         cursor = anchor.at;
-        let Some(node) = anchor.node.and_then(|range| nodes.get(&range.start).filter(|node| node.range == range)) else {
+        let Some(node) = anchor.node.and_then(|range| nodes.get(&range.start).filter(|node| node.range == range))
+        else {
             let unplaced: Vec<_> = items.iter().take(maximum).filter(|fact| !ranges.contains_key(fact.id)).collect();
             for fact in unplaced {
                 layouter.media(&[fact], None, false);
