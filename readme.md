@@ -19,7 +19,7 @@ pnpm add @meritt/gsx-wasm
 Swift:
 
 ```swift
-.package(url: "https://github.com/meritt/gsx.rs", exact: "0.1.1")
+.package(url: "https://github.com/meritt/gsx.rs", exact: "0.2.0")
 ```
 
 Python:

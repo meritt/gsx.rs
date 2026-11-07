@@ -318,7 +318,7 @@ dependencies = [
 
 [[package]]
 name = "gsx-core"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "gungraun",
@@ -331,14 +331,14 @@ dependencies = [
 
 [[package]]
 name = "gsx-ffi"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "gsx-core",
 ]
 
 [[package]]
 name = "gsx-wasm"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "gsx-core",
  "wasm-bindgen",
@@ -1130,7 +1130,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "cbindgen",
  "gsx-core",
