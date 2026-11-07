@@ -121,6 +121,16 @@ fn monotone_search_matches_exhaustive_on_corpus() {
 }
 
 #[test]
+fn monotone_search_matches_exhaustive_where_a_cluster_spans_leaves_at_a_chunk_end() {
+    for prefix in [511, 512, 513, 600] {
+        for tail in ["\u{600}` b` c", "x\u{600}**\u{301} b** c"] {
+            let markdown = format!("{}{tail}", "a".repeat(prefix));
+            agree(&parse(&markdown, &[]).unwrap(), &format!("prefix {prefix}"));
+        }
+    }
+}
+
+#[test]
 fn monotone_search_matches_exhaustive_on_generated_inputs() {
     for seed in 0..600 {
         let markdown = generated(seed);

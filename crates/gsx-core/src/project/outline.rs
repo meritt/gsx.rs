@@ -276,7 +276,7 @@ impl<'a> Outline<'a> {
                 stop += 1;
             }
             let offset = starts[run].max(head);
-            let text = &value[offset..starts[stop].min(tail)];
+            let text = &value[offset..starts[stop].min(tail).max(offset)];
             for (from, to) in entities(text) {
                 let beginning = boundaries.partition_point(|&at| at < offset + from);
                 let ending = boundaries.partition_point(|&at| at < offset + to);
