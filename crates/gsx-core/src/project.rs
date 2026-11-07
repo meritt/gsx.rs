@@ -533,10 +533,11 @@ impl Request<'_, '_> {
 
 fn appended(target: &Target, mut rendered: Rendered, url: Option<&str>) -> Rendered {
     if let Some(url) = url {
-        if target.form.visible(&rendered.text).trim().is_empty() {
+        if measure::blank(&target.form.visible(&rendered.text)) {
             rendered.text.clear();
             rendered.links.clear();
             rendered.styled.clear();
+            rendered.changes.retain(|change| change.feature == Feature::Media);
         } else {
             rendered.text.push_str("\n\n");
         }
@@ -655,7 +656,9 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         let fitted = match (spec.source, explicit, titled) {
             (Source::Body, ..) => {
                 let suffix = target_url.filter(|_| !derived).filter(|url| {
-                    let fits = request.fits(&Rendered::text(format!("{ELLIPSIS}\n\n{url}")));
+                    let blank = measure::blank(&target.form.visible(&draw_body(spec.name, None).text));
+                    let least = if blank { (*url).to_owned() } else { format!("{ELLIPSIS}\n\n{url}") };
+                    let fits = request.fits(&Rendered::text(least));
                     if !fits {
                         changes.push(request.change(Feature::TargetUrl, None, Some(When::Overflow)));
                     }
@@ -697,7 +700,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             }
         };
         let Fitted { mut rendered, measurements: measured } = fitted;
-        if spec.required && rendered.text.trim().is_empty() {
+        if spec.required && measure::blank(&rendered.text) {
             required.push(request.change(Feature::Title, None, Some(When::Empty)));
         }
         changes.append(&mut rendered.changes);
@@ -719,7 +722,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             text: rendered.text,
         });
     }
-    if facts.media_count == 0 && fields.iter().all(|field| target.form.visible(&field.text).trim().is_empty()) {
+    if facts.media_count == 0 && fields.iter().all(|field| measure::blank(&target.form.visible(&field.text))) {
         let end = children.last().map_or(0, |node| node.range.end);
         let (class, reason) = target.rule(Feature::Text).outcome(Some(When::Empty));
         let field =

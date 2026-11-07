@@ -55,7 +55,7 @@ Not measured here: Telegram rich structure limits (blocks, nesting, media, table
 
 ## Unicode
 
-Unicode 17.0.0, the version of ICU 78 in Node.js 26.13.0. `tools/measure/tables.mjs` generates `crates/gsx-core/src/measure/tables.rs` from the UCD (Grapheme_Cluster_Break, Extended_Pictographic, InCB, Emoji_Presentation, RGI_Emoji) and checks every sequence against Node's `\p{RGI_Emoji}`; it also writes the UAX #29 test file. Run `node tools/measure/tables.mjs [ucd-directory]`; without a directory it fetches the pinned version. NFC before X counting comes from `icu_normalizer` 2.2, on the same Unicode version; `node tools/unicode/normalization.mjs [ucd-directory]` writes its conformance cases to `crates/gsx-core/tests/project/NormalizationTest.txt`.
+Unicode 17.0.0, the version of ICU 78 in Node.js 26.13.0. `tools/measure/tables.mjs` generates `crates/gsx-core/src/measure/tables.rs` from the UCD (Grapheme_Cluster_Break, Extended_Pictographic, InCB, Emoji_Presentation, Default_Ignorable_Code_Point, RGI_Emoji) and checks every sequence against Node's `\p{RGI_Emoji}` and every code point against `\p{Default_Ignorable_Code_Point}`; it also writes the UAX #29 test file. Run `node tools/measure/tables.mjs [ucd-directory]`; without a directory it fetches the pinned version. NFC before X counting comes from `icu_normalizer` 2.2, on the same Unicode version; `node tools/unicode/normalization.mjs [ucd-directory]` writes its conformance cases to `crates/gsx-core/tests/project/NormalizationTest.txt`.
 
 No dependency: neither `unicode-segmentation` nor ICU4X's segmenter carries RGI_Emoji, which X and Threads need, so the tables are generated in-tree.
 

@@ -11,6 +11,10 @@ pub use rules::{Condition, Context, Field, Limit, Maximum, Measurement, MediaKin
 pub(crate) use rules::{given, limit, resolved, unlimited};
 pub use tables::UNICODE_VERSION;
 
+pub fn blank(text: &str) -> bool {
+    text.chars().all(|char| char.is_whitespace() || emoji::contains(&tables::DEFAULT_IGNORABLE, char))
+}
+
 pub const X_URL_WEIGHT: usize = 23;
 pub const MASTODON_RESERVED_PER_URL: u32 = 23;
 

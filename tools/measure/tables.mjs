@@ -94,6 +94,17 @@ for (const [field, name, value] of records(core)) {
   }
 }
 
+const ignorable = records(core)
+  .filter(([, name]) => name === 'Default_Ignorable_Code_Point')
+  .map(([field]) => range(field));
+for (let point = 0; point < 0x110000; point += 1) {
+  const listed = ignorable.some(([from, to]) => from <= point && point <= to);
+  const surrogate = point >= 0xd800 && point <= 0xdfff;
+  if (!surrogate && listed !== /\p{Default_Ignorable_Code_Point}/u.test(String.fromCodePoint(point))) {
+    throw new Error(`Node disagrees on Default_Ignorable_Code_Point U+${point.toString(16).toUpperCase()}`);
+  }
+}
+
 const map = [];
 for (let point = 0; point < property.length; point += 1) {
   if (point === 0 || property[point] !== property[point - 1]) {
@@ -185,6 +196,8 @@ const rust =
   array('BREAK', 'u32', map) +
   '\n' +
   array('EMOJI_PRESENTATION', 'u32', inversion(sets.Emoji_Presentation)) +
+  '\n' +
+  array('DEFAULT_IGNORABLE', 'u32', inversion(ignorable)) +
   '\n' +
   array('RGI_SINGLE', 'u32', inversion(singles)) +
   '\n' +

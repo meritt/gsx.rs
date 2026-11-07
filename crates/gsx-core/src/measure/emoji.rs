@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use super::tables::{EMOJI_PRESENTATION, RGI_ENDS, RGI_LONGEST, RGI_SEQUENCES, RGI_SINGLE};
 
-fn contains(inversion: &[u32], char: char) -> bool {
+pub(super) fn contains(inversion: &[u32], char: char) -> bool {
     let point = char as u32;
     point >= inversion[0] && inversion.partition_point(|&boundary| boundary <= point) % 2 == 1
 }
