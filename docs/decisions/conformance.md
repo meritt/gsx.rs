@@ -39,6 +39,7 @@ Exceeding any limit rejects the document with MARKDOWN_TOO_COMPLEX and the range
 
 | Limit | Value | Counts | Where counted |
 | --- | --- | --- | --- |
+| `documentUnits` | 262144 | UTF-16 code units of the input; eight times the largest field limit (Telegram rich messages, 32768) | Before any other work on the input |
 | `documentLines` | 16384 | Lines: line endings plus one | Before tokenizing |
 | `containerDepth` | 64 | Nested block quotes, list items and footnote definitions | Document tokenizer; no deeper container opens |
 | `blockDelimiters` | 1024 | Characters of `*`, `_`, `~` sequences that reach attention, per paragraph, heading or cell | Inline tokenizer; later sequences stay text |

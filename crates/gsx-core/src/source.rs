@@ -6,6 +6,23 @@ pub struct InvalidText {
     pub start: u32,
 }
 
+pub fn oversized(text: &str) -> Option<(u32, u32)> {
+    let maximum = Limit::DocumentUnits.maximum() as usize;
+    if text.len() <= maximum {
+        return None;
+    }
+    let mut units = 0;
+    let mut start = None;
+    for char in text.chars() {
+        let next = units + char.len_utf16();
+        if next > maximum && start.is_none() {
+            start = Some(units);
+        }
+        units = next;
+    }
+    start.map(|start| (start as u32, units as u32))
+}
+
 pub fn normalize(text: &str) -> Result<Cow<'_, str>, InvalidText> {
     let bytes = text.as_bytes();
     let control = bytes.iter().enumerate().position(|(at, &byte)| match byte {
@@ -109,10 +126,11 @@ pub enum Limit {
     DocumentMathLiterals,
     DocumentPairedDelimiters,
     DocumentTableCells,
+    DocumentUnits,
 }
 
 impl Limit {
-    pub const ALL: [Limit; 11] = [
+    pub const ALL: [Limit; 12] = [
         Limit::BlockDelimiters,
         Limit::BlockLabels,
         Limit::BlockLabelEnds,
@@ -124,6 +142,7 @@ impl Limit {
         Limit::DocumentMathLiterals,
         Limit::DocumentPairedDelimiters,
         Limit::DocumentTableCells,
+        Limit::DocumentUnits,
     ];
 
     pub const fn maximum(self) -> u32 {
@@ -137,6 +156,7 @@ impl Limit {
             Limit::ContainerDepth => 64,
             Limit::DocumentLines => 16_384,
             Limit::DocumentListItems | Limit::DocumentTableCells => 8192,
+            Limit::DocumentUnits => 262_144,
         }
     }
 
@@ -153,6 +173,7 @@ impl Limit {
             Limit::DocumentMathLiterals => "documentMathLiterals",
             Limit::DocumentPairedDelimiters => "documentPairedDelimiters",
             Limit::DocumentTableCells => "documentTableCells",
+            Limit::DocumentUnits => "documentUnits",
         }
     }
 }

@@ -319,7 +319,8 @@
                 "documentListItems",
                 "documentMathLiterals",
                 "documentPairedDelimiters",
-                "documentTableCells"
+                "documentTableCells",
+                "documentUnits"
               ]
             },
             "maximum": { "type": "integer", "minimum": 1 }

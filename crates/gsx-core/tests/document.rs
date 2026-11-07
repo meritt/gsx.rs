@@ -218,6 +218,10 @@ fn enforces_budgets_where_exceeded() {
         (table("| a | b |\n", 4095), None),
         (table("| a | b |\n", 4096), Some((Limit::DocumentTableCells, 40_970, 40_979))),
         (table("| a |\n", 4096), Some((Limit::DocumentTableCells, 24_590, 24_595))),
+        ("a".repeat(262_144), None),
+        ("a".repeat(262_145), Some((Limit::DocumentUnits, 262_144, 262_145))),
+        ("é".repeat(262_144), None),
+        (format!("{}😀", "a".repeat(262_143)), Some((Limit::DocumentUnits, 262_143, 262_145))),
     ] {
         assert_eq!(too_complex(&text), expected, "{}", &text[..text.len().min(40)]);
     }
