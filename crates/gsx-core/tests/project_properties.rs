@@ -1,12 +1,21 @@
 mod support;
+#[allow(dead_code)]
+#[path = "support/schema.rs"]
+mod validator;
+
+use std::sync::LazyLock;
 
 use gsx_core::document::{Media, Range, parse};
 use gsx_core::project::{
     Class, Facts, Format, MediaFact, MediaKind, Offsets, Options, Placement, Projection, Target, project_with,
 };
 use gsx_core::targets::TARGETS;
+use gsx_core::wire;
 use proptest::prelude::*;
 use support::markup::boundaries;
+use validator::Schema;
+
+static SCHEMA: LazyLock<Schema> = LazyLock::new(Schema::load);
 
 const FRAGMENTS: &[&str] = &[
     "a",
@@ -281,7 +290,9 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
         prop_assert_eq!(&first, &second, "{} is not deterministic", target.name);
         check(input, target, &first)?;
     }
-    Ok(())
+    let sampled = TARGETS[input.len() % TARGETS.len()];
+    let out = wire::project(input.as_bytes(), &MEDIA[..setup.media], sampled, &facts);
+    SCHEMA.check_wire(&out).map_err(TestCaseError::fail)
 }
 
 proptest! {

@@ -18,6 +18,7 @@ icu_properties.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+boon.workspace = true
 criterion.workspace = true
 gungraun.workspace = true
 proptest.workspace = true
