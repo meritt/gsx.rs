@@ -52,6 +52,8 @@ Native output is not reported. A change has `feature`, `reason`, `field` and the
 
 All forms share block layout: one list-marker set, continuation lines indented by the marker width, a quote prefix on every line including blank ones, one table cell separator. A target overrides a rule only where the platform renders differently. In `entities` targets a range nested in a range of the same style is dropped.
 
+A heading is rendered as bold text wherever the form has bold (the `b` tag, the strong delimiter, the bold entity), and as plain text elsewhere. This holds on every target, including the platforms with native headings (Telegram rich messages, MAX, Discord, Slack `markdown`); native heading constructs are never emitted.
+
 ## Fields
 
 A derived field (YouTube title, TikTok photo title, VK video name) declares its source (explicit fact, leading heading, first line), whether it leaves the body, its unit, maximum and truncation (ellipsis or hard). Every limited field is measured and fitted on its own; fitting one never cuts another. The VK video name (field `title`, video only) is the whole body fitted again to its own limit; its rendering changes belong to `text`, so it reports only its truncation.
