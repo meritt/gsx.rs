@@ -64,7 +64,7 @@ No dependency: neither `unicode-segmentation` nor ICU4X's segmenter carries RGI_
 | Case | Rule |
 | --- | --- |
 | `bluesky-entities` | graphemes and UTF-8 bytes both reported, each against its own maximum |
-| `mastodon-plain`, instance unresolved | vanilla Mastodon: 500, 23 per URL, 1500 alt |
+| `mastodon-plain`, instance unresolved | vanilla Mastodon: 500, 23 per URL; alt is measured without a maximum and not fitted until the `descriptionLimit` fact gives the instance's limit |
 | `telegram-entities`, capabilities resolved | UTF-16 against the resolved maximum; unverified against tdlib |
 | `facebook-plain` | 63 206 code points, the documented post limit |
 
