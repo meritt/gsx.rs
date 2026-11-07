@@ -43,10 +43,35 @@ fn exit(events: &[Event], enter: usize) -> usize {
     events.len() - 1
 }
 
+fn inline(name: Name) -> bool {
+    matches!(
+        name,
+        Name::Emphasis
+            | Name::Strong
+            | Name::GfmStrikethrough
+            | Name::GsxUnderline
+            | Name::GsxHighlight
+            | Name::GsxSpoiler
+            | Name::Link
+            | Name::Image
+    )
+}
+
 pub fn count(events: &[Event], state: &ParseState) {
     let mut counts = [0_u32; Limit::ALL.len()];
     let mut columns = 0;
+    let mut depth = 0_u32;
     for (index, event) in events.iter().enumerate() {
+        if inline(event.name) {
+            if event.kind == Kind::Exit {
+                depth -= 1;
+                continue;
+            }
+            depth += 1;
+            if depth == Limit::InlineDepth.maximum() + 1 {
+                state.exceed(Limit::InlineDepth, event.point.index, events[exit(events, index)].point.index);
+            }
+        }
         if event.kind != Kind::Enter {
             continue;
         }

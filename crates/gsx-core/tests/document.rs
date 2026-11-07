@@ -200,8 +200,8 @@ fn reports_offsets_in_the_input() {
 fn enforces_budgets_where_exceeded() {
     let table = |row: &str, rows: usize| format!("| a | b |\n| - | - |\n{}", row.repeat(rows));
     for (text, expected) in [
-        (format!("{} a", ">".repeat(65)), Some((Limit::ContainerDepth, 64, 66))),
-        (format!("{} a", ">".repeat(64)), None),
+        (format!("{} a", ">".repeat(33)), Some((Limit::ContainerDepth, 32, 34))),
+        (format!("{} a", ">".repeat(32)), None),
         ("a\n".repeat(16_384), Some((Limit::DocumentLines, 32_768, 32_768))),
         ("a\n".repeat(16_383), None),
         ("$a=b$ ".repeat(1025), Some((Limit::DocumentMathLiterals, 6144, 6149))),
@@ -218,6 +218,8 @@ fn enforces_budgets_where_exceeded() {
         (table("| a | b |\n", 4095), None),
         (table("| a | b |\n", 4096), Some((Limit::DocumentTableCells, 40_970, 40_979))),
         (table("| a |\n", 4096), Some((Limit::DocumentTableCells, 24_590, 24_595))),
+        (format!("{}a{}", "*".repeat(32), "*".repeat(32)), None),
+        (format!("{}a{}", "*".repeat(34), "*".repeat(34)), Some((Limit::InlineDepth, 32, 37))),
         ("a".repeat(262_144), None),
         ("a".repeat(262_145), Some((Limit::DocumentUnits, 262_144, 262_145))),
         ("é".repeat(262_144), None),

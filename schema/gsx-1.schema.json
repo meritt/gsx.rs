@@ -320,7 +320,8 @@
                 "documentMathLiterals",
                 "documentPairedDelimiters",
                 "documentTableCells",
-                "documentUnits"
+                "documentUnits",
+                "inlineDepth"
               ]
             },
             "maximum": { "type": "integer", "minimum": 1 }

@@ -127,10 +127,11 @@ pub enum Limit {
     DocumentPairedDelimiters,
     DocumentTableCells,
     DocumentUnits,
+    InlineDepth,
 }
 
 impl Limit {
-    pub const ALL: [Limit; 12] = [
+    pub const ALL: [Limit; 13] = [
         Limit::BlockDelimiters,
         Limit::BlockLabels,
         Limit::BlockLabelEnds,
@@ -143,6 +144,7 @@ impl Limit {
         Limit::DocumentPairedDelimiters,
         Limit::DocumentTableCells,
         Limit::DocumentUnits,
+        Limit::InlineDepth,
     ];
 
     pub const fn maximum(self) -> u32 {
@@ -153,10 +155,11 @@ impl Limit {
             | Limit::DocumentPairedDelimiters => 1024,
             Limit::BlockLabels | Limit::DocumentEscapes => 4096,
             Limit::BlockLabelEnds => 256,
-            Limit::ContainerDepth => 64,
+            Limit::ContainerDepth => 32,
             Limit::DocumentLines => 16_384,
             Limit::DocumentListItems | Limit::DocumentTableCells => 8192,
             Limit::DocumentUnits => 262_144,
+            Limit::InlineDepth => 16,
         }
     }
 
@@ -174,6 +177,7 @@ impl Limit {
             Limit::DocumentPairedDelimiters => "documentPairedDelimiters",
             Limit::DocumentTableCells => "documentTableCells",
             Limit::DocumentUnits => "documentUnits",
+            Limit::InlineDepth => "inlineDepth",
         }
     }
 }

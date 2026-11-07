@@ -11,6 +11,11 @@
     { "id": "prose-128k", "group": "long", "source": { "repeat": { "block": "prose" }, "until": 131072 } },
 
     { "id": "units", "group": "budget", "source": { "repeat": "a ", "times": 131072 } },
+    {
+      "id": "inline-depth",
+      "group": "budget",
+      "source": { "repeat": { "concat": [{ "repeat": "**", "times": 16 }, "a", { "repeat": "**", "times": 16 }, "\n\n"] }, "times": 1000 }
+    },
     { "id": "lines-text", "group": "budget", "source": { "repeat": "a\n", "times": 16383 } },
     { "id": "lines-blank", "group": "budget", "source": { "repeat": "a\n\n", "times": 8191 } },
     { "id": "lines-heading", "group": "budget", "source": { "repeat": "# a\n", "times": 16383 } },
@@ -30,7 +35,7 @@
     {
       "id": "container-depth",
       "group": "budget",
-      "source": { "repeat": { "concat": [{ "repeat": "> ", "times": 63 }, "a\n"] }, "times": 1000 }
+      "source": { "repeat": { "concat": [{ "repeat": "> ", "times": 31 }, "a\n"] }, "times": 2000 }
     },
     {
       "id": "table-cells",
@@ -62,6 +67,7 @@
     { "id": "reject-empty-items", "group": "reject", "source": { "repeat": "-\n", "times": 43690 } },
     { "id": "reject-delimiters", "group": "reject", "source": { "repeat": "*a ", "times": 40000 } },
     { "id": "reject-label-ends", "group": "reject", "source": { "repeat": "a]", "times": 257 } },
-    { "id": "reject-units", "group": "reject", "source": { "repeat": "a ", "times": 131073 } }
+    { "id": "reject-units", "group": "reject", "source": { "repeat": "a ", "times": 131073 } },
+    { "id": "reject-inline-depth", "group": "reject", "source": { "concat": [{ "repeat": "**", "times": 17 }, "a", { "repeat": "**", "times": 17 }] } }
   ]
 }
