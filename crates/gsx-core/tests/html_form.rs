@@ -233,6 +233,19 @@ fn rich_alts_share_the_text_budget() {
 }
 
 #[test]
+fn rich_keeps_captions_before_the_cut() {
+    let markdown = format!("Intro\n\n::media{{id=\"a\"}}\n\n{}\n\n::media{{id=\"b\"}}", "word ".repeat(7000));
+    let projection = rich(&markdown, &[image("a", Some("Described")), image("b", Some("Later"))]);
+    assert!(text(&projection).contains("<figure><img src=\"media:a\"/><figcaption>Described</figcaption></figure>"));
+    assert_eq!(projection.measurements[0].value, 32_768);
+    assert_eq!(projection.items[0].alt.as_deref(), Some("Described"));
+    assert_ne!(projection.items[1].alt.as_deref(), Some("Later"));
+    assert!(changes(&projection).contains(&("text", "approximated", "text_truncated")));
+    let slots: Vec<_> = projection.changes.iter().filter_map(|change| change.slot).collect();
+    assert_eq!(slots, [Slot { block: None, item: 1 }]);
+}
+
+#[test]
 fn rich_items_carry_the_alt_left_out_of_the_text_budget() {
     let body = format!("Ready.\n\n{}\n\n::media{{id=\"a\"}}", "x".repeat(32_760));
     let projection = rich(&body, &[image("a", Some("Described"))]);

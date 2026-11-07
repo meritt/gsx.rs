@@ -45,6 +45,7 @@ struct Figure {
     start: usize,
     end: usize,
     group: bool,
+    cut: bool,
     range: Option<Range>,
     alts: Vec<(usize, Option<String>)>,
 }
@@ -451,7 +452,7 @@ impl Html {
         context.writer().raw(&markup);
         let end = context.writer().mark();
         let alts = vec![(index, self.media[index].alt.clone())];
-        self.figures.push(Figure { start, end, group: false, range, alts });
+        self.figures.push(Figure { start, end, group: false, cut: context.done(), range, alts });
     }
 
     fn place(&mut self, context: &mut Context, node: &Node, indices: &[usize], level: usize) {
@@ -479,7 +480,14 @@ impl Html {
                 let end = context.writer().mark();
                 context.writer().raw(&format!("</{name}>"));
                 let alts = indices.iter().map(|&index| (index, self.media[index].alt.clone())).collect();
-                self.figures.push(Figure { start, end, group: true, range: Some(node.range), alts });
+                self.figures.push(Figure {
+                    start,
+                    end,
+                    group: true,
+                    cut: context.done(),
+                    range: Some(node.range),
+                    alts,
+                });
                 return;
             }
             context.report_when(Feature::Media, Some(node.range), Some(When::Group));
@@ -503,6 +511,7 @@ impl Html {
         let maximum = limit.and_then(|limit| limit.maximum(&facts)).map_or(usize::MAX, |maximum| maximum as usize);
         let body = cost(&context.target.form.visible(context.writer().since(0)));
         let Some(mut remaining) = maximum.checked_sub(body) else { return };
+        let cut = context.done();
         let mut inserts = vec![];
         for figure in std::mem::take(&mut self.figures) {
             let mut entries: Vec<String> = vec![];
@@ -513,10 +522,10 @@ impl Html {
                 let overhead = cost(&format!("{separator}{prefix}"));
                 let room = remaining.saturating_sub(overhead);
                 let value = cost(alt);
-                let text = if room == 0 {
-                    String::new()
-                } else if value <= room {
+                let text = if (cut && !figure.cut) || value <= room {
                     alt.to_owned()
+                } else if room == 0 {
+                    String::new()
                 } else {
                     shortened(alt, |candidate| cost(candidate) <= room)
                 };
@@ -536,7 +545,7 @@ impl Html {
                     context.published_alt(*item, Some(text.clone()).filter(|text| !text.is_empty()));
                 }
                 if !text.is_empty() {
-                    remaining -= overhead + cost(&text);
+                    remaining = remaining.saturating_sub(overhead + cost(&text));
                     entries.push(prefix + &text);
                 }
             }

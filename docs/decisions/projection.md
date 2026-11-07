@@ -13,7 +13,7 @@
 | `media` | selected items, covers, per-item changes |
 | `items` | targets outside `blocks`, when facts list media items: one `{reference, alt}` per item in fact order, with the alt as published (fitted, or on `telegram-html-rich` cut or dropped with its figcaption by the text budget); a per-item measurement carries `item`, the index here, and no `block` |
 
-Alt is fitted per item on every target that declares an `alt` limit for the item's kind: the longest grapheme prefix with an ellipsis that fits (`media_alt_truncated`); when not even the ellipsis fits, the alt is dropped (`omitted` `media_alt_omitted`). The Mastodon limit is the instance `descriptionLimit` fact; without it alt is measured and not fitted.
+Alt is fitted per item on every target that declares an `alt` limit for the item's kind: the longest grapheme prefix with an ellipsis that fits (`media_alt_truncated`); when not even the ellipsis fits, the alt is dropped (`omitted` `media_alt_omitted`). The Mastodon limit is the instance `descriptionLimit` fact; without it alt is measured and not fitted. On `telegram-html-rich` the alt is a figcaption inside the text budget, read in visual order with one cut point: when the body is cut, a figcaption placed before the cut is kept whole and the body is cut earlier to make room for it; figcaptions after the cut, and all of them when the body is not cut, share what the body leaves, in order.
 
 Media appear as references (`media:<id>`); the caller resolves URLs and builds the request.
 
