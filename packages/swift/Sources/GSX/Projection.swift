@@ -210,7 +210,7 @@ public struct Change: Sendable, Hashable, Decodable {
     public let field: FieldName
     public let range: Range<Int>?
     public let truncated: Truncated?
-    /// Alt changes: the block and the item in it on blocks targets, else the index in `items`.
+    /// Alt and spoiler changes: the block and the item in it on blocks targets, else the index in `items`.
     public let block: Int?
     public let item: Int?
 

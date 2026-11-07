@@ -221,9 +221,9 @@
             { "type": "null" }
           ]
         },
-        "block": { "description": "Index of the block of the changed alt, with item.", "$ref": "#/$defs/count" },
+        "block": { "description": "Index of the block of the changed alt or spoiler, with item.", "$ref": "#/$defs/count" },
         "item": {
-          "description": "Index of the media item whose alt changed: in the block, or in projection items outside the blocks/1 form.",
+          "description": "Index of the media item whose alt or spoiler changed: in the block, or in projection items outside the blocks/1 form.",
           "$ref": "#/$defs/count"
         }
       },

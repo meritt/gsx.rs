@@ -210,3 +210,20 @@ fn slack_omits_spoilers() {
     let discord = run("discord-blocks", "::media{id=\"p\"}", &[MediaFact { spoiler: true, ..image("p") }]);
     assert_eq!(discord.blocks, [Block::Media { items: vec![Item { spoiler: true, ..item("p") }], layout: None }]);
 }
+
+#[test]
+fn slack_reports_each_omitted_spoiler_at_its_item() {
+    let items = [MediaFact { spoiler: true, ..image("p") }, image("q"), MediaFact { spoiler: true, ..image("r") }];
+    let grouped = run("slack-blocks", "Look\n\n::media{ids=\"p,q,r\" layout=\"slideshow\"}", &items);
+    let slots: Vec<_> = grouped.changes.iter().map(|change| (change.reason, change.slot)).collect();
+    assert_eq!(
+        slots,
+        [
+            ("media_spoiler_omitted", Some(Slot { block: Some(1), item: 0 })),
+            ("media_spoiler_omitted", Some(Slot { block: Some(1), item: 2 })),
+        ]
+    );
+    let single = run("slack-blocks", "::media{id=\"p\"}\n\n::media{id=\"q\"}\n\n::media{id=\"r\"}", &items);
+    let slots: Vec<_> = single.changes.iter().map(|change| change.slot).collect();
+    assert_eq!(slots, [Some(Slot { block: Some(0), item: 0 }), Some(Slot { block: Some(2), item: 0 })]);
+}

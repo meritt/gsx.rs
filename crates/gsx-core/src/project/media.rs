@@ -150,8 +150,12 @@ struct Layouter {
 
 impl Layouter {
     fn change(&mut self, field: FieldName, range: Option<Range>, when: When) {
+        self.change_at(field, range, when, None);
+    }
+
+    fn change_at(&mut self, field: FieldName, range: Option<Range>, when: When, slot: Option<Slot>) {
         let (class, reason) = self.target.rule(Feature::Media).outcome(Some(when));
-        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None, slot: None };
+        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None, slot };
         if !self.laid.changes.contains(&change) {
             self.laid.changes.push(change);
         }
@@ -162,7 +166,8 @@ impl Layouter {
             self.change(FieldName::Text, range, When::Inline);
         }
         if fact.spoiler && !self.form.spoiler {
-            self.change(FieldName::Text, range, When::Spoiler);
+            let slot = Slot { block: Some(slot.0 as u32), item: slot.1 as u32 };
+            self.change_at(FieldName::Text, range, When::Spoiler, Some(slot));
         }
         let alt = authored(fact).and_then(|alt| {
             let fitted = fit_alt(self.target, alt, fact.format, range, &self.resolved, (Some(slot.0), slot.1));
