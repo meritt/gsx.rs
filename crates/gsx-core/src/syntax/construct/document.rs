@@ -345,7 +345,7 @@ fn resolve(tokenizer: &mut Tokenizer) {
         tokenizer.events.append(&mut exits);
     }
 
-    tokenizer.resolvers.append(&mut child.resolvers.split_off(0));
+    tokenizer.resolvers.append(&mut child.resolvers);
 
-    tokenizer.tokenize_state.definitions.append(&mut child.tokenize_state.definitions.split_off(0));
+    tokenizer.tokenize_state.definitions.append(&mut child.tokenize_state.definitions);
 }
