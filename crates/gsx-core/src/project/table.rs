@@ -478,7 +478,8 @@ impl Target {
 
     pub fn digest(&self) -> String {
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-        for byte in self.manifest().bytes().chain(measure::UNICODE_VERSION.bytes()) {
+        let version = env!("CARGO_PKG_VERSION").bytes();
+        for byte in self.manifest().bytes().chain(measure::UNICODE_VERSION.bytes()).chain(version) {
             hash = (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
         }
         format!("{hash:016x}")

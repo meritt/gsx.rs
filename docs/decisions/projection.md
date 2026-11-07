@@ -38,7 +38,7 @@ Native output is not reported. A change has `feature`, `reason`, `field` and the
 
 ## Target table
 
-`feature → { class, reason, conditions: [{ when, class, reason }] }`, plus form configuration, measure rules per field and facts. The renderer reads only the table and the configuration; the manifest, capabilities and digest derive from it. The digest hashes the table, the form version and the measure rules, never a hand-bumped revision. `tests/targets.rs` checks every emitted `(feature, class, reason)` against the table.
+`feature → { class, reason, conditions: [{ when, class, reason }] }`, plus form configuration, measure rules per field and facts. The renderer reads only the table and the configuration; the manifest, capabilities and digest derive from it. The digest hashes the table, the form version, the measure rules and the gsx version, never a hand-bumped revision: a renderer change that leaves the table alone still changes the digest at the next release. `tests/targets.rs` checks every emitted `(feature, class, reason)` against the table.
 
 ## Forms
 
