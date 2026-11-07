@@ -110,7 +110,7 @@ fn range_of(children: &[Node], id: &str) -> Option<Range> {
 pub(super) fn attach(target: &'static Target, facts: &Facts, children: &[Node]) -> Attached {
     let resolved = super::resolved(facts);
     let mut attached = Attached { items: vec![], changes: vec![], measurements: vec![] };
-    for (index, fact) in facts.items.iter().enumerate() {
+    for (index, fact) in facts.items.unwrap_or_default().iter().enumerate() {
         let alt = authored(fact).and_then(|alt| {
             let fitted = fit_alt(target, alt, fact.format, range_of(children, fact.id), &resolved, (None, index));
             attached.measurements.extend(fitted.measurements);
@@ -227,17 +227,18 @@ pub(super) fn layout(
     anchors: &[Anchor],
 ) -> Laid {
     let maximum = form.items.unwrap_or(usize::MAX);
+    let items = facts.items.unwrap_or_default();
     let mut layouter = Layouter {
         target,
         form,
         resolved: super::resolved(facts),
         laid: Laid { blocks: vec![], changes: vec![], measurements: vec![] },
     };
-    for fact in facts.items.iter().skip(maximum) {
+    for fact in items.iter().skip(maximum) {
         layouter.change(FieldName::Text, range_of(children, fact.id), When::Count);
     }
     for node in children {
-        if placed(node).is_some_and(|ids| ids.iter().any(|id| facts.items.iter().all(|item| item.id != *id))) {
+        if placed(node).is_some_and(|ids| ids.iter().any(|id| items.iter().all(|item| item.id != *id))) {
             layouter.change(FieldName::Text, Some(node.range), When::Missing);
         }
     }
@@ -246,8 +247,7 @@ pub(super) fn layout(
         layouter.text(&text[cursor..anchor.at]);
         cursor = anchor.at;
         let Some(node) = anchor.node.and_then(|range| children.iter().find(|node| node.range == range)) else {
-            let unplaced: Vec<_> =
-                facts.items.iter().take(maximum).filter(|fact| !referenced(children, fact.id)).collect();
+            let unplaced: Vec<_> = items.iter().take(maximum).filter(|fact| !referenced(children, fact.id)).collect();
             for fact in unplaced {
                 layouter.media(&[fact], None, false);
             }
@@ -255,8 +255,8 @@ pub(super) fn layout(
         };
         let mut kept = vec![];
         for id in placed(node).unwrap_or_default() {
-            match facts.items.iter().position(|item| item.id == id) {
-                Some(index) if index < maximum => kept.push(&facts.items[index]),
+            match items.iter().position(|item| item.id == id) {
+                Some(index) if index < maximum => kept.push(&items[index]),
                 _ => {}
             }
         }

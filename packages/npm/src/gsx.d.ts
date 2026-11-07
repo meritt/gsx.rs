@@ -126,7 +126,8 @@ export interface Facts {
   /** Mastodon instance media description limit in code points; without it alt is not fitted. */
   descriptionLimit?: number | null;
   entitiesAllowed?: boolean;
-  items?: Iterable<MediaFact>;
+  /** The media the caller publishes. A referenced id missing from a given list was dropped; without the list, attaching targets treat every id as attached. */
+  items?: Iterable<MediaFact> | null;
 }
 
 /** An attached media item, matched to media references by `id`. */

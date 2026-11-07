@@ -12,7 +12,7 @@ pub struct Facts<'a> {
     pub caption_limit: Option<u32>,
     pub description_limit: Option<u32>,
     pub entities_allowed: bool,
-    pub items: &'a [MediaFact<'a>],
+    pub items: Option<&'a [MediaFact<'a>]>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

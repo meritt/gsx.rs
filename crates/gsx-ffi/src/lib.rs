@@ -141,9 +141,12 @@ pub struct Facts {
 
 impl Facts {
     /// # Safety
-    /// `items` points to `items_len` entries whose `id` points to `id_len` bytes and whose `alt`
-    /// is `NULL` or points to `alt_len` bytes.
-    unsafe fn items(&self) -> Result<Vec<CoreMediaFact<'_>>, String> {
+    /// `items` is `NULL` with `items_len` 0, or points to `items_len` entries whose `id` points to
+    /// `id_len` bytes and whose `alt` is `NULL` or points to `alt_len` bytes.
+    unsafe fn items(&self) -> Result<Option<Vec<CoreMediaFact<'_>>>, String> {
+        if self.items.is_null() && self.items_len == 0 {
+            return Ok(None);
+        }
         // SAFETY: the caller promises `items_len` readable entries.
         let entries = unsafe { slice(self.items, self.items_len, "items") }?;
         let mut list = Vec::with_capacity(entries.len());
@@ -161,13 +164,13 @@ impl Facts {
             };
             list.push(CoreMediaFact { id, format, alt, spoiler: entry.spoiler, inline: entry.inline });
         }
-        Ok(list)
+        Ok(Some(list))
     }
 
     /// # Safety
     /// `title` is `NULL` or points to `title_len` bytes; `target_url` is `NULL` or points to
     /// `target_url_len` bytes.
-    unsafe fn core<'a>(&'a self, items: &'a [CoreMediaFact<'a>]) -> Result<CoreFacts<'a>, String> {
+    unsafe fn core<'a>(&'a self, items: Option<&'a [CoreMediaFact<'a>]>) -> Result<CoreFacts<'a>, String> {
         let limit = |value: i64, what: &str| match value {
             ..0 => Ok(None),
             _ => u32::try_from(value).map(Some).map_err(|_| format!("{what} {value} is over 2^32 - 1")),
@@ -238,7 +241,8 @@ pub unsafe extern "C" fn gsx_serialize(
 /// # Safety
 /// As for `gsx_parse`; `target` points to `target_len` bytes; `facts` is `NULL` (no facts) or
 /// points to a `gsx_facts` whose `title` is `NULL` or points to `title_len` bytes and whose `items`
-/// point to `items_len` media facts, each `id` and `alt` as `id` and `cover` of `gsx_parse` media.
+/// is `NULL` with `items_len` 0 (no items fact) or points to `items_len` media facts, each `id` and
+/// `alt` as `id` and `cover` of `gsx_parse` media.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gsx_project(
     text: *const u8,
@@ -261,7 +265,7 @@ pub unsafe extern "C" fn gsx_project(
                 return Ok(wire::project(text, &media, target, &CoreFacts::default()));
             };
             let items = facts.items()?;
-            Ok(wire::project(text, &media, target, &facts.core(&items)?))
+            Ok(wire::project(text, &media, target, &facts.core(items.as_deref())?))
         })
     }
 }
@@ -491,7 +495,7 @@ mod tests {
         let items = [item];
         let facts = Facts { items: items.as_ptr(), items_len: 1, ..facts };
         let core_items = [CoreMediaFact { id, format: Format::Gif, alt: Some(alt), spoiler: true, inline: false }];
-        let core = CoreFacts { items: &core_items, ..core };
+        let core = CoreFacts { items: Some(&core_items), ..core };
         let discord = targets::target("discord-blocks").unwrap();
         let media = [CoreMedia { id, cover: None }];
         let output = project_with(text.as_bytes(), &[id], "discord-blocks", Some(&facts)).unwrap();
@@ -502,6 +506,13 @@ mod tests {
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "item format 4 is not GSX_FORMAT_*");
         let bad = Facts { items: ptr::null(), ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "items is NULL");
+        let none: [MediaFact; 0] = [];
+        let unlisted = Facts { items: ptr::null(), items_len: 0, ..facts };
+        let output = project_with(text.as_bytes(), &[id], "x-plain", Some(&unlisted)).unwrap();
+        assert!(output.contains("media_attached") && !output.contains("media_missing"), "{output}");
+        let empty = Facts { items: none.as_ptr(), items_len: 0, ..facts };
+        let output = project_with(text.as_bytes(), &[id], "x-plain", Some(&empty)).unwrap();
+        assert!(output.contains("media_missing") && !output.contains("media_attached"), "{output}");
         let mut error = ptr::null_mut();
         // SAFETY: a local slot.
         let output = unsafe { gsx_targets(&raw mut error) };

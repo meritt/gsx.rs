@@ -184,7 +184,7 @@ fn outcome(
         caption_limit: limit("captionLimit"),
         description_limit: limit("descriptionLimit"),
         entities_allowed: matches!(facts.get("entitiesAllowed"), Json::Bool(true)),
-        items: &items,
+        items: matches!(facts.get("items"), Json::Array(_)).then_some(&items[..]),
     };
     Ok(match (String::from_utf16(units).ok(), operation, target) {
         (Some(text), Operation::Project, Some(target)) => wire::project(text.as_bytes(), &media, target, &facts),

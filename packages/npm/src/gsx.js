@@ -164,7 +164,7 @@ export const load = (() => {
         throw new TypeError('target must be a string');
       }
 
-      const { title = null, targetUrl = null, entitiesAllowed = false, items = [] } = facts;
+      const { title = null, targetUrl = null, entitiesAllowed = false, items = null } = facts;
       const kind = facts.media == null ? 0 : KINDS[facts.media];
 
       if (kind === undefined) {
@@ -190,7 +190,7 @@ export const load = (() => {
       }
 
       const entries = split(media);
-      const described = mediaFacts(items);
+      const described = mediaFacts(items ?? []);
       const at = invalid(text);
       if (at) return wasm.invalidText(...at);
 
@@ -208,6 +208,7 @@ export const load = (() => {
         count(facts.captionLimit, 'facts.captionLimit'),
         count(facts.descriptionLimit, 'facts.descriptionLimit'),
         entitiesAllowed,
+        items !== null,
         ...described
       );
     }

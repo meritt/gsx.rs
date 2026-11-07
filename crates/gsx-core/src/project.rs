@@ -85,14 +85,14 @@ pub struct Context<'a> {
     link_depth: u32,
     open: Vec<Style>,
     allowed: bool,
-    items: &'a [MediaFact<'a>],
+    items: Option<&'a [MediaFact<'a>]>,
     anchors: Vec<Anchor>,
     alts: Vec<(usize, Option<String>)>,
 }
 
 impl<'a> Context<'a> {
     pub fn items(&self) -> &[MediaFact<'_>] {
-        self.items
+        self.items.unwrap_or_default()
     }
 
     pub fn published_alt(&mut self, item: usize, alt: Option<String>) {
@@ -141,7 +141,7 @@ impl<'a> Context<'a> {
 
     pub fn report_media(&mut self, node: &Node) {
         let ids = node.media_ids().unwrap_or_default();
-        let listed = |id: &String| self.items.iter().any(|item| item.id == id);
+        let listed = |id: &String| self.items.is_none_or(|items| items.iter().any(|item| item.id == id));
         let (some_listed, some_missing) = (ids.iter().any(listed), !ids.iter().all(listed));
         if some_missing {
             self.report_when(Feature::Media, Some(node.range), Some(When::Missing));

@@ -68,7 +68,8 @@ public struct Facts: Sendable, Hashable {
     public var captionLimit: UInt32?
     public var descriptionLimit: UInt32?
     public var entitiesAllowed: Bool
-    public var items: [MediaFact]
+    /// The media the caller publishes. A referenced id missing from a given list was dropped; without the list, attaching targets treat every id as attached.
+    public var items: [MediaFact]?
 
     public init(
         media: MediaKind? = nil,
@@ -81,7 +82,7 @@ public struct Facts: Sendable, Hashable {
         captionLimit: UInt32? = nil,
         descriptionLimit: UInt32? = nil,
         entitiesAllowed: Bool = false,
-        items: [MediaFact] = []
+        items: [MediaFact]? = nil
     ) {
         self.media = media
         self.mediaCount = mediaCount

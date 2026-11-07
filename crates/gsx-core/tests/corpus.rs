@@ -71,7 +71,7 @@ fn facts<'a>(json: &'a Json, items: &'a [MediaFact<'a>]) -> Facts<'a> {
             Some("story") => Some(Placement::Story),
             Some(other) => panic!("no placement {other}"),
         },
-        items,
+        items: matches!(json.get("items"), Json::Array(_)).then_some(items),
         ..Facts::default()
     }
 }

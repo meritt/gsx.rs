@@ -131,8 +131,15 @@ public enum GSX {
     }
 
     private static func withItems<R>(
-        _ items: [MediaFact], _ body: (UnsafePointer<gsx_media_fact>?, Int) throws(InternalError) -> R
+        _ items: [MediaFact]?, _ body: (UnsafePointer<gsx_media_fact>?, Int) throws(InternalError) -> R
     ) throws(InternalError) -> R {
+        guard let items else { return try body(nil, 0) }
+        guard !items.isEmpty else {
+            let result: Result<R, InternalError> = withUnsafePointer(to: gsx_media_fact()) { empty in
+                Result { () throws(InternalError) in try body(empty, 0) }
+            }
+            return try result.get()
+        }
         var storage: [UInt8] = [0]
         var spans: [(id: Range<Int>, alt: Range<Int>?)] = []
         for item in items {

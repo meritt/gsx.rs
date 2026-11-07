@@ -122,19 +122,22 @@ fn mastodon_limit_follows_instance_fact() {
 fn attached_media_report_only_listed_items() {
     let markdown = "Look\n\n::media{id=\"a\"}\n\n::media{ids=\"b,c\" layout=\"collage\"}\n\n::media{id=\"c\"}";
     let items = [MediaFact { id: "c", format: Format::Image, alt: None, spoiler: false, inline: false }];
-    let facts = Facts { media: Some(MediaKind::Image), media_count: 1, items: &items, ..Facts::default() };
+    let listed = Facts { media: Some(MediaKind::Image), media_count: 1, items: Some(&items), ..Facts::default() };
+    let unlisted = Facts { items: None, ..listed };
     let attached = (Class::Approximated, "media_attached");
     let missing = (Class::Omitted, "media_missing");
     for target in TARGETS.iter().filter(|target| target.form.blocks().is_none() && target.name != "telegram-html-rich")
     {
-        let projection = run(target.name, markdown, &facts);
-        let media: Vec<_> = projection
-            .changes
-            .iter()
-            .filter(|change| change.feature == Feature::Media)
-            .map(|change| (change.range.unwrap().start, (change.class, change.reason)))
-            .collect();
-        assert_eq!(media, [(6, missing), (23, missing), (23, attached), (60, attached)], "{}", target.name);
+        let media = |facts: &Facts| -> Vec<_> {
+            run(target.name, markdown, facts)
+                .changes
+                .iter()
+                .filter(|change| change.feature == Feature::Media)
+                .map(|change| (change.range.unwrap().start, (change.class, change.reason)))
+                .collect()
+        };
+        assert_eq!(media(&listed), [(6, missing), (23, missing), (23, attached), (60, attached)], "{}", target.name);
+        assert_eq!(media(&unlisted), [(6, attached), (23, attached), (60, attached)], "{}", target.name);
     }
 }
 

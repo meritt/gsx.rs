@@ -134,7 +134,7 @@ fn image<'a>(id: &'a str, alt: Option<&'a str>) -> MediaFact<'a> {
 fn rich(markdown: &str, items: &[MediaFact]) -> Projection {
     let media: Vec<_> = items.iter().map(|item| Media { id: item.id, cover: None }).collect();
     let document = parse(markdown, &media).unwrap();
-    let facts = Facts { media: Some(MediaKind::Image), media_count: items.len(), items, ..Facts::default() };
+    let facts = Facts { media: Some(MediaKind::Image), media_count: items.len(), items: Some(items), ..Facts::default() };
     project(&document, target("telegram-html-rich").unwrap(), &facts)
 }
 

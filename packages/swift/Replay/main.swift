@@ -58,7 +58,7 @@ for file in arguments.dropFirst() {
             captionLimit: given?.captionLimit,
             descriptionLimit: given?.descriptionLimit,
             entitiesAllowed: given?.entitiesAllowed ?? false,
-            items: given?.items ?? []
+            items: given?.items
         )
         let json = try input.target.map { try GSX.projectJSON(input.markdown, target: $0, facts: facts, media: media) }
             ?? GSX.parseJSON(input.markdown, media: media)

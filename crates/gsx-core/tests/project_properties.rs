@@ -211,7 +211,7 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
         caption_limit: setup.caption_limit,
         description_limit: setup.caption_limit,
         entities_allowed: setup.entities_allowed,
-        items: &items,
+        items: Some(&items),
     };
     let options = Options { search: None, maximum: setup.maximum };
     for target in TARGETS {

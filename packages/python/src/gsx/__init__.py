@@ -270,7 +270,7 @@ class Facts:
     characters_reserved_per_url: Optional[int] = None
     caption_limit: Optional[int] = None
     entities_allowed: bool = False
-    items: Tuple[MediaFact, ...] = ()
+    items: Optional[Tuple[MediaFact, ...]] = None
     target_url: Optional[str] = None
     description_limit: Optional[int] = None
     placement: Optional[str] = None
@@ -436,8 +436,9 @@ def _facts(facts: Facts) -> _Facts:
         raise ValueError("facts.media_count must be a non-negative int that fits size_t")
     title = None if facts.title is None else facts.title.encode("utf-8")
     target_url = None if facts.target_url is None else facts.target_url.encode("utf-8")
-    items =(_MediaFact * len(facts.items))()
-    for index, item in enumerate(facts.items):
+    listed = () if facts.items is None else tuple(facts.items)
+    items = None if facts.items is None else (_MediaFact * len(listed))()
+    for index, item in enumerate(listed):
         if item.format not in _FORMATS:
             raise ValueError("facts.items format must be 'image', 'gif', 'video' or 'audio'")
         id_ = item.id.encode("utf-8")
@@ -459,7 +460,7 @@ def _facts(facts: Facts) -> _Facts:
         _limit(facts.description_limit, "facts.description_limit"),
         bool(facts.entities_allowed),
         items,
-        len(facts.items),
+        len(listed),
     )
 
 

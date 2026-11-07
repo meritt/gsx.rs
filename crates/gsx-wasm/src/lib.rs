@@ -66,6 +66,7 @@ pub fn project(
     caption_limit: Option<u32>,
     description_limit: Option<u32>,
     entities_allowed: bool,
+    listed: bool,
     item_ids: Vec<String>,
     item_formats: Vec<u8>,
     item_alts: Vec<JsValue>,
@@ -113,7 +114,7 @@ pub fn project(
         caption_limit,
         description_limit,
         entities_allowed,
-        items: &items,
+        items: listed.then_some(&items[..]),
     };
     let media = media(&ids, &covers)?;
     text(len, |text| Ok(wire::project(text, &media, target, &facts)))
