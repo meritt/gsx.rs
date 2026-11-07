@@ -152,7 +152,8 @@ export type Unit =
   | 'mastodon-weighted'
   | 'threads-weighted'
   | 'hashtags'
-  | 'mentions';
+  | 'mentions'
+  | 'links';
 
 export type Class = 'approximated' | 'textual_fallback' | 'unwrapped' | 'omitted' | 'blocked';
 

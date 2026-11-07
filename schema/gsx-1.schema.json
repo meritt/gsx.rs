@@ -144,7 +144,8 @@
         "mastodon-weighted",
         "threads-weighted",
         "hashtags",
-        "mentions"
+        "mentions",
+        "links"
       ]
     },
     "measurement": {

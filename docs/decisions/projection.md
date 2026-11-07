@@ -62,6 +62,8 @@ A target URL (Threads reply or quote target) is appended to the body after a bla
 
 Instagram counts hashtags (`#` after the start or whitespace, then letters, digits or `_`) and mentions (`@`, then ASCII letters, digits, `.` or `_`) in each rendered probe, before measuring. Beyond the 30th hashtag or the 20th mention the sigil is removed and the word kept, with one `approximated` change per cap (`hashtag_limit_exceeded`, `mention_limit_exceeded`) carrying unit `hashtags` or `mentions`, the cap and the count. The caps are `text` limits in those units, so they are measured and never drive the cut.
 
+Threads publishes at most 5 unique URLs. While rendering, link destinations count in order, a repeated URL once, with one slot kept for a target URL when the fact is set; a link with a label beyond the cap keeps its label and drops its destination (`unwrapped` `link_limit_exceeded`). The rendered text is then measured in unit `links`: the unique URLs the X detector finds, bare URLs and the target URL included. A measure above 5 cannot be fixed without dropping text, so the projection is `blocked` `link_limit_exceeded`; like the Instagram caps, `links` never drives the cut.
+
 Generated ellipsis, cut position and the gap before a block are node fields. A truncated literal stays literal: escaping and entity detection treat it as authored text.
 
 ## Fitting

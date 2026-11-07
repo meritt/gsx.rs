@@ -30,11 +30,12 @@ pub enum Unit {
     ThreadsWeighted,
     Hashtags,
     Mentions,
+    Links,
 }
 
 impl Unit {
     pub const fn counts_markers(self) -> bool {
-        matches!(self, Unit::Hashtags | Unit::Mentions)
+        matches!(self, Unit::Hashtags | Unit::Mentions | Unit::Links)
     }
 
     pub const fn name(self) -> &'static str {
@@ -48,6 +49,7 @@ impl Unit {
             Unit::ThreadsWeighted => "threads-weighted",
             Unit::Hashtags => "hashtags",
             Unit::Mentions => "mentions",
+            Unit::Links => "links",
         }
     }
 }
@@ -88,6 +90,7 @@ pub fn measure(unit: Unit, text: &str, facts: &Facts) -> u32 {
         ),
         Unit::ThreadsWeighted => count::threads_weighted(text),
         Unit::Hashtags | Unit::Mentions => markers(unit, text).len(),
+        Unit::Links => count::unique_urls(text, facts.urls),
     };
     u32::try_from(count).unwrap_or(u32::MAX)
 }

@@ -34,6 +34,17 @@ fn valid<'a>(text: &'a str, spans: &'a [Range<usize>]) -> impl Iterator<Item = &
     spans.iter().filter(|span| span.start < span.end && text.get(span.start..span.end).is_some())
 }
 
+pub(super) fn unique_urls(text: &str, urls: &[Range<usize>]) -> usize {
+    let mut seen: Vec<&str> = vec![];
+    for url in valid(text, urls) {
+        let url = &text[url.clone()];
+        if !seen.contains(&url) {
+            seen.push(url);
+        }
+    }
+    seen.len()
+}
+
 fn x_char(char: char) -> usize {
     match char {
         '\0'..='\u{10FF}' | '\u{2000}'..='\u{200D}' | '\u{2010}'..='\u{201F}' | '\u{2032}'..='\u{2037}' => 1,

@@ -89,6 +89,8 @@ pub struct Context<'a> {
     positions: HashMap<&'a str, usize>,
     anchors: Vec<Anchor>,
     alts: Vec<(usize, Option<String>)>,
+    urls: Vec<String>,
+    url_cap: Option<usize>,
 }
 
 impl<'a> Context<'a> {
@@ -98,6 +100,18 @@ impl<'a> Context<'a> {
 
     pub fn position(&self, id: &str) -> Option<usize> {
         self.positions.get(id).copied()
+    }
+
+    pub fn admit(&mut self, href: &str) -> bool {
+        let Some(cap) = self.url_cap else { return true };
+        if self.urls.iter().any(|url| url == href) {
+            return true;
+        }
+        let admitted = self.urls.len() < cap;
+        if admitted {
+            self.urls.push(href.to_owned());
+        }
+        admitted
     }
 
     pub fn published_alt(&mut self, item: usize, alt: Option<String>) {
@@ -282,6 +296,11 @@ fn render(
         positions: media::positions(facts.items.unwrap_or_default()),
         anchors: vec![],
         alts: vec![],
+        urls: vec![],
+        url_cap: target.form.entities().and_then(|form| form.links).map(|cap| {
+            let reserved = facts.target_url.is_some() && target.handles(Feature::TargetUrl);
+            cap - usize::from(reserved)
+        }),
     };
     draw(&mut context);
     let mut written = std::mem::replace(&mut context.writer, Writer::new(Escape::None)).finish();
@@ -395,7 +414,7 @@ impl Request<'_, '_> {
     fn measure(&self, unit: Unit, rendered: &Rendered) -> usize {
         let text = self.target.form.visible(&rendered.text);
         let (urls, elided) = match unit {
-            Unit::XWeighted => (links::x_urls(&text), vec![]),
+            Unit::XWeighted | Unit::Links => (links::x_urls(&text), vec![]),
             Unit::MastodonWeighted => links::mastodon_entities(&text),
             _ => (vec![], vec![]),
         };
@@ -470,14 +489,17 @@ impl Request<'_, '_> {
         let limits = self.limits();
         let values = self.values(&limits, &full);
         let fits = |values: &[usize]| {
-            limits.iter().zip(values).all(|(limit, value)| limit.maximum.is_none_or(|maximum| *value <= maximum))
+            limits.iter().zip(values).all(|(limit, value)| {
+                limit.unit.counts_markers() || limit.maximum.is_none_or(|maximum| *value <= maximum)
+            })
         };
         let measurements = self.measurements(&limits, &values);
         if fits(&values) {
             return Fitted { rendered: full, measurements };
         }
-        let ratio = |measurement: &Measurement| {
-            measurement.maximum.map_or(0.0, |maximum| measurement.value as f64 / maximum.max(1) as f64)
+        let ratio = |measurement: &Measurement| match measurement.maximum {
+            Some(maximum) if !measurement.unit.counts_markers() => measurement.value as f64 / maximum.max(1) as f64,
+            _ => 0.0,
         };
         let worst = measurements
             .iter()
@@ -504,6 +526,7 @@ impl Request<'_, '_> {
             limits
                 .iter()
                 .zip(values)
+                .filter(|(limit, _)| !limit.unit.counts_markers())
                 .filter_map(|(limit, &value)| limit.maximum.map(|maximum| value as f64 / maximum.max(1) as f64))
                 .fold(0.0, f64::max)
         };
@@ -711,6 +734,10 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         let Fitted { mut rendered, measurements: measured } = fitted;
         if spec.required && measure::blank(&rendered.text) {
             required.push(request.change(Feature::Title, None, Some(When::Empty)));
+        }
+        let over = |measured: &Measurement| measured.maximum.is_some_and(|maximum| measured.value > maximum);
+        if measured.iter().any(|measured| measured.unit == Unit::Links && over(measured)) {
+            rendered.changes.push(request.change(Feature::Link, None, Some(When::Overflow)));
         }
         changes.append(&mut rendered.changes);
         alts.append(&mut rendered.alts);

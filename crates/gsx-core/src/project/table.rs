@@ -180,6 +180,7 @@ pub struct EntityForm {
     pub code_splits: bool,
     pub detection: Detection,
     pub cap: Option<usize>,
+    pub links: Option<usize>,
     pub trim: bool,
     pub styled_suffix: bool,
 }

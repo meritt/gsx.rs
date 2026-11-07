@@ -18,6 +18,7 @@ How each target counts text against its limits. Code: `crates/gsx-core/src/measu
 | `mastodon-weighted` | Mastodon `StatusLengthValidator`: graphemes of the text with each URL span replaced by `x` and each elided span removed, plus `characters_reserved_per_url − 1` per URL; 0 reserved removes the URL |
 | `threads-weighted` | graphemes; a cluster that is exactly an RGI_Emoji sequence or one Emoji_Presentation code point counts its UTF-8 bytes |
 | `hashtags`, `mentions` | markers counted as in [projection.md](projection.md#fields); caps, never cut points |
+| `links` | unique URL spans, compared as text; a cap, never a cut point |
 
 A Mastodon mention counts as `@local`: the projection passes `@domain` as an elided span.
 
@@ -40,6 +41,7 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 | `bluesky-entities` | text | graphemes and utf8 | 300 and 3000 |
 | | alt | graphemes and utf8 | 2000 and 20000 |
 | `threads-entities` | text; alt | threads-weighted; code points | 500; 1000 |
+| | text | links | 5 |
 | `x-plain` | text; alt | x-weighted; code points | 280; 1000 |
 | `mastodon-plain` | text | mastodon-weighted | max characters, 500 |
 | | alt | code points | description limit, none |

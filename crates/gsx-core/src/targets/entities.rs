@@ -1,10 +1,10 @@
 use super::limits::{
-    Alt, CodePoints, Fact, Graphemes, Limit, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
+    Alt, CodePoints, Fact, Graphemes, Limit, Links, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
 };
 use super::plain::BODY;
-use super::{DEFAULT, Rules, rule};
+use super::{DEFAULT, LINK, Rules, rule};
 use crate::forms::plain::RENDERER;
-use crate::project::Class::{Approximated, Omitted, TextualFallback, Unwrapped};
+use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
     Condition, Detection, EntityForm, Feature, Form, Normalization, Offsets, Rule, Search, Style, Target, When,
 };
@@ -35,6 +35,7 @@ static BLUESKY_FORM: EntityForm = EntityForm {
     code_splits: false,
     detection: Detection::Bluesky,
     cap: None,
+    links: None,
     trim: false,
     styled_suffix: true,
 };
@@ -63,14 +64,25 @@ static THREADS_FORM: EntityForm = EntityForm {
     code_splits: false,
     detection: Detection::None,
     cap: Some(10),
+    links: Some(5),
     trim: false,
     styled_suffix: false,
 };
 
+const THREADS_LINK: [Condition; 3] = [
+    LINK.conditions[0],
+    Condition { when: When::Count, class: Unwrapped, reason: "link_limit_exceeded" },
+    Condition { when: When::Overflow, class: Blocked, reason: "link_limit_exceeded" },
+];
+
 pub static THREADS: Target = entities(
     "threads-entities",
     rules!(
-        Rules { spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"), ..DEFAULT },
+        Rules {
+            spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"),
+            link: Rule { conditions: &THREADS_LINK, ..LINK },
+            ..DEFAULT
+        },
         Rule {
             feature: Feature::TargetUrl,
             class: TextualFallback,
@@ -82,7 +94,7 @@ pub static THREADS: Target = entities(
         },
     ),
     &THREADS_FORM,
-    &[limit(Text, ThreadsWeighted, 500), limit(Alt, CodePoints, 1000)],
+    &[limit(Text, ThreadsWeighted, 500), limit(Text, Links, 5), limit(Alt, CodePoints, 1000)],
 );
 
 static TELEGRAM_FORM: EntityForm = EntityForm {
@@ -101,6 +113,7 @@ static TELEGRAM_FORM: EntityForm = EntityForm {
     code_splits: true,
     detection: Detection::None,
     cap: Some(100),
+    links: None,
     trim: true,
     styled_suffix: true,
 };

@@ -143,6 +143,15 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                     }
                     continue;
                 }
+                let admitted = context.admit(&href);
+                if !admitted && !bare {
+                    context.report_when(Feature::Link, Some(node.range), Some(When::Count));
+                    if title.is_some() {
+                        context.report(Feature::LinkTitle, node.range);
+                    }
+                    context.within_link(|context| inline(context, &node.children));
+                    continue;
+                }
                 context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
                 if title.is_some() {
                     context.report(Feature::LinkTitle, node.range);
