@@ -1,11 +1,12 @@
 use crate::document::Node;
 use crate::forms::markdown;
-use crate::project::{Context, Renderer, placed, referenced};
+use crate::project::{Context, Renderer, placed, references};
 
 pub const RENDERER: Renderer = Renderer { blocks, inline: markdown::inline };
 
 pub fn blocks(context: &mut Context, nodes: &[Node]) {
-    let leading = context.items().iter().any(|item| !referenced(nodes, item.id));
+    let placed_ids = references(nodes);
+    let leading = context.items().iter().any(|item| !placed_ids.contains_key(item.id));
     let mut gap = if leading { 2 } else { 0 };
     let mut previous = leading.then_some(false);
     if leading {
@@ -37,5 +38,5 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
 
 fn dropped(context: &Context, id: &str) -> bool {
     let maximum = context.target.form.blocks().and_then(|form| form.items).unwrap_or(usize::MAX);
-    context.items().iter().position(|item| item.id == id).is_none_or(|index| index >= maximum)
+    context.position(id).is_none_or(|index| index >= maximum)
 }

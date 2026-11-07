@@ -3,7 +3,7 @@ use crate::document::{Align, Kind, Layout, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
     CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Slot, Truncated,
-    When, blank, href, marker, placed, referenced, shortened,
+    When, blank, href, marker, placed, references, shortened,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks: render, inline: render_inline };
@@ -411,10 +411,11 @@ impl Html {
                 spoiler: fact.spoiler,
             })
             .collect();
-        for medium in self.media.iter().skip(self.limit()) {
-            let range =
-                nodes.iter().find(|node| referenced(std::slice::from_ref(node), &medium.id)).map(|node| node.range);
-            context.report_when(Feature::Media, range, Some(When::Count));
+        if self.media.len() > self.limit() {
+            let ranges = references(nodes);
+            for medium in self.media.iter().skip(self.limit()) {
+                context.report_when(Feature::Media, ranges.get(medium.id.as_str()).copied(), Some(When::Count));
+            }
         }
     }
 
@@ -422,7 +423,7 @@ impl Html {
         let mut kept = vec![];
         let mut missing = false;
         for id in ids {
-            match self.media.iter().position(|medium| medium.id == *id) {
+            match context.position(id) {
                 Some(index) if index < self.limit() => kept.push(index),
                 Some(_) => {}
                 None => missing = true,
@@ -591,8 +592,9 @@ impl Html {
         let mut paragraph = false;
         let mut carry = 0;
         if level == 1 {
+            let placed_ids = references(nodes);
             let unplaced: Vec<usize> = (0..self.media.len().min(self.limit()))
-                .filter(|&index| !referenced(nodes, &self.media[index].id))
+                .filter(|&index| !placed_ids.contains_key(self.media[index].id.as_str()))
                 .collect();
             for index in unplaced {
                 if !first {

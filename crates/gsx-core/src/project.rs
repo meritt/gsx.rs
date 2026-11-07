@@ -23,7 +23,7 @@ pub use fit::WINDOW;
 pub(crate) use layout::blank;
 pub use layout::{CELL, ELLIPSIS, RULE, Writer, marker, single_line};
 pub use links::href;
-pub use media::{Attachment, Block, Item, placed, referenced};
+pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
     BlocksForm, Condition, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm, LineStart,
     MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Structure, Style, Target, Truncation,
@@ -86,6 +86,7 @@ pub struct Context<'a> {
     open: Vec<Style>,
     allowed: bool,
     items: Option<&'a [MediaFact<'a>]>,
+    positions: HashMap<&'a str, usize>,
     anchors: Vec<Anchor>,
     alts: Vec<(usize, Option<String>)>,
 }
@@ -93,6 +94,10 @@ pub struct Context<'a> {
 impl<'a> Context<'a> {
     pub fn items(&self) -> &[MediaFact<'_>] {
         self.items.unwrap_or_default()
+    }
+
+    pub fn position(&self, id: &str) -> Option<usize> {
+        self.positions.get(id).copied()
     }
 
     pub fn published_alt(&mut self, item: usize, alt: Option<String>) {
@@ -141,7 +146,7 @@ impl<'a> Context<'a> {
 
     pub fn report_media(&mut self, node: &Node) {
         let ids = node.media_ids().unwrap_or_default();
-        let listed = |id: &String| self.items.is_none_or(|items| items.iter().any(|item| item.id == id));
+        let listed = |id: &String| self.items.is_none() || self.positions.contains_key(id.as_str());
         let (some_listed, some_missing) = (ids.iter().any(listed), !ids.iter().all(listed));
         if some_missing {
             self.report_when(Feature::Media, Some(node.range), Some(When::Missing));
@@ -274,6 +279,7 @@ fn render(
         open: vec![],
         allowed: facts.entities_allowed,
         items: facts.items,
+        positions: media::positions(facts.items.unwrap_or_default()),
         anchors: vec![],
         alts: vec![],
     };
