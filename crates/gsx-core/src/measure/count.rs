@@ -43,6 +43,7 @@ fn x_char(char: char) -> usize {
 
 pub(super) fn x_weighted(text: &str, urls: &[Range<usize>]) -> usize {
     let mut urls = valid(text, urls).peekable();
+    let bytes = text.as_bytes();
     let mut weight = 0;
     let mut at = 0;
     while let Some(char) = text[at..].chars().next() {
@@ -50,6 +51,11 @@ pub(super) fn x_weighted(text: &str, urls: &[Range<usize>]) -> usize {
         if let Some(url) = urls.next_if(|url| url.start == at) {
             weight += X_URL_WEIGHT;
             at = url.end;
+            continue;
+        }
+        if char.is_ascii() && bytes.get(at + 1).is_none_or(u8::is_ascii) {
+            weight += 1;
+            at += 1;
             continue;
         }
         let emoji = emoji::rgi_prefix(&text[at..]);

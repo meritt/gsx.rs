@@ -42,10 +42,10 @@ impl Units {
 }
 
 pub fn x_urls(text: &str) -> Vec<Range<usize>> {
-    let units = Units::new(text);
-    if units.units.len() > X_MEASURED_UTF16 {
+    if text.len() > X_MEASURED_UTF16 && text.encode_utf16().count() > X_MEASURED_UTF16 {
         return vec![];
     }
+    let units = Units::new(text);
     twitter::urls(&units.units).into_iter().filter_map(|range| units.bytes(range)).collect()
 }
 
