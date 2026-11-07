@@ -116,7 +116,7 @@ export interface Facts {
   media?: 'image' | 'video' | 'gif' | 'audio' | null;
   mediaCount?: number;
   title?: string | null;
-  /** Appended after the body on targets that declare `target_url`; never cut. */
+  /** Appended after the body, or replacing a blank body, on targets that declare `target_url`; never cut. */
   targetUrl?: string | null;
   maxCharacters?: number | null;
   charactersReservedPerUrl?: number | null;

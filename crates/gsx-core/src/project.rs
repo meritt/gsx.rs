@@ -514,9 +514,13 @@ impl Request<'_, '_> {
     }
 }
 
-fn appended(mut rendered: Rendered, url: Option<&str>) -> Rendered {
+fn appended(target: &Target, mut rendered: Rendered, url: Option<&str>) -> Rendered {
     if let Some(url) = url {
-        if !rendered.text.is_empty() {
+        if target.form.visible(&rendered.text).trim().is_empty() {
+            rendered.text.clear();
+            rendered.links.clear();
+            rendered.styled.clear();
+        } else {
             rendered.text.push_str("\n\n");
         }
         let start = rendered.text.len();
@@ -643,7 +647,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                 let mut fitted = request.fit(
                     || Outline::of_nodes(document, body),
                     !removed,
-                    |cut| appended(draw_body(spec.name, cut), suffix),
+                    |cut| appended(target, draw_body(spec.name, cut), suffix),
                 );
                 if suffix.is_some() {
                     fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));
