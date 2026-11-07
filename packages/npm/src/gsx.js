@@ -76,8 +76,8 @@ export const load = (() => {
     return [ids, covers];
   }
 
-  const KINDS = { image: 1, video: 2, gif: 3, audio: 4 };
-  const PLACEMENTS = { post: 1, reel: 2, story: 3 };
+  const KINDS = { __proto__: null, image: 1, video: 2, gif: 3, audio: 4 };
+  const PLACEMENTS = { __proto__: null, post: 1, reel: 2, story: 3 };
   const FORMATS = { image: 0, gif: 1, video: 2, audio: 3 };
 
   function mediaFacts(items) {
