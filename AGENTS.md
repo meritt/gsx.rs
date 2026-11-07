@@ -89,7 +89,7 @@ cargo bench -p gsx-core --bench instructions
 cargo +nightly-2026-11-01 fuzz run parse -- -max_len=4096
 ```
 
-`bench` writes `testdata/bench/baseline/gsx-<commit>.json` and its `.md` summary; `--wasm` builds the npm package and writes `gsx-wasm-<commit>` in Node.js. CI compares Callgrind instruction counts with the base commit and fails a case more than 1% above it; wall time on shared runners is too noisy. Instruction counts need Valgrind and `gungraun-runner` of the `gungraun` version in `Cargo.lock`. Fuzzing needs `cargo install cargo-fuzz`; the targets are `parse` and `project`.
+`bench` writes `testdata/bench/baseline/gsx-<commit>.json` and its `.md` summary; `--wasm` builds the npm package and writes `gsx-wasm-<commit>` in Node.js. CI compares Callgrind instruction counts with the base commit and fails a case more than 1% above it; wall time on shared runners is too noisy. Instruction counts need Valgrind and `gungraun-runner` of the `gungraun` version in `Cargo.lock`. Fuzzing needs `cargo install cargo-fuzz`; the targets are `parse` and `project`, and CI runs each for 60 s with `fuzz/Cargo.lock` locked.
 
 ## Build
 
@@ -106,7 +106,7 @@ cargo xtask pin [--check] [<release set>]
 
 ## Release
 
-1. Set `version` in `Cargo.toml` (`[workspace.package]`), `packages/npm/package.json` and `packages/python/pyproject.toml`; merge to `main`.
+1. Set `version` in `Cargo.toml` (`[workspace.package]`), `packages/npm/package.json` and `packages/python/pyproject.toml`, run `cargo update -p gsx-core --manifest-path fuzz/Cargo.toml`; merge to `main`.
 2. Take the release set CI built for that commit and pin it:
 
    ```bash

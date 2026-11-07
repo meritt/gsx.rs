@@ -65,19 +65,49 @@ const MEDIA: [Media<'static>; 4] = [
     Media { id: "d", cover: None },
     Media { id: "e", cover: None },
 ];
+const IDS: [&str; 6] = ["a", "b", "c", "d", "e", "x"];
 const FORMATS: [Format; 4] = [Format::Image, Format::Gif, Format::Video, Format::Audio];
 const PLACEMENTS: [Placement; 3] = [Placement::Post, Placement::Reel, Placement::Story];
+const KINDS: [MediaKind; 4] = [MediaKind::Image, MediaKind::Gif, MediaKind::Video, MediaKind::Audio];
+const URLS: &[&str] = &[
+    "https://example.com/post/1",
+    "https://www.threads.net/@alice/post/C1a2b3",
+    "http://пример.рф/путь?q=1#frag",
+    "https://example.com/a_(b)*c*",
+    "example.com",
+    "not a url",
+    "https://",
+    "javascript:alert(1)",
+    "",
+    " ",
+    "https://example.com/\nnext",
+    "**https://example.com**",
+];
+const ALTS: &[&str] = &["", " ", "\n", "**a**", "https://example.com", "🇺🇦 e\u{301}"];
+
+#[derive(Clone, Debug)]
+struct Item {
+    id: usize,
+    format: usize,
+    alt: Option<String>,
+    spoiler: bool,
+    inline: bool,
+}
 
 #[derive(Clone, Debug)]
 struct Setup {
     media: usize,
-    video: bool,
+    kind: Option<usize>,
+    media_count: usize,
     placement: Option<Placement>,
-    items: Vec<(usize, bool, bool, bool)>,
+    listed: bool,
+    items: Vec<Item>,
     title: Option<String>,
+    target_url: Option<String>,
     max_characters: Option<u32>,
     characters_reserved_per_url: Option<u32>,
     caption_limit: Option<u32>,
+    description_limit: Option<u32>,
     entities_allowed: bool,
     maximum: Option<usize>,
 }
@@ -86,31 +116,62 @@ fn markup() -> impl Strategy<Value = String> {
     prop::collection::vec(prop::sample::select(FRAGMENTS), 0..64).prop_map(|parts| parts.concat())
 }
 
+fn alt() -> impl Strategy<Value = String> {
+    prop_oneof![
+        "[a-zé🚀 ]{0,24}",
+        "[a-z🚀 ]{1,6}".prop_map(|part| part.repeat(500)),
+        prop::sample::select(ALTS).prop_map(str::to_owned),
+    ]
+}
+
+fn item() -> impl Strategy<Value = Item> {
+    (0..IDS.len(), 0..FORMATS.len(), prop::option::of(alt()), any::<bool>(), any::<bool>())
+        .prop_map(|(id, format, alt, spoiler, inline)| Item { id, format, alt, spoiler, inline })
+}
+
+fn target_url() -> impl Strategy<Value = String> {
+    prop_oneof![prop::sample::select(URLS).prop_map(str::to_owned), "[a-z:/.?#@ ]{0,32}"]
+}
+
 fn setup() -> impl Strategy<Value = Setup> {
     (
-        (0..=MEDIA.len(), any::<bool>()),
-        prop::collection::vec((0..FORMATS.len(), any::<bool>(), any::<bool>(), any::<bool>()), MEDIA.len()),
-        prop::option::of("[a-zé🚀 ]{0,24}"),
-        (prop::option::of(1..1000u32), prop::option::of(0..64u32), prop::option::of(1..2000u32)),
-        (any::<bool>(), prop::option::of(0..160usize), prop::option::of(prop::sample::select(&PLACEMENTS[..]))),
+        (0..=MEDIA.len(), prop::option::of(0..KINDS.len()), 0..=IDS.len()),
+        prop::collection::vec(item(), 0..=IDS.len()),
+        (prop::option::of("[a-zé🚀 ]{0,24}"), prop::option::of(target_url())),
+        (
+            prop::option::of(1..1000u32),
+            prop::option::of(0..64u32),
+            prop::option::of(1..2000u32),
+            prop::option::of(0..2000u32),
+        ),
+        (
+            any::<bool>(),
+            prop::option::of(0..160usize),
+            prop::option::of(prop::sample::select(&PLACEMENTS[..])),
+            any::<bool>(),
+        ),
     )
         .prop_map(
             |(
-                (media, video),
+                (media, kind, media_count),
                 items,
-                title,
-                (max_characters, characters_reserved_per_url, caption_limit),
-                (entities_allowed, maximum, placement),
+                (title, target_url),
+                (max_characters, characters_reserved_per_url, caption_limit, description_limit),
+                (entities_allowed, maximum, placement, listed),
             )| {
                 Setup {
                     media,
-                    video,
+                    kind,
+                    media_count,
                     placement,
+                    listed,
                     items,
                     title,
+                    target_url,
                     max_characters,
                     characters_reserved_per_url,
                     caption_limit,
+                    description_limit,
                     entities_allowed,
                     maximum,
                 }
@@ -189,29 +250,29 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
     let Ok(document) = parse(input, &MEDIA[..setup.media]) else {
         return Ok(());
     };
-    let items: Vec<MediaFact> = MEDIA[..setup.media]
+    let items: Vec<MediaFact> = setup
+        .items
         .iter()
-        .zip(&setup.items)
-        .map(|(media, &(format, alt, spoiler, inline))| MediaFact {
-            id: media.id,
-            format: FORMATS[format],
-            alt: alt.then_some("alt text"),
-            spoiler,
-            inline,
+        .map(|item| MediaFact {
+            id: IDS[item.id],
+            format: FORMATS[item.format],
+            alt: item.alt.as_deref(),
+            spoiler: item.spoiler,
+            inline: item.inline,
         })
         .collect();
     let facts = Facts {
-        media: (setup.media > 0).then_some(if setup.video { MediaKind::Video } else { MediaKind::Image }),
-        media_count: setup.media,
+        media: setup.kind.map(|kind| KINDS[kind]),
+        media_count: setup.media_count,
         placement: setup.placement,
         title: setup.title.as_deref(),
-        target_url: None,
+        target_url: setup.target_url.as_deref(),
         max_characters: setup.max_characters,
         characters_reserved_per_url: setup.characters_reserved_per_url,
         caption_limit: setup.caption_limit,
-        description_limit: setup.caption_limit,
+        description_limit: setup.description_limit,
         entities_allowed: setup.entities_allowed,
-        items: Some(&items),
+        items: setup.listed.then_some(&items[..]),
     };
     let options = Options { search: None, maximum: setup.maximum };
     for target in TARGETS {
