@@ -513,7 +513,13 @@ impl Html {
         let Some(mut remaining) = maximum.checked_sub(body) else { return };
         let cut = context.done();
         let mut inserts = vec![];
+        let mut kept = 0;
         for figure in std::mem::take(&mut self.figures) {
+            let before = if cut && !figure.cut {
+                Some(cost(&context.target.form.visible(&context.writer().since(0)[..figure.end])))
+            } else {
+                None
+            };
             let mut entries: Vec<String> = vec![];
             for (index, (item, alt)) in figure.alts.iter().enumerate() {
                 let Some(alt) = alt.as_deref().filter(|alt| !alt.trim().is_empty()) else { continue };
@@ -522,7 +528,8 @@ impl Html {
                 let overhead = cost(&format!("{separator}{prefix}"));
                 let room = remaining.saturating_sub(overhead);
                 let value = cost(alt);
-                let text = if (cut && !figure.cut) || value <= room {
+                let whole = before.is_some_and(|before| before + kept + overhead + value <= maximum);
+                let text = if whole || value <= room {
                     alt.to_owned()
                 } else if room == 0 {
                     String::new()
@@ -545,7 +552,9 @@ impl Html {
                     context.published_alt(*item, Some(text.clone()).filter(|text| !text.is_empty()));
                 }
                 if !text.is_empty() {
-                    remaining = remaining.saturating_sub(overhead + cost(&text));
+                    let spent = overhead + cost(&text);
+                    remaining = remaining.saturating_sub(spent);
+                    kept += spent;
                     entries.push(prefix + &text);
                 }
             }

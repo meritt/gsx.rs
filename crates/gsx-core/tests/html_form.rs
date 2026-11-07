@@ -246,6 +246,18 @@ fn rich_keeps_captions_before_the_cut() {
 }
 
 #[test]
+fn rich_shares_the_rest_with_a_caption_too_long_to_keep_whole() {
+    let alt = "described ".repeat(4000);
+    let markdown = format!("Intro\n\n::media{{id=\"a\"}}\n\n{}", "word ".repeat(7000));
+    let projection = rich(&markdown, &[image("a", Some(&alt))]);
+    let body = text(&projection);
+    assert!(body.matches("word").count() > 6000);
+    assert!(projection.measurements[0].value <= 32_768);
+    assert_ne!(projection.items[0].alt.as_deref(), Some(alt.as_str()));
+    assert!(changes(&projection).contains(&("text", "approximated", "text_truncated")));
+}
+
+#[test]
 fn rich_items_carry_the_alt_left_out_of_the_text_budget() {
     let body = format!("Ready.\n\n{}\n\n::media{{id=\"a\"}}", "x".repeat(32_760));
     let projection = rich(&body, &[image("a", Some("Described"))]);
