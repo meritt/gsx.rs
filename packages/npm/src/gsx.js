@@ -132,9 +132,23 @@ export const load = (() => {
     return result[key];
   }
 
-  function bind(wasm, memory) {
+  function bind(instance, instantiate) {
     const encoder = new TextEncoder();
+    let { wasm, memory } = instance;
     let bytes = new Uint8Array(0);
+
+    function call(run) {
+      try {
+        return run();
+      } catch (error) {
+        if (error instanceof WebAssembly.RuntimeError) {
+          ({ wasm, memory } = instantiate());
+          bytes = new Uint8Array(0);
+        }
+
+        throw error;
+      }
+    }
 
     function pass(text) {
       const capacity = text.length * 3;
@@ -146,17 +160,15 @@ export const load = (() => {
     function parseJSON(text, media = []) {
       const entries = split(media);
       const at = invalid(text);
-      if (at) return wasm.invalidText(...at);
 
-      return wasm.parse(pass(text), ...entries);
+      return call(() => (at ? wasm.invalidText(...at) : wasm.parse(pass(text), ...entries)));
     }
 
     function serializeJSON(text, media = []) {
       const entries = split(media);
       const at = invalid(text);
-      if (at) return wasm.invalidText(...at);
 
-      return wasm.serialize(pass(text), ...entries);
+      return call(() => (at ? wasm.invalidText(...at) : wasm.serialize(pass(text), ...entries)));
     }
 
     function projectJSON(text, target, facts = {}, media = []) {
@@ -191,14 +203,7 @@ export const load = (() => {
 
       const entries = split(media);
       const described = mediaFacts(items ?? []);
-      const at = invalid(text);
-      if (at) return wasm.invalidText(...at);
-
-      return wasm.project(
-        pass(text),
-        ...entries,
-        target,
-        kind,
+      const limits = [
         count(facts.mediaCount, 'facts.mediaCount') ?? 0,
         placement,
         title ?? undefined,
@@ -207,9 +212,13 @@ export const load = (() => {
         count(facts.charactersReservedPerUrl, 'facts.charactersReservedPerUrl'),
         count(facts.captionLimit, 'facts.captionLimit'),
         count(facts.descriptionLimit, 'facts.descriptionLimit'),
-        entitiesAllowed,
-        items !== null,
-        ...described
+      ];
+      const at = invalid(text);
+
+      return call(() =>
+        at
+          ? wasm.invalidText(...at)
+          : wasm.project(pass(text), ...entries, target, kind, ...limits, entitiesAllowed, items !== null, ...described)
       );
     }
 
@@ -222,7 +231,7 @@ export const load = (() => {
       serializeJSON,
       project: (text, target, facts, media) => unwrap(projectJSON(text, target, facts, media), 'projection'),
       projectJSON,
-      targets: () => (listed ??= Object.freeze(JSON.parse(wasm.targets()).targets.map(Object.freeze))),
+      targets: () => (listed ??= Object.freeze(JSON.parse(call(() => wasm.targets())).targets.map(Object.freeze))),
     };
   }
 
@@ -249,26 +258,30 @@ export const load = (() => {
 
   return async function load(source = new URL('./gsx.wasm', import.meta.url)) {
     const module = await compile(source);
-    const wasm = glue();
 
     if (!WebAssembly.Module.exports(module).some(({ name }) => name === 'version')) {
       throw new VersionError(undefined);
     }
 
-    let exports;
+    function instantiate() {
+      const wasm = glue();
+      return { wasm, memory: wasm.initSync({ module }).memory };
+    }
+
+    let instance;
 
     try {
-      exports = wasm.initSync({ module });
+      instance = instantiate();
     } catch (error) {
       throw error instanceof WebAssembly.LinkError ? new VersionError(undefined) : error;
     }
 
-    const found = wasm.version();
+    const found = instance.wasm.version();
 
     if (found !== VERSION) {
       throw new VersionError(found);
     }
 
-    return Object.freeze({ ...bind(wasm, exports.memory), VERSION, ParseError, VersionError });
+    return Object.freeze({ ...bind(instance, instantiate), VERSION, ParseError, VersionError });
   };
 })();
