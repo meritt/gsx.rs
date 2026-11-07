@@ -38,9 +38,9 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 | `slack-plain` | text (file comment); alt (image) | code points | none; 1000 |
 | `slack-blocks` | text; alt | code points | 12000; 2000 |
 | `bluesky-entities` | text | graphemes and utf8 | 300 and 3000 |
-| | alt (image); alt (video) | graphemes and utf8 | 2000 and 20000; 1000 and 10000 |
-| `threads-entities` | text | threads-weighted | 500 |
-| `x-plain` | text | x-weighted | 280 |
+| | alt | graphemes and utf8 | 2000 and 20000 |
+| `threads-entities` | text; alt | threads-weighted; code points | 500; 1000 |
+| `x-plain` | text; alt | x-weighted; code points | 280; 1000 |
 | `mastodon-plain` | text | mastodon-weighted | max characters, 500 |
 | | alt | code points | description limit, none |
 | `linkedin-plain` | text; alt | code points | 3000; 4086 |
@@ -64,6 +64,8 @@ No dependency: neither `unicode-segmentation` nor ICU4X's segmenter carries RGI_
 | Case | Rule |
 | --- | --- |
 | `bluesky-entities` | graphemes and UTF-8 bytes both reported, each against its own maximum |
+| `bluesky-entities` alt | the lexicon sets no maximum for image or video alt; 2000 graphemes and 20000 bytes are the Bluesky app's `MAX_ALT_TEXT` for both |
+| `x-plain`, `threads-entities` alt | 1000 characters, the X media metadata `alt_text` schema and the Threads publishing reference, counted in code points |
 | `mastodon-plain`, instance unresolved | vanilla Mastodon: 500, 23 per URL; alt is measured without a maximum and not fitted until the `descriptionLimit` fact gives the instance's limit |
 | Telegram text and caption lengths | code points, though entity offsets are UTF-16. The Bot API gives "characters after entities parsing"; the MTProto config documents `caption_length_limit_*` and `story_caption_length_limit_*` as "UTF-8 length", which TDLib's `utf8_length` counts as characters, the unit it checks bot texts and captions and cuts reply quotes in |
 | `telegram-entities`, capabilities resolved | code points against the resolved maximum |

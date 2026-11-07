@@ -52,7 +52,7 @@ pub(super) const BODY: &[FieldSpec] = &[field(FieldName::Text, Media::Any, Sourc
 
 pub static X: Target = Target {
     normalization: Normalization::Nfc,
-    ..text(Escape::None, "x-plain", plain!(&[]), BODY, &[limit(Text, XWeighted, 280)])
+    ..text(Escape::None, "x-plain", plain!(&[]), BODY, &[limit(Text, XWeighted, 280), limit(Alt, CodePoints, 1000)])
 };
 
 pub static MASTODON: Target = text(

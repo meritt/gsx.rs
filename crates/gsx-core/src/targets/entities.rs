@@ -1,6 +1,5 @@
 use super::limits::{
-    Alt, CodePoints, Fact, Graphemes, Image, Limit, Only, Story, Text, ThreadsWeighted, Utf8Bytes, Video, limit,
-    resolved,
+    Alt, CodePoints, Fact, Graphemes, Limit, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
 };
 use super::plain::BODY;
 use super::{DEFAULT, Rules, rule};
@@ -51,10 +50,8 @@ pub static BLUESKY: Target = entities(
     &[
         limit(Text, Graphemes, 300),
         limit(Text, Utf8Bytes, 3000),
-        limit(Alt, Graphemes, 2000).when(Only(Image)),
-        limit(Alt, Utf8Bytes, 20000).when(Only(Image)),
-        limit(Alt, Graphemes, 1000).when(Only(Video)),
-        limit(Alt, Utf8Bytes, 10000).when(Only(Video)),
+        limit(Alt, Graphemes, 2000),
+        limit(Alt, Utf8Bytes, 20000),
     ],
 );
 
@@ -85,7 +82,7 @@ pub static THREADS: Target = entities(
         },
     ),
     &THREADS_FORM,
-    &[limit(Text, ThreadsWeighted, 500)],
+    &[limit(Text, ThreadsWeighted, 500), limit(Alt, CodePoints, 1000)],
 );
 
 static TELEGRAM_FORM: EntityForm = EntityForm {
