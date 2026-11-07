@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use gsx_core::document::{Document, parse};
 use gsx_core::project::{
-    Class, Facts, Feature, FieldName, MediaKind, Options, Projection, Style, Target, project, project_with,
+    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Projection, Style, Target, project,
+    project_with,
 };
 use gsx_core::targets::{TARGETS, target};
 
@@ -115,6 +116,26 @@ fn mastodon_limit_follows_instance_fact() {
     assert!(measurement.value <= 12);
     assert!(text(&projection, FieldName::Text).ends_with('…'));
     assert!(reasons(&projection).contains(&(Class::Approximated, Feature::Text, "text_truncated")));
+}
+
+#[test]
+fn attached_media_report_only_listed_items() {
+    let markdown = "Look\n\n::media{id=\"a\"}\n\n::media{ids=\"b,c\" layout=\"collage\"}\n\n::media{id=\"c\"}";
+    let items = [MediaFact { id: "c", format: Format::Image, alt: None, spoiler: false, inline: false }];
+    let facts = Facts { media: Some(MediaKind::Image), media_count: 1, items: &items, ..Facts::default() };
+    let attached = (Class::Approximated, "media_attached");
+    let missing = (Class::Omitted, "media_missing");
+    for target in TARGETS.iter().filter(|target| target.form.blocks().is_none() && target.name != "telegram-html-rich")
+    {
+        let projection = run(target.name, markdown, &facts);
+        let media: Vec<_> = projection
+            .changes
+            .iter()
+            .filter(|change| change.feature == Feature::Media)
+            .map(|change| (change.range.unwrap().start, (change.class, change.reason)))
+            .collect();
+        assert_eq!(media, [(6, missing), (23, missing), (23, attached), (60, attached)], "{}", target.name);
+    }
 }
 
 #[test]

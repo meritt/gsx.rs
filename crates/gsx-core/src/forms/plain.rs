@@ -12,7 +12,7 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
             break;
         }
         if media(node) {
-            context.report(Feature::Media, node.range);
+            context.report_media(node);
             continue;
         }
         if !first {

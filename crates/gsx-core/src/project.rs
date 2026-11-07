@@ -139,6 +139,18 @@ impl<'a> Context<'a> {
         self.report_when(feature, Some(range), None);
     }
 
+    pub fn report_media(&mut self, node: &Node) {
+        let ids = node.media_ids().unwrap_or_default();
+        let listed = |id: &String| self.items.iter().any(|item| item.id == id);
+        let (some_listed, some_missing) = (ids.iter().any(listed), !ids.iter().all(listed));
+        if some_missing {
+            self.report_when(Feature::Media, Some(node.range), Some(When::Missing));
+        }
+        if some_listed {
+            self.report(Feature::Media, node.range);
+        }
+    }
+
     pub fn report_when(&mut self, feature: Feature, range: Option<Range>, when: Option<When>) {
         let (class, reason) = self.target.rule(feature).outcome(when);
         self.changes.push(Change { class, feature, reason, field: self.field, range, truncated: None, slot: None });

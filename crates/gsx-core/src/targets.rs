@@ -61,6 +61,7 @@ const DEFAULT: Rules = Rules {
         conditions: &[
             Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
             Condition { when: When::Overflow, class: Omitted, reason: "media_alt_omitted" },
+            Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
         ],
     },
 };

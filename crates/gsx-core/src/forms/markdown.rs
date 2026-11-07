@@ -20,7 +20,7 @@ fn blocks_at(context: &mut Context, nodes: &[Node], depth: u32) {
             break;
         }
         if media(node) {
-            context.report(Feature::Media, node.range);
+            context.report_media(node);
             continue;
         }
         if !first {

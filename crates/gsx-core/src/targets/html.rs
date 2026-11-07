@@ -22,7 +22,12 @@ const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlFor
 
 const HEADING: Rule = rule(Feature::Heading, TextualFallback, "heading_as_bold");
 const CODE_INFO: Rule = rule(Feature::CodeBlock, Omitted, "code_block_info_omitted");
-const MEDIA: Rule = rule(Feature::Media, Approximated, "media_attached");
+const MEDIA: Rule = Rule {
+    feature: Feature::Media,
+    class: Approximated,
+    reason: "media_attached",
+    conditions: &[Condition { when: When::Missing, class: Omitted, reason: "media_missing" }],
+};
 const LINK_TITLE: Rule = rule(Feature::LinkTitle, Approximated, "link_title_unsupported");
 const INVISIBLE: Condition = Condition { when: When::LabelInvisible, class: Omitted, reason: "link_label_invisible" };
 const TEXTUAL: [Rule; 6] = [
