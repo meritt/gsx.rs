@@ -47,10 +47,60 @@ pub struct Point {
     pub offset: u32,
 }
 
+const BLOCK: usize = 64;
+
+#[derive(Clone, Debug)]
+struct Units {
+    base: Vec<u32>,
+    offsets: Vec<u8>,
+    total: u32,
+}
+
+impl Units {
+    fn new(text: &str, collapsed: &[u32]) -> Self {
+        let mut base = Vec::with_capacity(text.len().div_ceil(BLOCK));
+        let mut offsets = Vec::with_capacity(text.len());
+        let mut collapsed = collapsed.iter().map(|&at| at as usize).peekable();
+        let (mut unit, mut width) = (0, 0);
+        for (block, bytes) in text.as_bytes().chunks(BLOCK).enumerate() {
+            let mut first = 0;
+            offsets.extend(bytes.iter().enumerate().map(|(offset, &byte)| {
+                let start = byte & 0xC0 != 0x80;
+                let ends = u32::from(collapsed.next_if_eq(&(block * BLOCK + offset)).is_some());
+                unit += if start { width } else { 0 };
+                width = if start { 1 + u32::from(byte >= 0xF0) + ends } else { width };
+                if offset == 0 {
+                    first = unit;
+                }
+                (unit - first) as u8
+            }));
+            base.push(first);
+        }
+        Units { base, offsets, total: unit + width }
+    }
+
+    fn at(&self, byte: usize) -> u32 {
+        self.offsets.get(byte).map_or(self.total, |&offset| self.base[byte / BLOCK] + u32::from(offset))
+    }
+
+    fn byte(&self, utf16: u32) -> usize {
+        let Some(block) = self.base.partition_point(|&unit| unit < utf16).checked_sub(1) else {
+            return 0;
+        };
+        let start = block * BLOCK;
+        let offsets = &self.offsets[start..self.offsets.len().min(start + BLOCK)];
+        let within = offsets.partition_point(|&offset| self.base[block] + u32::from(offset) < utf16);
+        if start + within < self.offsets.len() {
+            return start + within;
+        }
+        self.offsets.len() + usize::from(self.total < utf16)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct LineIndex {
     line_starts: Vec<u32>,
-    utf16: Option<Vec<u32>>,
+    utf16: Option<Units>,
     collapsed: Vec<u32>,
     len: u32,
 }
@@ -63,36 +113,22 @@ impl LineIndex {
                 collapsed.push((at - collapsed.len()) as u32);
             }
         }
-        let utf16 = (!text.is_ascii() || !collapsed.is_empty()).then(|| {
-            let mut table = vec![0; text.len() + 1];
-            let mut unit = 0;
-            let mut next = collapsed.iter().peekable();
-            for (index, char) in text.char_indices() {
-                table[index..index + char.len_utf8()].fill(unit);
-                unit += char.len_utf16() as u32;
-                if next.peek().is_some_and(|&&at| at as usize == index) {
-                    next.next();
-                    unit += 1;
-                }
-            }
-            table[text.len()] = unit;
-            table
-        });
+        let utf16 = (!text.is_ascii() || !collapsed.is_empty()).then(|| Units::new(text, &collapsed));
         let mut index = LineIndex { line_starts: vec![0], utf16, collapsed, len: 0 };
         index.len = index.utf16(text.len());
         index.line_starts.extend(text.match_indices('\n').map(|(at, _)| match &index.utf16 {
-            Some(table) => table[at + 1],
+            Some(units) => units.at(at + 1),
             None => (at + 1) as u32,
         }));
         index
     }
 
     pub fn utf16(&self, byte: usize) -> u32 {
-        self.utf16.as_ref().map_or(byte as u32, |table| table[byte])
+        self.utf16.as_ref().map_or(byte as u32, |units| units.at(byte))
     }
 
     pub fn byte(&self, utf16: u32) -> usize {
-        self.utf16.as_ref().map_or(utf16 as usize, |table| table.partition_point(|&unit| unit < utf16))
+        self.utf16.as_ref().map_or(utf16 as usize, |units| units.byte(utf16))
     }
 
     pub fn input_byte(&self, byte: usize) -> usize {
