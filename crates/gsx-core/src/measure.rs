@@ -6,6 +6,7 @@ mod tables;
 
 use std::ops::Range;
 
+pub(crate) use grapheme::Segmenter;
 pub use grapheme::{Clusters, clusters};
 pub use rules::{Condition, Context, Field, Limit, Maximum, Measurement, MediaKind, Placement, Rendering};
 pub(crate) use rules::{given, limit, resolved, unlimited};

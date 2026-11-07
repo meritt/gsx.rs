@@ -66,7 +66,7 @@ Generated ellipsis, cut position and the gap before a block are node fields. A t
 
 ## Fitting
 
-- One outline per document: grapheme segments over inline flows; cuts snap back out of URLs, mentions, hashtags and emails.
+- One outline per document: grapheme segments over inline flows; cuts snap back out of URLs, mentions, hashtags and emails. It is built on demand in chunks of at least 512 bytes that end after whitespace, which none of those entities, nor a token the lower bound skips, spans.
 - Per field, a lower bound from the retained segments, then a monotone search: a gallop from the point the overflow ratio predicts (upper bound × maximum / measured value), a binary search, and a rescan of up to 64 units.
 - A later cut measures less than an earlier one only when the earlier cut sits inside an inline container (link, datetime, styled span render differently when cut) or keeps a partial word (ellipsis back-off depends on closing punctuation; X and Mastodon weigh completed URLs and mentions differently). Above such cuts lengths only grow, so the rescan stops at the first clean cut above the boundary and scans the whole window only when that cut fits.
 - Every target uses the monotone search: O(log n) renders of the document plus at most 64 rescan probes. `tests/fit.rs` checks it against exhaustive search for every target on the corpus and generated inputs.
