@@ -263,7 +263,7 @@ export interface Projection {
   media: string[];
   /** Present for targets of the `blocks/1` form only. */
   blocks?: Block[];
-  /** Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items. */
+  /** Outside the `blocks/1` form, media items with published alt and spoiler state; omitted when empty. */
   items?: Attachment[];
   /** With `overflow: 'thread'`, when the body did not fit: every post of the thread in order; the top level repeats the first. */
   parts?: Part[];

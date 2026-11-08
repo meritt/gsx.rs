@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/meritt/gsx.rs/schema/gsx-1.schema.json",
   "title": "gsx/1 wire result",
-  "description": "Wire format of gsx-core::wire: a parse result, a serialize result (the canonical gsx/1 source), a projection result or the target listing. Document offsets are UTF-16 code units of the normalized input; a range is [start, end).",
+  "description": "Wire format of gsx_core::wire: a parse result, serialized gsx/1 source, a projection result or the target listing. Document offsets are UTF-16 code units of the original input; a range is [start, end).",
   "oneOf": [
     {
       "type": "object",
@@ -53,12 +53,12 @@
         "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
         "media": { "type": "array", "items": { "type": "string" } },
         "blocks": {
-          "description": "Present for targets of the blocks/1 form only: text and media laid out in order.",
+          "description": "Present for targets of the blocks/1 form only: text, media and separators in order.",
           "type": "array",
           "items": { "$ref": "#/$defs/block" }
         },
         "items": {
-          "description": "Outside the blocks/1 form, one per media fact item with its fitted alt; absent without items.",
+          "description": "Outside the blocks/1 form, media items with their published alt and spoiler state; omitted when empty.",
           "type": "array",
           "items": { "$ref": "#/$defs/attachment" }
         },
