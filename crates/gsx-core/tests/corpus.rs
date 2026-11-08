@@ -41,6 +41,10 @@ fn facts<'a>(json: &'a Json, items: &'a [MediaFact<'a>]) -> Facts<'a> {
         let unknown: Vec<_> = object.keys().filter(|key| !KNOWN_FACTS.contains(&key.as_str())).collect();
         assert!(unknown.is_empty(), "facts not read by the corpus test: {unknown:?}");
     }
+    let limit = |key: &str| match json.get(key) {
+        Json::Number(limit) => Some(*limit as u32),
+        _ => None,
+    };
     Facts {
         media: match json.get("media").str() {
             None => None,
@@ -50,15 +54,12 @@ fn facts<'a>(json: &'a Json, items: &'a [MediaFact<'a>]) -> Facts<'a> {
             Some("audio") => Some(MediaKind::Audio),
             Some(other) => panic!("no media kind {other}"),
         },
-        caption_limit: match json.get("captionLimit") {
-            Json::Number(limit) => Some(*limit as u32),
-            _ => None,
-        },
+        caption_limit: limit("captionLimit"),
         entities_allowed: json.get("entitiesAllowed") == &Json::Bool(true),
-        description_limit: match json.get("descriptionLimit") {
-            Json::Number(limit) => Some(*limit as u32),
-            _ => None,
-        },
+        description_limit: limit("descriptionLimit"),
+        max_characters: limit("maxCharacters"),
+        characters_reserved_per_url: limit("charactersReservedPerUrl"),
+        title: json.get("title").str(),
         target_url: json.get("targetUrl").str(),
         media_count: match json.get("mediaCount") {
             Json::Number(count) => *count as usize,
@@ -72,12 +73,22 @@ fn facts<'a>(json: &'a Json, items: &'a [MediaFact<'a>]) -> Facts<'a> {
             Some(other) => panic!("no placement {other}"),
         },
         items: matches!(json.get("items"), Json::Array(_)).then_some(items),
-        ..Facts::default()
     }
 }
 
-const KNOWN_FACTS: &[&str] =
-    &["media", "mediaCount", "placement", "captionLimit", "descriptionLimit", "entitiesAllowed", "targetUrl", "items"];
+const KNOWN_FACTS: &[&str] = &[
+    "media",
+    "mediaCount",
+    "placement",
+    "captionLimit",
+    "descriptionLimit",
+    "maxCharacters",
+    "charactersReservedPerUrl",
+    "title",
+    "entitiesAllowed",
+    "targetUrl",
+    "items",
+];
 
 fn check(failures: &mut Vec<String>, label: &str, expected: &Json, actual: &str) {
     if let Some(found) = difference("", expected, &Json::parse(actual)) {
