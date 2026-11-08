@@ -26,7 +26,7 @@ pub use layout::{CELL, ELLIPSIS, RULE, Writer, marker, single_line};
 pub use links::href;
 pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
-    BlocksForm, Condition, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm, LineStart,
+    BlocksForm, Condition, DATE_LABEL, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm, LineStart,
     MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Structure, Style, Target, Truncation,
     When,
 };
@@ -148,14 +148,29 @@ impl<'a> Context<'a> {
         self.open_form().and_then(|form| form.heading)
     }
 
-    pub fn styled(&mut self, style: Style, feature: Feature, node: &Node, draw: impl FnOnce(&mut Self)) {
+    pub fn styled(
+        &mut self,
+        style: Style,
+        value: Option<String>,
+        feature: Feature,
+        node: &Node,
+        draw: impl FnOnce(&mut Self),
+    ) {
         let mark = self.writer.mark();
         self.open.push(style);
         draw(self);
         self.open.pop();
         if !self.open.contains(&style) {
-            self.writer.style(style, None, mark, Some((feature, node.range)));
+            self.writer.style(style, value, mark, Some((feature, node.range)));
         }
+    }
+
+    pub fn inside(&self, style: Style) -> bool {
+        self.open.contains(&style)
+    }
+
+    pub fn nested(&self) -> bool {
+        !self.open.is_empty() || self.link_depth > 0
     }
 
     pub fn within_link(&mut self, draw: impl FnOnce(&mut Self)) {

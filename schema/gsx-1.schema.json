@@ -151,12 +151,29 @@
     "entity": {
       "type": "object",
       "properties": {
-        "style": { "enum": ["bold", "italic", "underline", "strikethrough", "spoiler", "code", "link", "tag"] },
+        "style": {
+          "enum": [
+            "bold",
+            "italic",
+            "underline",
+            "strikethrough",
+            "spoiler",
+            "code",
+            "link",
+            "tag",
+            "pre",
+            "blockquote",
+            "date"
+          ]
+        },
         "range": {
           "description": "Range in the field text, in the target's offsets unit (see the target listing).",
           "$ref": "#/$defs/range"
         },
-        "value": { "$ref": "#/$defs/nullableString" }
+        "value": {
+          "description": "The URL of a link, the tag of a tag, the language of a pre, the UNIX time of a date in decimal; null otherwise.",
+          "$ref": "#/$defs/nullableString"
+        }
       },
       "required": ["style", "range", "value"],
       "additionalProperties": false

@@ -109,6 +109,9 @@ static TELEGRAM_FORM: EntityForm = EntityForm {
         (Feature::Spoiler, Style::Spoiler),
         (Feature::InlineCode, Style::Code),
         (Feature::Link, Style::Link),
+        (Feature::CodeBlock, Style::Pre),
+        (Feature::Blockquote, Style::Blockquote),
+        (Feature::Datetime, Style::Date),
     ],
     heading: Some(Style::Bold),
     gated: true,
@@ -135,7 +138,22 @@ pub static TELEGRAM: Target = entities(
             reason: "heading_as_text",
             conditions: &[CAPPED]
         },
-        code_block: rule(Feature::CodeBlock, Unwrapped, "code_block_unwrapped"),
+        blockquote: Rule {
+            feature: Feature::Blockquote,
+            class: TextualFallback,
+            reason: "blockquote_as_text",
+            conditions: &[
+                CAPPED,
+                Condition { when: When::Nested, class: Unwrapped, reason: "blockquote_cannot_nest" },
+                Condition { when: When::Code, class: Unwrapped, reason: "code_block_cannot_be_quoted" },
+            ],
+        },
+        code_block: Rule {
+            feature: Feature::CodeBlock,
+            class: Unwrapped,
+            reason: "entities_unavailable",
+            conditions: &[CAPPED, Condition { when: When::Info, class: Omitted, reason: "code_block_info_omitted" }],
+        },
         emphasis: gated(Feature::Emphasis),
         strong: gated(Feature::Strong),
         strikethrough: gated(Feature::Strikethrough),
@@ -152,7 +170,17 @@ pub static TELEGRAM: Target = entities(
             ],
         },
         link_title: rule(Feature::LinkTitle, Approximated, "link_title_unsupported"),
-        datetime: rule(Feature::Datetime, Unwrapped, "datetime_unwrapped"),
+        datetime: Rule {
+            feature: Feature::Datetime,
+            class: Unwrapped,
+            reason: "entities_unavailable",
+            conditions: &[
+                CAPPED,
+                Condition { when: When::Nested, class: Unwrapped, reason: "entity_cannot_contain_entity" },
+                Condition { when: When::Overflow, class: Unwrapped, reason: "datetime_label_too_long" },
+                Condition { when: When::Refused, class: Unwrapped, reason: "datetime_out_of_range" },
+            ],
+        },
         ..DEFAULT
     }),
     &TELEGRAM_FORM,

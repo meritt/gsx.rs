@@ -79,18 +79,41 @@ fn trim(text: &mut String, styled: &mut Vec<Styled>) {
     });
 }
 
+fn code(style: Style) -> bool {
+    matches!(style, Style::Code | Style::Pre)
+}
+
+fn tighten(text: &str, styled: &mut Vec<Styled>) {
+    styled.retain_mut(|entity| {
+        let Span { start, end } = entity.span;
+        let end = start + text[start..end].trim_end_matches(blank).len();
+        let start = match entity.style {
+            Style::Blockquote => end - text[start..end].trim_start_matches(blank).len(),
+            _ => start,
+        };
+        entity.span = start..end;
+        start < end
+    });
+}
+
 pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
     let suffix = written.suffix.as_ref().filter(|_| !form.styled_suffix).map(|suffix| suffix.start);
+    let spans = |style: fn(Style) -> bool| {
+        written.styled.iter().filter(move |entity| style(entity.style)).map(|entity| entity.span.clone())
+    };
     let mut breaks = written.prefixes.clone();
     if form.code_splits {
-        breaks.extend(
-            written.styled.iter().filter(|entity| entity.style == Style::Code).map(|entity| entity.span.clone()),
-        );
+        breaks.extend(spans(code));
         breaks.sort_by_key(|span| span.start);
     }
+    let pre: Vec<Span<usize>> = spans(|style| style == Style::Pre).collect();
     let mut styled = vec![];
     for entity in &written.styled {
-        let breaks = if entity.style == Style::Code { &written.prefixes } else { &breaks };
+        let breaks = match entity.style {
+            Style::Code | Style::Pre => &written.prefixes,
+            Style::Blockquote => &pre,
+            _ => &breaks,
+        };
         pieces(entity, breaks, suffix, &mut styled);
     }
     match form.detection {
@@ -99,6 +122,7 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
     }
     if form.trim {
         trim(&mut written.text, &mut styled);
+        tighten(&written.text, &mut styled);
     }
     styled.sort_by_key(|entity| (entity.span.start, std::cmp::Reverse(entity.span.end)));
     let mut capped = vec![];

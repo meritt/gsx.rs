@@ -147,7 +147,18 @@ export interface MediaFact {
 
 export type FieldName = 'text' | 'title' | 'description' | 'alt';
 
-export type Style = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'spoiler' | 'code' | 'link' | 'tag';
+export type Style =
+  | 'bold'
+  | 'italic'
+  | 'underline'
+  | 'strikethrough'
+  | 'spoiler'
+  | 'code'
+  | 'link'
+  | 'tag'
+  | 'pre'
+  | 'blockquote'
+  | 'date';
 
 export type Unit =
   | 'graphemes'

@@ -52,6 +52,14 @@ Native output is not reported. A change has `feature`, `reason`, `field` and the
 
 All forms share block layout: one list-marker set, continuation lines indented by the marker width, a quote prefix on every line including blank ones, one table cell separator. A target overrides a rule only where the platform renders differently. In `entities` targets a range nested in a range of the same style is dropped.
 
+`telegram-entities` follows the MTProto entity rules ([entities](https://core.telegram.org/api/entities)) and, where they are silent, the choices of `telegram-html`:
+
+- A code block is a `pre` range whose value is the language; the rest of the info string is dropped (`omitted` `code_block_info_omitted`). Its lines carry no list indentation, and no other range spans it: `pre` cannot be nested.
+- A blockquote is a `blockquote` range without the `> ` prefix. It holds the list markers inside it, not those of a list around it. A quote inside a quote adds no range (`unwrapped` `blockquote_cannot_nest`); a code block inside a quote splits the range around it (`unwrapped` `code_block_cannot_be_quoted`).
+- A datetime is a `date` range whose value is the UNIX time in decimal. Its label stays plain text (`unwrapped`) when the date sits inside another range or holds a link, code or another date (`entity_cannot_contain_entity`), when the label exceeds 127 UTF-16 units (`datetime_label_too_long`), or when the time is negative or past 2³¹ − 1, the bounds of the MTProto `int` (`datetime_out_of_range`). MTProto also refuses a date later than 1098 days from now; a projection has no clock, so the platform reports that one.
+- A range ends before trailing whitespace, and a blockquote also starts after leading whitespace: MTProto excludes trailing whitespace from an entity.
+- Without the `entitiesAllowed` fact every range falls back as the other ranges do (`unwrapped` `entities_unavailable`), and a blockquote keeps its prefix (`textual_fallback` `blockquote_as_text`).
+
 The LinkedIn reserved set is escaped with a backslash except `#` at the start or after whitespace and before a letter, digit or `_`: Little Text Format reads that as a hashtag, which the author wrote.
 
 A heading is rendered as bold text wherever the form has bold (the `b` tag, the strong delimiter, the bold entity), and as plain text elsewhere. This holds on every target, including the platforms with native headings (Telegram rich messages, MAX, Discord, Slack `markdown`); native heading constructs are never emitted.

@@ -30,6 +30,7 @@ pub enum When {
     Truncated,
     Refused,
     Thread,
+    Code,
 }
 
 impl When {
@@ -55,6 +56,7 @@ impl When {
             When::Truncated => "truncated",
             When::Refused => "refused",
             When::Thread => "thread",
+            When::Code => "code",
         }
     }
 }
@@ -150,7 +152,12 @@ pub enum Style {
     Code,
     Link,
     Tag,
+    Pre,
+    Blockquote,
+    Date,
 }
+
+pub const DATE_LABEL: usize = 127;
 
 impl Style {
     pub const fn name(self) -> &'static str {
@@ -163,6 +170,9 @@ impl Style {
             Style::Code => "code",
             Style::Link => "link",
             Style::Tag => "tag",
+            Style::Pre => "pre",
+            Style::Blockquote => "blockquote",
+            Style::Date => "date",
         }
     }
 }
