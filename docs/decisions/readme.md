@@ -1,10 +1,12 @@
-# Decisions
+# Contracts
 
-| File | Scope |
+Current `gsx/1` contracts and design rationale, implemented by `gsx-core` and shared by every binding.
+
+| Reference | Scope |
 | --- | --- |
-| [parser.md](parser.md) | Why an own parser derived from markdown-rs |
-| [conformance.md](conformance.md) | Spec and micromark resolutions, `gsx/1` rules, limits |
-| [serialize.md](serialize.md) | Canonical `gsx/1`, guarantees, escaping |
-| [projection.md](projection.md) | Projection contract, changes, target table, forms, fitting |
-| [measure.md](measure.md) | Length units and per-target field limits |
-| [bindings.md](bindings.md) | Binding boundary, C ABI, wire format |
+| [Parser ownership](parser.md) | Grammar ownership, event stream and complexity boundaries |
+| [Conformance](conformance.md) | Syntax, diagnostics and input limits |
+| [Serialization](serialize.md) | Canonical form and round-trip behavior |
+| [Projection](projection.md) | Facts, fields, changes, media and threads |
+| [Measurement](measure.md) | Counting units, field limits and limit policy |
+| [Bindings](bindings.md) | Package API, wire format, offsets and C ownership |

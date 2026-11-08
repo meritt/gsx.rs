@@ -1,52 +1,51 @@
-# Serialize
+# Serialization
 
-`serialize` writes a document back to `gsx/1`: the formatter for editors and AI skills.
+The serializer writes a parsed document as `gsx/1`, preserving its structure and literal provenance. Implementation: [serialize.rs](../../crates/gsx-core/src/serialize.rs).
 
-## API
+## Contract
 
-- `serialize::canonical(&Document) -> Option<String>`: the canonical form, or `None` when it does not reparse to the same document.
-- `serialize::serialize(&Document) -> String`: the canonical form; otherwise the canonical form of the document reparsed from its normalized text; otherwise that text.
+| Rust API | Result |
+| --- | --- |
+| `serialize::canonical(&Document) -> Option<String>` | Canonical text only if reparsing preserves the document; otherwise `None` |
+| `serialize::serialize(&Document) -> String` | Canonical text, then a canonical attempt from normalized source, then normalized source itself |
 
-Same document means structural equality: kind, provenance and block gap per node, recursively. Ranges are ignored, and adjacent authored text nodes are merged first, because tokenization may split one text.
+Structural equality compares node kind, provenance, block gap and children. It ignores ranges and merges adjacent authored text nodes. Reparse with the same media declarations. Serialization is idempotent; [serializer tests](../../crates/gsx-core/tests/serialize.rs) cover corpus round trips, generated inputs and source fallback.
 
-## Guarantees
+For a parsed document `d`, `parse(serialize(d))` preserves that structure and `serialize(parse(serialize(d))) == serialize(d)`. Canonicalization is linear: it reparses each paragraph or heading once and the complete output once; the public serializer makes at most two canonical attempts. Source fallback preserves content when canonical rewriting cannot preserve the tree.
 
-- For every accepted document `d`, `parse(serialize(d))` equals `d` and `serialize(parse(serialize(d))) == serialize(d)`.
-- Every accepted corpus document and every bench typical and long case takes the canonical path.
-- Linear time: a canonical attempt reparses each paragraph and heading once and the whole output once; `serialize` makes at most two attempts.
+```text
+#  Release             -> # Release
+__gsx__ ships.         -> **gsx** ships.
+3) first               -> 3. first
+```
 
-## Canonical choices
+## Canonical form
 
 | Construct | Form |
 | --- | --- |
-| Emphasis, strong | `*a*`, `**a**`; `_`, `__` where `*` would merge with an adjacent run, close an open ancestor or fail to flank |
-| Bullet list | `-`; `*` right after another bullet list |
-| Ordered list | `n.` from the list start; `n)` right after another ordered list |
-| Task item | `- [ ] `, `- [x] ` |
-| Heading | ATX; setext only when the content spans lines at depth 1 or 2 |
-| Thematic break | `---`; `___` right after a paragraph or first in a list item |
-| Code block | fenced with backticks one longer than the longest run in the value, at least three; tildes when the info string holds a backtick |
-| Inline code | backticks one longer than the longest run; space padding only when needed |
-| Table | `\| a \| b \|` rows; delimiter `---`, `:---`, `---:`, `:---:` |
-| Hard break | backslash before the line ending |
-| Link | `[text](dest "title")`; `<dest>` when the destination needs brackets; `<url>` when the text equals the destination |
-| Time | `:time[label]{datetime="…"}`, `:time[label]{unix="…"}` |
-| Media | `::media{id="…"}`, `::media{ids="…" layout="collage\|slideshow"}` |
-| Gaps | the blank lines the block gap records |
+| Emphasis, strong | `*text*`, `**text**`; underscores where stars would merge, close an ancestor or fail to flank |
+| Lists | `-` and `n.` from the list start; alternate with `*` and `n)` to keep adjacent lists separate |
+| Task items | `- [ ] ` and `- [x] ` |
+| Headings | ATX; setext for multiline content at levels 1 and 2 |
+| Thematic breaks | `---`; `___` after a paragraph or first in a list item |
+| Code blocks | Backtick fences one longer than the longest run in the value, at least three; tildes if the info string contains a backtick |
+| Inline code | Backticks one longer than the longest run, with padding only when required |
+| Tables | Padded cells; `---`, `:---`, `---:` or `:---:` alignment delimiters |
+| Hard breaks | Backslash before LF |
+| Links | `[text](dest "title")`, with `<dest>` where a bare destination is unsafe; `<url>` when the authored label matches the source destination and no title is present |
+| Directives | Quoted attributes for time and media |
+| Block gaps | Preserve `gapBefore` |
 
-## Escaping
+## Escaping and source preservation
 
-Authored characters are escaped as numeric character references (`&#42;`), never with a backslash: a backslash escape parses as a literal node and would change provenance. A character is escaped only where it could start syntax:
+Authored text uses numeric character references such as `&#42;` where characters would become syntax. Backslash escapes would change provenance. Escape contexts are:
 
-- always: `` ` `` `*` `[` `]` `<` `~` `|` `$` and U+FEFF;
-- `\` unless followed by an alphanumeric or a space; `_` unless between alphanumerics; `&` before `#` or an alphanumeric;
-- `+` and `=` when doubled or at a line start; `#` `>` `-` at a line start; `.` or `)` after one to nine digits at a line start;
-- `:` before an ASCII alphanumeric, a non-ASCII character or `/`; `@` after an email local-part character; `.` after `www`, so no GFM autolink literal swallows a following reference;
-- leading and trailing spaces and tabs of a line, and line endings that would not be soft breaks;
-- an alphanumeric next to an emphasis delimiter when no delimiter can flank otherwise.
+- Always: backtick, `*`, `[`, `]`, `<`, `~`, `|`, `$` and U+FEFF.
+- `\` unless followed by an alphanumeric or a space; `_` unless between alphanumerics; `&` before `#` or an ASCII alphanumeric.
+- `+` and `=` when doubled or at a line start; `#`, `>` and `-` at a line start; `.` or `)` after one to nine initial ASCII digits.
+- `:` before an ASCII alphanumeric, a non-ASCII character or `/`; `@` after an ASCII alphanumeric, `.`, `+`, `-` or `_`; `.` after case-insensitive `www`. These prevent autolinks from consuming a following character reference.
+- Leading and trailing spaces or tabs, line endings that cannot remain soft breaks, and an alphanumeric next to emphasis when no delimiter can flank otherwise.
 
-## Literals
+Literal nodes retain source spelling with normalized line endings and container prefixes, including lazy continuation lines. A literal at the start of a paragraph continuation receives four spaces to prevent block interpretation. A task paragraph opening with a hard break retains its checkbox separator exactly once. Paragraphs and headings whose canonical inline form changes the tree retain their source spelling too.
 
-Literal nodes are written byte for byte from their source range, line endings normalized. Continuation lines keep their container prefixes, lazy lines included. A literal that begins a paragraph continuation line is indented four spaces so it cannot start a block. A task item paragraph that opens with a hard break starts at the checkbox separator, which is not written twice.
-
-A paragraph or heading whose canonical inline form does not reparse to the same inline tree is written from its source too. On random `gsx/1` fragment soup the document-level fallback takes 0.5% of multi-line and 0.01% of single-line documents.
+Every accepted corpus document and the typical and long benchmark cases must take the canonical path; the serializer tests enforce this independently of the general source fallback.

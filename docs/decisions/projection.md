@@ -1,117 +1,144 @@
 # Projection
 
-## Contract
+`project(document, target, facts) -> Projection` is pure. Target rules and explicit facts determine rendering, field limits, media handling and overflow. The caller validates document diagnostics and refuses publication when a change has class `blocked`.
 
-`project(document, target, facts) -> Projection` is pure. Every input that changes the output is a declared fact: media, the placement (post, reel or story), instance and account limits (Mastodon characters and description, X long posts), the channel-story caption limit, the Instagram hashtag limit, a content warning counted with the text, whether entities are allowed, an appended target URL, an explicit title. No ambient context reaches a projection.
+## Facts
 
-| Field | Content |
+[`Facts`](../../packages/npm/src/gsx.d.ts) describes placement, media, account limits, titles, target URLs and overflow. Names below use the wire and JavaScript spelling; Rust and Python use snake_case.
+
+| Facts | Purpose |
 | --- | --- |
-| `fields` | named text outputs (`text`, `title`, `description`, `alt`), each with its links or entities |
-| `blocks` | `blocks` targets only: ordered text, media and separator blocks; text blocks are rendered by the platform's `markdown` target |
-| `measurements` | one per limited field: unit, value, maximum; per-block limits carry the block index |
-| `changes` | every change, ordered by source position, uncapped |
-| `media` | selected items, covers, per-item changes |
-| `items` | targets outside `blocks`, when facts list media items: one `{reference, alt, spoiler}` per item in fact order, with the alt as published (fitted, or on `telegram-html-rich` cut or dropped with its figcaption by the text budget); a per-item measurement carries `item`, the index here, and no `block` |
+| `media`, `mediaCount`, `placement` | Select rules for the publication context |
+| `maxCharacters`, `charactersReservedPerUrl`, `captionLimit`, `descriptionLimit`, `hashtagLimit` | Supply target-specific limits |
+| `title`, `targetUrl`, `spoilerText` | Supply a title, appended URL or Mastodon content warning |
+| `entitiesAllowed` | Enable Telegram story entities; false by default |
+| `items` | Selected media with ID, format, alt, spoiler and inline availability |
+| `overflow` | `truncate` by default; `thread` on supporting targets |
 
-Alt is fitted per item on every target that declares an `alt` limit for the item's kind: the longest grapheme prefix with an ellipsis that fits (`media_alt_truncated`); when not even the ellipsis fits, the alt is dropped (`omitted` `media_alt_omitted`). The Mastodon limit is the instance `descriptionLimit` fact; without it alt is measured and not fitted. On `telegram-html-rich` the alt is a figcaption inside the text budget, read in visual order with one cut point: when the body is cut, a figcaption placed before the cut is kept whole and the body is cut earlier to make room for it, provided the text before its figure, the captions kept before it and the whole caption fit the limit together; any other figcaption, before or after the cut, and all of them when the body is not cut, share what the body leaves, in order.
+Facts affect only targets that declare the corresponding behavior. Supply media context explicitly; `items` does not infer `media` or `mediaCount`. Discover capabilities through `targets()`:
 
-Media appear as references (`media:<id>`); the caller resolves URLs and builds the request.
+```js
+const target = gsx.targets().find(({ name }) => name === 'bluesky-entities');
 
-A directive id absent from a given `items` fact is a medium the caller dropped (a gateway rejection, a size or variant filter); an empty list drops every medium. `telegram-html-rich` and `blocks` targets remove that id from its directive, and the directive itself when no id is left, with one `omitted` `media_missing` change per directive; the surrounding text closes up as if the directive were absent, with no empty section at an edge and one separator between its neighbours. A group left with one item is placed as a single item and reports no split. Other targets attach media rather than place them, so a directive reports its change wherever the text is cut: a directive with an absent id reports one `omitted` `media_missing`, and `media_attached` only when at least one of its ids is listed. Without an `items` fact, as in an analysis before media are selected, attaching targets treat every id as listed and report only `media_attached`; placing targets, which need each item's format, treat every id as absent. `media_inline_unavailable` stays blocking: it reports a listed item that is not `inline` or whose format the form cannot place.
+console.log(target.threads);
+console.log(target.codes);
+console.log(target.manifest);
+```
 
-A media item marked spoiler keeps the mark wherever the platform can hide it, and `items` carries it as `spoiler`, the state the item is published in. Each target declares how:
+## Output
 
-| Spoilers | Targets | Platform |
-| --- | --- | --- |
-| per item: image, GIF, video | `telegram-html`, `telegram-html-rich`, `x-plain` | Bot API `has_spoiler` (no audio or document); X media metadata `sensitive_media_warning` |
-| per item: every format | `discord-markdown` | attachment `is_spoiler` |
-| per post | `mastodon-plain`, `threads-entities` | `sensitive`, `is_spoiler_media`: one flag hides every medium of the post |
-| none | the other attaching targets | no media spoiler in the publishing API |
+| Property | Content |
+| --- | --- |
+| `fields` | Named text outputs, each with link ranges and entities |
+| `measurements` | Counts and maxima for applicable limits; item or block indices when needed |
+| `changes` | Transformations and blocking conditions, ordered by source position, uncapped |
+| `media` | IDs referenced by document directives; in a thread, those assigned to the part |
+| `blocks` | Block targets: text, media groups and separators in order |
+| `items` | Non-block targets: media references with published alt and spoiler state, in fact order; omitted from JSON when empty |
+| `parts` | Split thread, including the first part also represented at the top level; omitted when unsplit |
 
-An item whose mark the target cannot carry, by format, by target or because the placement is a story (no platform hides story media), loses it: `omitted` `media_spoiler_omitted` with the item index. On a per-post target one marked item hides them all, so every item is published hidden and each one not marked reports `approximated` `media_spoiler_widened`; hiding more is the safer side of a spoiler. Mastodon also hides the media of a post with a content warning, which the `spoilerText` fact does not mark here. `blocks` targets carry the mark per item in the block, as their form allows.
+Output ranges use the [binding coordinate systems](bindings.md#wire-format). Media references such as `media:photo` are resolved by the caller. In item measurements and changes, `item` indexes the output `items`; on block targets, `block` indexes `blocks` and `item` indexes that block's items.
 
-## Changes
+### Changes
 
 | Class | Meaning |
 | --- | --- |
-| `approximated` | same meaning through another native construct |
-| `textual_fallback` | the construct is rendered as visible text |
-| `unwrapped` | the construct is removed, its content kept |
-| `omitted` | the construct and its content are removed |
-| `blocked` | the projection cannot be published; carries a code |
+| `approximated` | Adapted representation, including fitting |
+| `textual_fallback` | Construct represented as visible text |
+| `unwrapped` | Formatting removed, content retained |
+| `omitted` | Construct or value removed |
+| `blocked` | Output cannot be published; `code` identifies the condition |
 
-Native output is not reported. A change has `feature`, `reason`, `field` and the source range; an alt or spoiler change (`media_alt_truncated`, `media_alt_omitted`, `media_spoiler_omitted`), one per affected item, also carries the item index, and on `blocks` targets the block index, as its alt measurement does, since items of one group share the group's range. Reasons are `<feature>_<outcome>`, one per cause, with no target prefix unless the cause is target-specific. An empty projection is one `blocked` change.
+A change includes feature, reason, field and an optional input range. Truncation includes its measurement details. Every non-native transformation is reported, including omitted code info and unsupported nesting; native rendering produces no change. Highlight removal is `unwrapped`, retaining its content. Rules, conditional outcomes, capabilities and manifests derive from the same [target tables](../architecture.md#targets).
 
-- No change is silent: a datetime label, a nested quote on a `markdown` target, a code info string and the MAX spoiler each yield one.
-- Highlight keeps its content: `unwrapped`, never `omitted`.
-- A link title is dropped on every target, since none shows it: `omitted` `link_title_omitted`.
-- Identical changes are reported once: in a `blocks` group every item shares the group's range, so two videos in a Slack slideshow give one `media_inline_unavailable`.
-- A change belongs to the field that produced it.
+Reasons identify the cause without a target prefix unless it is target-specific. Each change belongs to the field that produced it. Alt and spoiler changes are per affected item, even when items share a directive's range. Identical block-group changes without an item index are reported once: two unsupported videos in a Slack slideshow produce one `media_inline_unavailable`. [Target tests](../../crates/gsx-core/tests/targets.rs) check emitted feature/class/reason combinations against the declarations.
 
-## Target table
+## Fields and rendering
 
-`feature → { class, reason, conditions: [{ when, class, reason }] }`, plus form configuration, measure rules per field and facts. The renderer reads only the table and the configuration; the manifest, capabilities and digest derive from it. The digest hashes the table, the form version, the measure rules and the gsx version, never a hand-bumped revision: a renderer change that leaves the table alone still changes the digest at the next release. `tests/targets.rs` checks every emitted `(feature, class, reason)` against the table.
-
-## Forms
+Form configuration lives in [`project/table.rs`](../../crates/gsx-core/src/project/table.rs); renderers read it rather than maintaining separate target rules.
 
 | Form | Configuration |
 | --- | --- |
-| `plain` | escape (none, LinkedIn reserved set, HTML entities, angle substitution); link `label (href)`, label omitted when equal to `href` |
-| `entities` | offset unit (UTF-16, UTF-8); node → range kind; exclusive groups; code splits ranges; range cap with overflow class; empty-label policy |
-| `markdown` | delimiter map; escape set; provider-owned spans; line-start neutralisers; fence and info policy; native block set; datetime template; quote nesting |
-| `html` | tag map; native block set; newline form; nesting constraints; `href` schemes; empty-element removal |
-| `blocks` | text segments rendered by the platform's `markdown` target; media grouping; per-item alt limit; block ceiling |
+| `plain` | Escaping policy; links render as `label (href)`, or just `href` when equal |
+| `entities` | Offset unit, style mapping, heading style, availability gate, code splitting, detection, entity and link caps, whitespace trimming, styled suffixes |
+| `markdown` | Delimiters, native blocks, escapes, provider-owned spans, line-start neutralization, HTML escaping, datetime template, separators, quote depth, URL-label policy |
+| `html` | Block mode and structural limits, tags, exclusive styles, code and quote nesting, code info, empty elements, whitespace trimming |
+| `blocks` | Markdown text form, supported media formats, grouping and item limits, block ceiling, spoilers, separators |
 
-All forms share block layout: one list-marker set, continuation lines indented by the marker width, a quote prefix on every line including blank ones, one table cell separator. A target overrides a rule only where the platform renders differently. In `entities` targets a range nested in a range of the same style is dropped.
+- Headings become bold where supported and plain text elsewhere. Native heading constructs are not emitted. Link titles are omitted on every target.
+- Text layouts share list markers, continuation indentation by marker width, quote prefixes on every line including blank lines, and table separators. Targets override layout only where their rendering differs. Markdown and HTML forms escape authored text for their target grammar. Blocks render text through the platform's Markdown target.
+- LinkedIn preserves `#` at the start or after whitespace when followed by a letter, digit or `_`, while backslash-escaping other reserved characters. Discord renders URL-shaped link labels as a bare URL when destinations match, or `label (URL)` otherwise. Markdown inline code uses one more backtick than the longest run in its value.
+- YouTube titles use `title`, then a leading heading, then the first line. TikTok photo titles use the heading or first line and ignore `title`. An extracted heading leaves the body; a TikTok first line leaves only when it fits the title whole (`first_line_became_title`), otherwise the body retains it and the title gets its fitted prefix. VK video titles fit the whole body again; rendering changes belong to `text`, so `title` reports only truncation. Each field declares its own unit, maximum and ellipsis or hard-cut policy; fitting one never cuts another. Title extraction removes layout list markers and quote prefixes.
+- Threads appends `targetUrl` after a blank line or replaces a blank body, reporting `textual_fallback` `target_url_as_text`. It uses the serialized HTTP(S) URL from the [shared URL policy](conformance.md#syntax) and never cuts it. Fitting reserves the URL plus an ellipsis and blank line for a nonblank body. Refused URLs report `omitted` `target_url_refused`; URLs that cannot fit report `omitted` `target_url_omitted`. A replaced blank body retains media changes only.
+- Blank output contains only whitespace or default-ignorable Unicode characters. Required empty fields report a blocking change.
 
-`telegram-entities` follows the MTProto entity rules ([entities](https://core.telegram.org/api/entities)) and, where they are silent, the choices of `telegram-html`:
+### Entities and caps
 
-- A code block is a `pre` range whose value is the language; the rest of the info string is dropped (`omitted` `code_block_info_omitted`). Its lines carry no list indentation, and no other range spans it: `pre` cannot be nested.
-- A blockquote is a `blockquote` range without the `> ` prefix. It holds the list markers inside it, not those of a list around it. A quote inside a quote adds no range (`unwrapped` `blockquote_cannot_nest`); a code block inside a quote splits the range around it (`unwrapped` `code_block_cannot_be_quoted`).
-- A datetime is a `date` range whose value is the UNIX time in decimal. Its label stays plain text (`unwrapped`) when the date sits inside another range or holds a link, code or another date (`entity_cannot_contain_entity`), when the label exceeds 127 UTF-16 units (`datetime_label_too_long`), or when the time is negative or past 2³¹ − 1, the bounds of the MTProto `int` (`datetime_out_of_range`). MTProto also refuses a date later than 1098 days from now; a projection has no clock, so the platform reports that one.
-- A range ends before trailing whitespace, and a blockquote also starts after leading whitespace: MTProto excludes trailing whitespace from an entity.
-- Without the `entitiesAllowed` fact every range falls back as the other ranges do (`unwrapped` `entities_unavailable`), and a blockquote keeps its prefix (`textual_fallback` `blockquote_as_text`).
+Telegram supports `pre`, `blockquote` and `date` entities when enabled. Code blocks split surrounding entities; quotes cannot nest (`unwrapped` `blockquote_cannot_nest`), and code splits a quote (`unwrapped` `code_block_cannot_be_quoted`). A date's `value` is the decimal UNIX time. Its label remains text with an `unwrapped` change inside another entity or when containing a link, code or date (`entity_cannot_contain_entity`), above 127 UTF-16 units (`datetime_label_too_long`), or outside UNIX times 0 through 2³¹ − 1 (`datetime_out_of_range`). The projection has no clock and does not validate time-relative provider restrictions.
 
-The LinkedIn reserved set is escaped with a backslash except `#` at the start or after whitespace and before a letter, digit or `_`: Little Text Format reads that as a hashtag, which the author wrote.
+`pre` stores the language and omits the remaining code info string (`omitted` `code_block_info_omitted`); its lines carry no list indentation. Quote entities contain their own list markers without an enclosing quote prefix. Telegram ranges exclude trailing whitespace; quote ranges also exclude leading whitespace. Without `entitiesAllowed`, styles report `unwrapped` `entities_unavailable` and quotes retain their prefixes with `textual_fallback` `blockquote_as_text`. Repeated nesting of the same entity style produces one range.
 
-`bluesky-entities` finds facets in authored text as the atproto `RichText.detectFacets` does: links, tags, and mentions. A mention is `@` at the start, after whitespace or after `(`, followed by a handle of ASCII letters, digits, `.` and `-` up to a word boundary. A facet needs the account's DID, which only the network knows, so the `mention` range carries the handle and the caller resolves it, dropping the range when resolution fails, as `detectFacets` does. Where atproto keeps a candidate whose last label is a known TLD, gsx checks the handle syntax (labels of 1 to 63 characters without a leading or trailing `-`, at least two, the last starting with a letter, 253 characters in all) and leaves the rest to that resolution, which spares the TLD list.
+Bluesky detects link, tag and mention facets in authored text. A mention begins with `@` at the start, after whitespace or after `(` and ends at a word boundary. Handles use ASCII letters, digits, dots and hyphens: at least two labels of 1-63 characters, no leading or trailing hyphen, a final label starting with a letter, and at most 253 characters overall. A mention entity carries the handle; the caller resolves it to a DID and drops unresolved facets. Local syntax validation avoids maintaining a TLD registry; account existence remains a caller concern.
 
-On Discord, whose markdown has no rule:
+Instagram removes excess hashtag or mention sigils while retaining their words, with one `approximated` `hashtag_limit_exceeded` or `mention_limit_exceeded` change per cap. YouTube applies its hashtag cap to the description. Threads counts distinct URLs in rendering order and reserves a slot when the `targetUrl` fact is set; excess explicit destinations lose their links but retain labels (`unwrapped` `link_limit_exceeded`). Remaining excess detected URLs produce `blocked` `link_limit_exceeded`. These count limits appear in measurements but never drive the text cut; values are in [field limits](measure.md#field-limits).
 
-- A thematic break is `———`, the rule every text form writes (`textual_fallback` `thematic_break_as_text`). On `discord-blocks` a top-level break is a `separator` block, a Components V2 Separator, and no change; one after the cut is dropped.
-- Discord does not render a masked link whose label is a URL. A label equal to its URL becomes the bare URL (`approximated` `link_bare_url`); a URL label pointing elsewhere becomes `label (URL)` (`textual_fallback` `link_destination_as_text`).
+Discord Markdown renders a thematic break as `———` (`textual_fallback` `thematic_break_as_text`). On Discord blocks, a top-level break becomes a native separator; breaks after the cut are omitted. The Discord ceiling is 40 blocks, counting a gallery once regardless of its items. Slack allows 50 blocks and counts a slideshow as one plus its images. Exceeding a ceiling reports `blocked` `blocks_too_many`.
 
-`discord-blocks` allows 40 components per message, and each block is one: a gallery is one Media Gallery whatever its items. On `slack-blocks` a slideshow spends a block per image besides its own. Above the ceiling the projection is `blocked` `blocks_too_many`.
+## Media
 
-Inline code on `markdown` targets is fenced with one backtick more than the longest run in the code, as the serializer does.
+Parse-time media declarations validate directive IDs. Projection-time `items` selects what is available for publication:
 
-A heading is rendered as bold text wherever the form has bold (the `b` tag, the strong delimiter, the bold entity), and as plain text elsewhere. This holds on every target, including the platforms with native headings (Telegram rich messages, MAX, Discord, Slack `markdown`); native heading constructs are never emitted.
+```js
+const text = 'At the harbor.\n\n::media{id="photo"}';
+const media = [{ id: 'photo' }];
 
-## Fields
+const projection = gsx.project(text, 'discord-blocks', {
+  items: [{
+    id: 'photo',
+    format: 'image',
+    alt: 'A lighthouse above the harbor',
+    inline: true
+  }]
+}, media);
 
-A derived field (YouTube title, TikTok photo title, VK video name) declares its source (explicit fact, leading heading, first line; a first line without the list markers and quote prefixes of the layout), whether it leaves the body, its unit, maximum and truncation (ellipsis or hard). Every limited field is measured and fitted on its own; fitting one never cuts another. A first line that leaves the body (TikTok photo title) leaves it only when it fits the title whole, reported as `approximated` `first_line_became_title`; a longer one stays in the body, so nothing is lost, and the title carries its fitted prefix. The VK video name (field `title`, video only) is the whole body fitted again to its own limit; its rendering changes belong to `text`, so it reports only its truncation.
+console.log(projection.blocks);
+```
 
-A target URL (Threads reply or quote target) is appended to the body after a blank line, or replaces a blank body, and is never cut: the body is fitted with the URL counted, and the change is `textual_fallback` `target_url_as_text`. A replaced body reports no rendering changes, only its media. The URL takes the one WHATWG parse of [conformance](conformance.md) rule 6 and is appended serialized; a URL that parse refuses is not appended and the change is `omitted` `target_url_refused`. When the URL, after `…` and a blank line unless the body is blank, exceeds a limit, nothing is appended and the change is `omitted` `target_url_omitted`. Text is blank when it holds only White_Space and Default_Ignorable_Code_Point characters (NBSP, zero-width space, Hangul filler); `text_empty` and required fields use the same test. Targets without a `target_url` rule ignore the fact.
+| Selection | Attaching targets | Rich HTML and block targets |
+| --- | --- | --- |
+| No `items` fact | Treat directive IDs as available | Treat them as missing because formats are unknown |
+| Empty `items` | Drop all referenced media | Drop all referenced media |
+| Some IDs missing | Report `media_missing`; attach listed IDs | Remove missing IDs and empty directives; close surrounding gaps |
 
-Instagram counts hashtags (`#` after the start or whitespace, then letters, digits or `_`) and mentions (`@`, then ASCII letters, digits, `.` or `_`) in each rendered probe, before measuring. Beyond the 5th hashtag (or the `hashtagLimit` fact) or the 20th mention the sigil is removed and the word kept, with one `approximated` change per cap (`hashtag_limit_exceeded`, `mention_limit_exceeded`) carrying unit `hashtags` or `mentions`, the cap and the count. The caps are `text` limits in those units, so they are measured and never drive the cut. YouTube caps the description the same way at 60 hashtags, beyond which it ignores every hashtag of the video.
+A directive with missing IDs reports one `omitted` `media_missing`. Placing targets close the gap to one separator between neighboring blocks and leave no empty edge section; a group reduced to one item is placed singly without a split change. Attaching targets report `media_attached` only if at least one ID is available, even when the directive lies beyond the text cut. A listed item without `inline` or with an unsupported format reports blocking `media_inline_unavailable`. Unreferenced listed items remain available as attachments.
 
-Threads publishes at most 5 unique URLs. While rendering, link destinations count in order, a repeated URL once, with one slot kept for a target URL when the fact is set; a link with a label beyond the cap keeps its label and drops its destination (`unwrapped` `link_limit_exceeded`). The rendered text is then measured in unit `links`: the unique URLs the X detector finds, bare URLs and the target URL included. A measure above 5 cannot be fixed without dropping text, so the projection is `blocked` `link_limit_exceeded`; like the Instagram caps, `links` never drives the cut.
+Alt uses the longest grapheme prefix plus ellipsis that fits every applicable item limit (`approximated` `media_alt_truncated`). If the ellipsis cannot fit, alt is omitted (`omitted` `media_alt_omitted`). Published alt is returned in `items` or block items.
 
-Generated ellipsis, cut position and the gap before a block are node fields. A truncated literal stays literal: escaping and entity detection treat it as authored text.
+`telegram-html-rich` places alt in figcaptions that share the body budget. When the body is cut, a preceding caption is retained whole if the text before its figure, earlier retained captions and that caption fit together; the body cut moves earlier to reserve its space. All other captions use the remaining budget in visual order, including every caption when the body fits whole.
 
-## Fitting
+Spoiler behavior is part of each target's configuration. Telegram HTML and X carry image, GIF and video spoilers; Discord Markdown carries them for every media format. Mastodon and Threads widen a marked item to the whole post, reporting `media_spoiler_widened` on newly hidden items. Unsupported attachment marks, including those in story placement, report `media_spoiler_omitted`. Blocks carry their per-item state. `spoilerText` affects Mastodon measurement but does not set item spoiler flags.
 
-- One outline per document: grapheme segments over inline flows; cuts snap back out of URLs, mentions, hashtags and emails. It is built on demand in chunks of at least 512 bytes that end after whitespace, which none of those entities, nor a token the lower bound skips, spans.
-- Per field, a lower bound from the retained segments, then a monotone search: a gallop from the point the overflow ratio predicts (upper bound × maximum / measured value), a binary search, and a rescan of up to 64 units.
-- A later cut measures less than an earlier one only when the earlier cut sits inside an inline container (link, datetime, styled span render differently when cut) or keeps a partial word (ellipsis back-off depends on closing punctuation; X and Mastodon weigh completed URLs and mentions differently). Above such cuts lengths only grow, so the rescan stops at the first clean cut above the boundary and scans the whole window only when that cut fits.
-- Every target uses the monotone search: O(log n) renders of the document plus at most 64 rescan probes. `tests/fit.rs` checks it against exhaustive search for every target on the corpus and generated inputs.
+## Fitting and threads
 
-## Threads
+Truncation uses a grapheme outline and avoids cuts inside URLs, mentions, hashtags and emails. Each field is rendered and measured against every applicable length limit. Monotone search with bounded rescanning selects a fitting prefix; [fit.rs](../../crates/gsx-core/tests/fit.rs) compares the result with exhaustive search.
 
-The `overflow` fact chooses what a body that does not fit becomes: `truncate`, the default, fits it as above; `thread` splits it into a thread of posts on a target that publishes threads (`x-plain`, `bluesky-entities`, `threads-entities`, `mastodon-plain`). Other targets ignore the fact, and a thread is never implied.
+One outline is shared per document and built lazily in chunks of at least 512 bytes ending at whitespace; protected entities and tokens skipped by the lower bound cannot cross that boundary. Per field, a lower bound from retained segments and the estimate `upper bound × maximum / measured value` guide galloping and binary search. This takes O(log n) renders plus up to 64 rescan probes.
 
-- The body is rendered whole and split greedily: each part is the longest rest of it that fits every text limit and ends at a paragraph break, else at a sentence end, else after a word, else at a grapheme boundary. A cut never falls inside a link, a link facet or a URL; the whitespace at the cut is dropped. Parts carry no numbering.
-- Links, entities and measurements belong to the part that holds them; a styled range across a cut is split in two.
-- A media directive goes with the part that holds its position; listed items no directive references go with the first part. A target URL goes with the first part.
-- `parts` lists every part as `{fields, measurements, media, items}` in order; the top-level `fields`, `measurements`, `media` and `items` are the first part's. A body that fits yields no `parts`.
-- The split is one `approximated` `text_threaded` change; rendering changes are reported once, at their source range.
+Closing an inline container or completing a partial word can reduce the measured length: link rendering, ellipsis back-off and weighted URL or mention recognition can change at that boundary. The rescan reaches the first clean cut above the search boundary and continues across the remaining window only if that cut fits. Generated ellipses, cut positions and block gaps remain node data. Truncated literals retain their provenance so escaping and entity detection remain consistent.
+
+`overflow: 'thread'` applies to X, Bluesky, Threads and Mastodon. Other targets retain truncation. The rendered body is split greedily: each part takes the longest remaining prefix that fits every active text length limit, preferring paragraph, sentence, word, then grapheme boundaries. It keeps links intact, trims boundary whitespace and adds no numbering. Links, entities and measurements belong to their part; entities crossing a boundary are split. A directive's media follows its part; unreferenced items and the target URL go to the first part.
+
+```js
+const paragraph = 'A paragraph with enough words to demonstrate thread splitting.';
+const text = Array(6).fill(paragraph).join('\n\n');
+
+const projection = gsx.project(text, 'bluesky-entities', {
+  overflow: 'thread'
+});
+
+for (const part of projection.parts ?? [projection]) {
+  console.log(part.fields[0].text);
+}
+```
+
+`parts` holds each post's fields, measurements, media and items. Top-level output repeats the first part. Rendering changes appear once; the split adds `text_threaded`.
