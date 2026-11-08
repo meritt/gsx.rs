@@ -267,11 +267,31 @@ struct Rendered {
     changes: Vec<Change>,
     anchors: Vec<Anchor>,
     alts: Vec<(usize, Option<String>)>,
+    prefixes: Vec<Span<usize>>,
 }
 
 impl Rendered {
     fn text(text: String) -> Self {
-        Rendered { text, links: vec![], styled: vec![], changes: vec![], anchors: vec![], alts: vec![] }
+        Rendered {
+            text,
+            links: vec![],
+            styled: vec![],
+            changes: vec![],
+            anchors: vec![],
+            alts: vec![],
+            prefixes: vec![],
+        }
+    }
+
+    fn unprefixed(&self) -> String {
+        let mut out = String::with_capacity(self.text.len());
+        let mut cursor = 0;
+        for prefix in &self.prefixes {
+            out.push_str(&self.text[cursor..prefix.start]);
+            cursor = prefix.end;
+        }
+        out.push_str(&self.text[cursor..]);
+        out
     }
 }
 
@@ -317,12 +337,22 @@ fn render(
         }
         None => vec![],
     };
-    let (text, links) = match target.normalization {
-        Normalization::None => (written.text, written.links),
-        Normalization::Nfc => normalized(&written.text, &written.links),
+    let (text, links, prefixes) = match target.normalization {
+        Normalization::None => (written.text, written.links, written.prefixes),
+        Normalization::Nfc => {
+            let (text, links) = normalized(&written.text, &written.links);
+            (text, links, vec![])
+        }
     };
-    let mut rendered =
-        Rendered { text, links, styled, changes: context.changes, anchors: context.anchors, alts: context.alts };
+    let mut rendered = Rendered {
+        text,
+        links,
+        styled,
+        changes: context.changes,
+        anchors: context.anchors,
+        alts: context.alts,
+        prefixes,
+    };
     cap_markers(target, field, &mut rendered);
     rendered
 }
@@ -338,6 +368,7 @@ fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendere
             continue;
         };
         rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links);
+        rendered.prefixes.clear();
         let (class, reason) = target.rule(feature).outcome(None);
         let truncated = Some(Truncated { unit, maximum, value: markers.len() as u32, exact: true });
         rendered.changes.push(Change { class, feature, reason, field, range: None, truncated, slot: None });
@@ -718,7 +749,8 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             ),
             (Source::Title { .. }, None, None) => {
                 let source = first_line(
-                    &render(target, facts, spec.name, None, |context| (target.renderer.blocks)(context, body)).text,
+                    &render(target, facts, spec.name, None, |context| (target.renderer.blocks)(context, body))
+                        .unprefixed(),
                 );
                 let mut fitted = request.fit(
                     || Outline::of_text(&source),
