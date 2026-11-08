@@ -80,6 +80,6 @@ fn provider_spans_stay_live() {
 #[test]
 fn slack_escapes_pipes_in_table_cells() {
     let projection = run("slack-markdown", "| a | b |\n| - | -: |\n| `x\\|y` | c |");
-    assert_eq!(text(&projection), "| a | b |\n| :--- | ---: |\n| ``x\\|y`` | c |");
+    assert_eq!(text(&projection), "| a | b |\n| :--- | ---: |\n| `x\\|y` | c |");
     assert_eq!(projection.changes, []);
 }

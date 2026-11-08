@@ -34,7 +34,8 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 | `telegram-html-rich` | text (post), visible | code points | 32768 |
 | `telegram-entities` | text (story) | code points | caption limit, 200 |
 | `max-html` | text, visible | code points | 4000 |
-| `discord-markdown`, `discord-blocks` | text; alt | code points | 2000; 1024 |
+| `discord-markdown` | text; alt | code points | 2000; 1024 |
+| `discord-blocks` | text; alt | code points | 4000; 1024 |
 | `slack-markdown` | text; alt (image) | code points | 12000; 1000 |
 | `slack-plain` | text (file comment); alt (image) | code points | none; 1000 |
 | `slack-blocks` | text; alt | code points | 12000; 2000 |
@@ -76,6 +77,7 @@ No dependency: neither `unicode-segmentation` nor ICU4X's segmenter carries RGI_
 | `x-plain`, long posts | 280 weighted; the `maxCharacters` fact lifts it for accounts allowed longer posts (25 000 with X Premium) |
 | `mastodon-plain`, content warning | the `spoilerText` fact is not rendered; `StatusLengthValidator` counts it joined before the text, so it is measured with the text |
 | `instagram-plain` hashtags | 5: the app's cap since December 2025; the Graph API reference still says 30, so the `hashtagLimit` fact overrides it |
+| `discord-blocks` text | 4000 for all text displays together: the Components V2 total that D++, JDA, Discord.NET and discord-userdoccers give; Discord's reference documents no text limit for these messages, and the 2000 of `content` does not apply to them. Whether gallery alt text counts toward the total is not documented; it is measured on its own |
 
 VK and `slack-plain` text stay unlimited until a primary source documents a limit.
 

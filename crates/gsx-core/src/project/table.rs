@@ -255,6 +255,7 @@ pub struct MarkdownForm {
     pub datetime: &'static str,
     pub separators: &'static str,
     pub quote_depth: Option<u32>,
+    pub url_labels: bool,
 }
 
 impl MarkdownForm {
@@ -273,8 +274,15 @@ pub struct BlocksForm {
     pub formats: &'static [Format],
     pub group: Option<(Layout, usize)>,
     pub items: Option<usize>,
-    pub ceiling: Option<usize>,
+    pub ceiling: Option<Ceiling>,
     pub spoiler: bool,
+    pub separator: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ceiling {
+    pub blocks: usize,
+    pub per_item: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

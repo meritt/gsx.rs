@@ -5,7 +5,9 @@ use super::{Rules, rule};
 use crate::document::Layout;
 use crate::forms::blocks::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback};
-use crate::project::{BlocksForm, Condition, Feature, Form, Format, Normalization, Rule, Search, Target, When};
+use crate::project::{
+    BlocksForm, Ceiling, Condition, Feature, Form, Format, Normalization, Rule, Search, Target, When,
+};
 
 const fn blocks(
     name: &'static str,
@@ -46,15 +48,16 @@ static DISCORD_FORM_BLOCKS: BlocksForm = BlocksForm {
     formats: &[Format::Image, Format::Gif, Format::Video],
     group: Some((Layout::Collage, 10)),
     items: Some(10),
-    ceiling: None,
+    ceiling: Some(Ceiling { blocks: 40, per_item: false }),
     spoiler: true,
+    separator: true,
 };
 
 pub static DISCORD: Target = blocks(
     "discord-blocks",
     rules!(Rules { media: MEDIA, ..DISCORD_RULES }),
     &DISCORD_FORM_BLOCKS,
-    &[limit(Text, CodePoints, 2000), limit(Alt, CodePoints, 1024)],
+    &[limit(Text, CodePoints, 4000), limit(Alt, CodePoints, 1024)],
 );
 
 static SLACK_FORM_BLOCKS: BlocksForm = BlocksForm {
@@ -62,8 +65,9 @@ static SLACK_FORM_BLOCKS: BlocksForm = BlocksForm {
     formats: &[Format::Image, Format::Gif],
     group: Some((Layout::Slideshow, 10)),
     items: None,
-    ceiling: Some(50),
+    ceiling: Some(Ceiling { blocks: 50, per_item: true }),
     spoiler: false,
+    separator: false,
 };
 
 pub static SLACK: Target = blocks(

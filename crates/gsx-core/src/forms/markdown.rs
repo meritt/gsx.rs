@@ -1,7 +1,7 @@
 use super::{media, wrapper};
 use crate::document::{Align, Kind, Node, Provenance};
 use crate::project::links::accepted;
-use crate::project::{CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, Renderer, When, href};
+use crate::project::{CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, RULE, Renderer, When, href};
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
 
@@ -55,9 +55,7 @@ pub(crate) fn block(context: &mut Context, node: &Node, depth: u32) {
                 context.writer().push("---");
             } else {
                 context.report(Feature::ThematicBreak, node.range);
-                let mut rule = String::new();
-                escape(&mut rule, "---", form.escaped);
-                context.writer().push(&rule);
+                context.writer().push(RULE);
             }
         }
         Kind::Code { lang, meta, value } => {
@@ -189,7 +187,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
             }
             Kind::InlineCode { value } => {
                 let shown = code(form, context.rendered(node, value), false);
-                let fence = "`".repeat(longest_run(&shown).max(1) + 1);
+                let fence = "`".repeat(longest_run(&shown) + 1);
                 let padding = if padded(&shown) { " " } else { "" };
                 context.writer().source(node.range);
                 context.writer().push(&format!("{fence}{padding}"));
@@ -201,11 +199,27 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                 if title.is_some() {
                     context.report(Feature::LinkTitle, node.range);
                 }
+                let href = href(url);
+                if !form.url_labels {
+                    let mut label = String::new();
+                    plain(&node.children, &mut label);
+                    if let Some(label) = accepted(&label) {
+                        let bare = !context.contains_cut(node) && label == href;
+                        context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
+                        if !bare {
+                            inline_at(context, &node.children, cell);
+                        }
+                        context.writer().source(node.range);
+                        let shown = raw(href, cell);
+                        context.writer().push(&if bare { shown } else { format!(" ({shown})") });
+                        continue;
+                    }
+                }
                 context.writer().source(node.range);
                 context.writer().push("[");
                 inline_at(context, &node.children, cell);
                 context.writer().source(node.range);
-                context.writer().push(&format!("]({})", raw(destination(&href(url)), cell)));
+                context.writer().push(&format!("]({})", raw(destination(&href), cell)));
             }
             Kind::Datetime { unix, .. } => datetime(context, node, *unix, cell),
             kind => match wrapper(kind) {

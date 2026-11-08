@@ -129,6 +129,13 @@
           },
           "required": ["items", "layout"],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "A visual divider between blocks.",
+          "properties": { "separator": { "const": true } },
+          "required": ["separator"],
+          "additionalProperties": false
         }
       ]
     },

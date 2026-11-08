@@ -25,6 +25,7 @@ pub struct Attachment {
 pub enum Block {
     Text(String),
     Media { items: Vec<Item>, layout: Option<Layout> },
+    Separator,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -283,6 +284,10 @@ pub(super) fn layout(
             }
             continue;
         };
+        if matches!(node.kind, Kind::ThematicBreak) {
+            layouter.laid.blocks.push(Block::Separator);
+            continue;
+        }
         let mut kept = vec![];
         for id in placed(node).unwrap_or_default() {
             match indexes.get(id) {
@@ -299,11 +304,11 @@ pub(super) fn layout(
             .blocks
             .iter()
             .map(|block| match block {
-                Block::Media { items, layout: Some(_) } => 1 + items.len(),
+                Block::Media { items, layout: Some(_) } if ceiling.per_item => 1 + items.len(),
                 _ => 1,
             })
             .sum();
-        if count > ceiling {
+        if count > ceiling.blocks {
             layouter.change(FieldName::Text, None, When::Blocks);
         }
     }

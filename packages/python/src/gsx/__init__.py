@@ -326,11 +326,12 @@ class Item:
 
 @dataclass(frozen=True)
 class Block:
-    """Text, or media items with an optional layout."""
+    """Text, media items with an optional layout, or a separator."""
 
     text: Optional[str] = None
     items: Optional[List[Item]] = None
     layout: Optional[str] = None
+    separator: bool = False
 
 
 @dataclass(frozen=True)
@@ -571,6 +572,8 @@ def _part(part: dict) -> Part:
 def _block(block: dict) -> Block:
     if "text" in block:
         return Block(text=block["text"])
+    if "separator" in block:
+        return Block(separator=True)
     return Block(items=[Item(**item) for item in block["items"]], layout=block["layout"])
 
 

@@ -1,4 +1,4 @@
-use crate::document::Node;
+use crate::document::{Kind, Node};
 use crate::forms::markdown;
 use crate::project::{Context, Renderer, placed, references};
 
@@ -12,8 +12,20 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
     if leading {
         context.anchor(None);
     }
+    let separator = context.target.form.blocks().is_some_and(|form| form.separator);
     for node in nodes {
         gap = gap.max(node.gap_before.unwrap_or(1));
+        if separator && matches!(node.kind, Kind::ThematicBreak) {
+            if context.done() {
+                continue;
+            }
+            if previous == Some(true) {
+                context.writer().newlines(gap);
+            }
+            context.anchor(Some(node));
+            (previous, gap) = (Some(false), 0);
+            continue;
+        }
         if let Some(ids) = placed(node) {
             if ids.iter().all(|id| dropped(context, id)) {
                 continue;

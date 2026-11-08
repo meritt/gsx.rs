@@ -7,7 +7,7 @@
 | Field | Content |
 | --- | --- |
 | `fields` | named text outputs (`text`, `title`, `description`, `alt`), each with its links or entities |
-| `blocks` | `blocks` targets only: ordered text and media blocks; text blocks are rendered by the platform's `markdown` target |
+| `blocks` | `blocks` targets only: ordered text, media and separator blocks; text blocks are rendered by the platform's `markdown` target |
 | `measurements` | one per limited field: unit, value, maximum; per-block limits carry the block index |
 | `changes` | every change, ordered by source position, uncapped |
 | `media` | selected items, covers, per-item changes |
@@ -61,6 +61,15 @@ All forms share block layout: one list-marker set, continuation lines indented b
 - Without the `entitiesAllowed` fact every range falls back as the other ranges do (`unwrapped` `entities_unavailable`), and a blockquote keeps its prefix (`textual_fallback` `blockquote_as_text`).
 
 The LinkedIn reserved set is escaped with a backslash except `#` at the start or after whitespace and before a letter, digit or `_`: Little Text Format reads that as a hashtag, which the author wrote.
+
+On Discord, whose markdown has no rule:
+
+- A thematic break is `———`, the rule every text form writes (`textual_fallback` `thematic_break_as_text`). On `discord-blocks` a top-level break is a `separator` block, a Components V2 Separator, and no change; one after the cut is dropped.
+- Discord does not render a masked link whose label is a URL. A label equal to its URL becomes the bare URL (`approximated` `link_bare_url`); a URL label pointing elsewhere becomes `label (URL)` (`textual_fallback` `link_destination_as_text`).
+
+`discord-blocks` allows 40 components per message, and each block is one: a gallery is one Media Gallery whatever its items. On `slack-blocks` a slideshow spends a block per image besides its own. Above the ceiling the projection is `blocked` `blocks_too_many`.
+
+Inline code on `markdown` targets is fenced with one backtick more than the longest run in the code, as the serializer does.
 
 A heading is rendered as bold text wherever the form has bold (the `b` tag, the strong delimiter, the bold entity), and as plain text elsewhere. This holds on every target, including the platforms with native headings (Telegram rich messages, MAX, Discord, Slack `markdown`); native heading constructs are never emitted.
 

@@ -40,7 +40,7 @@ fn text_segments_carry_the_gaps_around_media() {
     assert_eq!(projection.blocks, [text("a *b*\n\n"), single("p"), text("\n\nc")]);
     let measured = projection.measurements.iter().find(|measured| measured.field == FieldName::Text).unwrap();
     assert_eq!(measured.value, "a *b*\n\n\n\nc".chars().count());
-    assert_eq!(measured.maximum, Some(2000));
+    assert_eq!(measured.maximum, Some(4000));
     assert_eq!(reasons(&projection), NONE);
 }
 
@@ -193,10 +193,10 @@ fn slack_refuses_more_than_fifty_blocks() {
 
 #[test]
 fn media_after_the_cut_follow_the_text() {
-    let markdown = format!("{}\n\n::media{{id=\"p\"}}", "word ".repeat(500));
+    let markdown = format!("{}\n\n::media{{id=\"p\"}}", "word ".repeat(1000));
     let projection = run("discord-blocks", &markdown, &[image("p")]);
     let [Block::Text(kept), media] = projection.blocks.as_slice() else { panic!("{:?}", projection.blocks) };
-    assert!(kept.ends_with('…') && kept.chars().count() <= 2000);
+    assert!(kept.ends_with('…') && kept.chars().count() <= 4000);
     assert_eq!(media, &single("p"));
     let reasons = reasons(&projection);
     assert!(reasons.contains(&(Class::Approximated, Feature::Text, "text_truncated")));

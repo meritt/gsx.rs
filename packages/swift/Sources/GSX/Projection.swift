@@ -155,15 +155,18 @@ public struct Item: Sendable, Hashable, Decodable {
 public enum Block: Sendable, Hashable, Decodable {
     case text(String)
     case media(items: [Item], layout: Layout?)
+    case separator
 
     enum CodingKeys: String, CodingKey {
-        case text, items, layout
+        case text, items, layout, separator
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if let text = try container.decodeIfPresent(String.self, forKey: .text) {
             self = .text(text)
+        } else if container.contains(.separator) {
+            self = .separator
         } else {
             self = .media(
                 items: try container.decode([Item].self, forKey: .items),

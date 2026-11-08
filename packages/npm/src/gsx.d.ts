@@ -232,7 +232,7 @@ export interface Item {
   spoiler: boolean;
 }
 
-export type Block = { text: string } | { items: Item[]; layout: Layout | null };
+export type Block = { text: string } | { items: Item[]; layout: Layout | null } | { separator: true };
 
 export interface Truncated {
   unit: Unit;

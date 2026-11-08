@@ -399,6 +399,7 @@ impl Out {
                 self.key("layout");
                 self.optional(layout.map(Layout::as_str));
             }
+            Block::Separator => self.raw("{\"separator\":true"),
         }
         self.0.push('}');
     }

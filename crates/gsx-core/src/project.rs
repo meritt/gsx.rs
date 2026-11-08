@@ -26,9 +26,9 @@ pub use layout::{CELL, ELLIPSIS, RULE, Writer, marker, single_line};
 pub use links::href;
 pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
-    BlocksForm, Condition, DATE_LABEL, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm, LineStart,
-    MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Structure, Style, Target, Truncation,
-    When,
+    BlocksForm, Ceiling, Condition, DATE_LABEL, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm,
+    LineStart, MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Structure, Style, Target,
+    Truncation, When,
 };
 
 use layout::Styled;

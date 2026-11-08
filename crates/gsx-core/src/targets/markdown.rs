@@ -47,6 +47,7 @@ pub(super) static DISCORD_FORM: MarkdownForm = MarkdownForm {
     datetime: "<t:$unix:f>",
     separators: "",
     quote_depth: Some(1),
+    url_labels: false,
 };
 
 pub(super) const DISCORD_RULES: Rules = Rules {
@@ -85,6 +86,7 @@ pub(super) static SLACK_FORM: MarkdownForm = MarkdownForm {
     datetime: "<!date^$unix^{date_short} {time}|$label>",
     separators: "^|",
     quote_depth: None,
+    url_labels: true,
 };
 
 pub(super) const SLACK_RULES: Rules =
