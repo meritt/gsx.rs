@@ -89,7 +89,7 @@ cargo +nightly-2026-11-01 fuzz run parse -- -max_len=4096
 cargo +nightly-2026-11-01 fuzz run project -- -max_total_time=60
 ```
 
-Benchmarks write JSON and Markdown under `testdata/bench/baseline/`, identified by commit and runtime. Instruction benchmarks require Valgrind and a `gungraun-runner` matching `Cargo.lock`; CI permits at most 1% growth against the base commit. Instruction counts provide the regression gate because shared-runner wall time is noisy. Fuzzing requires `cargo-fuzz`; CI runs both targets for 60 seconds with `fuzz/Cargo.lock` locked.
+Benchmarks write JSON and Markdown under `testdata/bench/baseline/`, identified by commit and runtime. Instruction benchmarks require Valgrind and a `gungraun-runner` matching `Cargo.lock`; CI compares them with the base commit and reports growth above 1% as a warning with the affected benchmarks in the job summary, without failing the check. Instruction counts provide the regression signal because shared-runner wall time is noisy. Fuzzing requires `cargo-fuzz`; CI runs both targets for 60 seconds with `fuzz/Cargo.lock` locked.
 
 ## Build
 

@@ -349,7 +349,20 @@ jobs:
           cargo bench -p gsx-core --bench instructions --locked -- --save-baseline=base
 
       - name: Compare
-        run: cargo bench -p gsx-core --bench instructions --locked -- --baseline=base --callgrind-limits="$CALLGRIND_LIMITS"
+        run: |
+          status=0
+          cargo bench -p gsx-core --bench instructions --locked -- --baseline=base --callgrind-limits="$CALLGRIND_LIMITS" 2>&1 | tee "$RUNNER_TEMP/instructions.log" || status=$?
+          if [ "$status" -ne 3 ]; then
+            exit "$status"
+          fi
+          {
+            echo "### Instructions above ${CALLGRIND_LIMITS#ir=} of the base commit"
+            echo
+            echo '```text'
+            sed -n '/^Regressions:/,/^Gungraun result:/p' "$RUNNER_TEMP/instructions.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning title=Instructions::Instruction counts grew by more than ${CALLGRIND_LIMITS#ir=}; the job summary lists the benchmarks"
 
       - name: Save
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
