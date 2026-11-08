@@ -46,8 +46,8 @@ fn text_segments_carry_the_gaps_around_media() {
 
 #[test]
 fn slack_segments_use_slack_markdown() {
-    let projection = run("slack-blocks", "a.b\n\n::media{id=\"p\"}", &[image("p")]);
-    assert_eq!(projection.blocks, [text("a\\.b\n\n"), single("p")]);
+    let projection = run("slack-blocks", "a.b\n\n***\n\n::media{id=\"p\"}", &[image("p")]);
+    assert_eq!(projection.blocks, [text("a.b\n\n---\n\n"), single("p")]);
 }
 
 #[test]

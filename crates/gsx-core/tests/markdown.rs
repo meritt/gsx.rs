@@ -72,9 +72,9 @@ fn line_starts_are_neutralised() {
 }
 
 #[test]
-fn discord_keeps_provider_spans_live() {
+fn provider_spans_stay_live() {
     assert_eq!(text(&run("discord-markdown", "a_b https://x.io/a_b @c_d")), "a\\_b https://x.io/a_b @c_d");
-    assert_eq!(text(&run("slack-markdown", "a_b https://x.io")), "a\\_b https://x\\.io");
+    assert_eq!(text(&run("slack-markdown", "a_b https://x.io/a_b. c.d")), "a\\_b https://x.io/a_b. c.d");
 }
 
 #[test]
