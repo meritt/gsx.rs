@@ -691,7 +691,13 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         rendered
     };
     let titled = leading.filter(|heading| !draw_heading(heading, FieldName::Title, None).text.is_empty());
-    let removed = title.is_some_and(|(_, removed)| removed) && titled.is_none() && explicit.is_none();
+    let removable = title.is_some_and(|(_, removed)| removed) && titled.is_none() && explicit.is_none();
+    let removed = removable
+        && target.fields(facts).find(|spec| matches!(spec.source, Source::Title { .. })).is_some_and(|spec| {
+            let request = Request { target, spec, facts, options };
+            let blocks = render(target, facts, spec.name, None, |context| (target.renderer.blocks)(context, body));
+            request.fits(&Rendered::text(first_line(&blocks.unprefixed())))
+        });
     let draw_body = |field, cut: Option<&Cut>| {
         let mut rendered = render(target, facts, field, cut, |context| (target.renderer.blocks)(context, body));
         if removed {
@@ -759,6 +765,10 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                 );
                 if let Some(heading) = leading {
                     fitted.rendered.changes.extend(draw_heading(heading, spec.name, None).changes);
+                }
+                if removed {
+                    let range = body.first().map(|node| node.range);
+                    fitted.rendered.changes.push(request.change(Feature::Title, range, Some(When::TitleSource)));
                 }
                 fitted
             }

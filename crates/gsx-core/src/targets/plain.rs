@@ -131,7 +131,19 @@ pub static YOUTUBE: Target = text(
 pub static TIKTOK: Target = text(
     Escape::None,
     "tiktok-plain",
-    plain!(TITLE_SOURCE),
+    plain!(
+        TITLE_SOURCE,
+        Rule {
+            feature: Feature::Title,
+            class: Approximated,
+            reason: "title_truncated",
+            conditions: &[Condition {
+                when: When::TitleSource,
+                class: Approximated,
+                reason: "first_line_became_title"
+            }],
+        },
+    ),
     &[
         field(FieldName::Title, Media::Image, Source::Title { fact: false, first_line_removed: true }, false),
         field(FieldName::Text, Media::Any, Source::Body, false),
