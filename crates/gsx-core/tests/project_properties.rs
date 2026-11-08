@@ -59,7 +59,7 @@ const FRAGMENTS: &[&str] = &[
     "@alice",
     "@alice@social.example",
     "#hashtag",
-    ":time[tomorrow]{datetime=\"2026-11-06T18:00:00Z\"}",
+    "::time[tomorrow]{datetime=\"2026-11-06T18:00:00Z\"}",
     "::media{id=\"a\"}\n",
     "::media{id=\"b\"}\n",
     "::media{ids=\"a,b\" layout=\"collage\"}\n",

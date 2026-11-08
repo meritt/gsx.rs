@@ -8,7 +8,7 @@
 | --- | --- |
 | Emphasis, strong, strikethrough | `*text*`, `**text**`, `~~text~~` |
 | Underline, highlight, spoiler | `++text++`, `==text==`, `\|\|text\|\|` |
-| Date and time | `:time[Launch]{datetime="2026-11-08T12:00:00Z"}` or `:time[Launch]{unix="1794139200"}` |
+| Date and time | `::time[Launch]{datetime="2026-11-08T12:00:00Z"}` or `::time[Launch]{unix="1794139200"}` |
 | Media | `::media{id="photo"}` |
 | Media group | `::media{ids="a,b" layout="collage"}` or `layout="slideshow"` |
 
@@ -40,7 +40,7 @@ The tokenizer bounds link-destination parentheses at 32 levels (`LK08`). A task 
 | Escaped paired delimiter | The escape affects one character only |
 | Task checkbox content | The first paragraph's range ends at its own content, excluding the next block |
 
-Corpus `sources` retain the `known:` and `parser:` case identifiers for these resolutions. Directive grammar follows the cases pinned for micromark-extension-directive 4.0.0 (`D01`, `D03`, `D04`); `W04` pins BOM handling.
+Corpus `sources` retain the `known:` and `parser:` case identifiers for these resolutions. Every gsx extension directive opens with `::`, inline ones included: a text directive starts at two colons not preceded by an unescaped colon, so a single colon is ordinary text. Otherwise directive grammar follows the cases pinned for micromark-extension-directive 4.0.0 (`D01`, `D03`, `D04`); `W04` pins BOM handling.
 
 ## Limits
 

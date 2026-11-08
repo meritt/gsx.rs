@@ -76,7 +76,7 @@ pub const FRAGMENTS: &[&str] = &[
     "www.example.org",
     "user@example.com",
     "<https://example.com>",
-    ":time[",
+    "::time[",
     "]{datetime=\"2026-11-06T18:00:00Z\"}",
     "]{unix=\"1785423600\"}",
     "::media{id=\"a\"}",

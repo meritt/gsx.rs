@@ -12,7 +12,7 @@ fn runs_inputs_at_the_depth_limits_within_a_thread_stack() {
     let inline = format!("{}a{}", "**".repeat(inlines), "**".repeat(inlines));
     let link =
         format!("[{}![a](https://e.com/i){}](https://e.com)", "**".repeat(inlines - 2), "**".repeat(inlines - 2));
-    let directives = format!("{}a{}", ":x[**".repeat(inlines / 2), "**]".repeat(inlines / 2));
+    let directives = format!("{}a{}", "::x[**".repeat(inlines / 2), "**]".repeat(inlines / 2));
     let inputs = [
         format!("{}{link}", "> ".repeat(containers)),
         format!("{}{directives}", "> ".repeat(containers)),

@@ -185,9 +185,12 @@ fn canonically(source: &str) -> String {
 #[test]
 fn round_trips_gsx_constructs() {
     assert_eq!(
-        canonically("++u++ ==h== ||s|| :time[t]{datetime=\"2026-01-01T00:00:00Z\"} :time[n]{unix=1}"),
-        "++u++ ==h== ||s|| :time[t]{datetime=\"2026-01-01T00:00:00Z\"} :time[n]{unix=\"1\"}"
+        canonically("++u++ ==h== ||s|| ::time[t]{datetime=\"2026-01-01T00:00:00Z\"} ::time[n]{unix=1}"),
+        "++u++ ==h== ||s|| ::time[t]{datetime=\"2026-01-01T00:00:00Z\"} ::time[n]{unix=\"1\"}"
     );
+    assert_eq!(canonically("At\\:::time[noon]{unix=\"1\"}"), "At\\:::time[noon]{unix=\"1\"}");
+    assert_eq!(canonically("At&#58;::time[noon]{unix=\"1\"}"), "At&#58;::time[noon]{unix=\"1\"}");
+    assert_eq!(canonically("std&#58;:vector at 10:30"), "std:&#58;vector at 10:30");
     assert_eq!(
         canonically("::media{id=\"a\"}\n\n::media{ids=\"a,b\" layout=\"slideshow\"}"),
         "::media{id=\"a\"}\n\n::media{ids=\"a,b\" layout=\"slideshow\"}"

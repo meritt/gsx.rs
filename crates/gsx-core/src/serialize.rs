@@ -426,7 +426,7 @@ impl Inline<'_, '_> {
             Kind::Break => self.out.push_str("\\\n"),
             Kind::Link { url: _, source, title } => self.link(node, source, title.as_deref()),
             Kind::Datetime { datetime, unix } => {
-                self.out.push_str(":time[");
+                self.out.push_str("::time[");
                 self.nodes(&node.children, Some(']'), false, None);
                 if let Some(datetime) = datetime {
                     self.out.push_str("]{datetime=\"");
@@ -622,7 +622,9 @@ impl Inline<'_, '_> {
                 '_' => !(previous.is_some_and(char::is_alphanumeric) && next.is_some_and(char::is_alphanumeric)),
                 '&' => entity_start(next),
                 '+' | '=' => line_start || previous == Some(char) || next == Some(char),
-                ':' => next.is_some_and(|next| next.is_ascii_alphanumeric() || !next.is_ascii() || next == '/'),
+                ':' => next.is_some_and(|next| {
+                    next == '/' || previous == Some(':') && (next.is_ascii_alphanumeric() || !next.is_ascii())
+                }),
                 '@' => previous.is_some_and(|previous| {
                     previous.is_ascii_alphanumeric() || matches!(previous, '.' | '+' | '-' | '_')
                 }),

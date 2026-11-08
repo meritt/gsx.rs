@@ -19,7 +19,7 @@ fn text(projection: &Projection) -> &str {
 
 #[test]
 fn discord_reports_the_datetime_label() {
-    let projection = run("discord-markdown", ":time[Launch]{datetime=2026-07-30T15:00:00Z}");
+    let projection = run("discord-markdown", "::time[Launch]{datetime=2026-07-30T15:00:00Z}");
     assert_eq!(text(&projection), "<t:1785423600:f>");
     assert_eq!(reasons(&projection), [(Class::Approximated, Feature::Datetime, "datetime_label_omitted")]);
 }
@@ -47,7 +47,7 @@ fn truncated_literal_stays_escaped() {
 
 #[test]
 fn slack_flattens_datetime_label_and_reports_its_constructs() {
-    let projection = run("slack-markdown", ":time[**Launch** `x`]{datetime=2026-07-30T15:00:00Z}");
+    let projection = run("slack-markdown", "::time[**Launch** `x`]{datetime=2026-07-30T15:00:00Z}");
     assert_eq!(text(&projection), "<!date^1785423600^{date_short} {time}|Launch x>");
     assert_eq!(
         reasons(&projection),
