@@ -517,7 +517,7 @@ impl Request<'_, '_> {
             .applicable(field, measure::Context { placement, media: self.facts.media })
             .map(|limit| Bound { unit: limit.unit, maximum: limit.maximum(&facts).map(|maximum| maximum as usize) })
             .collect();
-        if let Some(first) = limits.first_mut() {
+        if let Some(first) = limits.iter_mut().find(|limit| !limit.unit.counts_markers()) {
             first.maximum = self.options.maximum.or(first.maximum);
         }
         limits

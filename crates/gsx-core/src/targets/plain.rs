@@ -163,6 +163,7 @@ pub static TIKTOK: Target = text(
         limit(Text, Utf16CodeUnits, 2200).when(Only(Video)),
         limit(Text, Utf16CodeUnits, 4000).on(&[Post]).when(Only(Image)),
         limit(Title, Utf16CodeUnits, 90).on(&[Post]).when(Only(Image)),
+        unlimited(Text, Mentions),
     ],
 );
 

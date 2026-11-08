@@ -54,6 +54,7 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 | `youtube-plain` | title; description | code points; utf8 | 100; 5000 |
 | | description | hashtags | 60 |
 | `tiktok-plain` | text (video); text (photo post); title (photo post) | utf16 | 2200; 4000; 90 |
+| | text | mentions | none |
 
 Not measured here: Telegram rich structure limits (blocks, nesting, media, table columns), hashtag, mention and media counts, NFC normalization before X counting, URL and mention detection.
 
@@ -77,6 +78,7 @@ No dependency: neither `unicode-segmentation` nor ICU4X's segmenter carries RGI_
 | `x-plain`, long posts | 280 weighted; the `maxCharacters` fact lifts it for accounts allowed longer posts (25 000 with X Premium) |
 | `mastodon-plain`, content warning | the `spoilerText` fact is not rendered; `StatusLengthValidator` counts it joined before the text, so it is measured with the text |
 | `instagram-plain` hashtags | 5: the app's cap since December 2025; the Graph API reference still says 30, so the `hashtagLimit` fact overrides it |
+| `tiktok-plain` mentions | counted without a maximum: the Content Posting API documents no cap on mentions or hashtags; a caller that enforces one, such as the 30 secondary sources give for the API for Business, reads the count instead of detecting mentions again |
 | `discord-blocks` text | 4000 for all text displays together: the Components V2 total that D++, JDA, Discord.NET and discord-userdoccers give; Discord's reference documents no text limit for these messages, and the 2000 of `content` does not apply to them. Whether gallery alt text counts toward the total is not documented; it is measured on its own |
 
 VK and `slack-plain` text stay unlimited until a primary source documents a limit.
