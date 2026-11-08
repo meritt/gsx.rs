@@ -123,7 +123,12 @@ impl Writer {
         let mut rest = line;
         while let Some(at) = rest.bytes().position(|byte| escaped.contains(&byte)) {
             self.out.text.push_str(&rest[..at]);
-            self.put(char::from(rest.as_bytes()[at]));
+            let byte = rest.as_bytes()[at];
+            if self.escape == Escape::LinkedIn && byte == b'#' && self.hashtag(&rest[at + 1..]) {
+                self.out.text.push('#');
+            } else {
+                self.put(char::from(byte));
+            }
             rest = &rest[at + 1..];
         }
         self.out.text.push_str(rest);
@@ -287,6 +292,11 @@ impl Writer {
             }
         }
         self.prefixes = prefixes;
+    }
+
+    fn hashtag(&self, after: &str) -> bool {
+        self.out.text.chars().next_back().is_none_or(char::is_whitespace)
+            && after.chars().next().is_some_and(|char| char.is_alphanumeric() || char == '_')
     }
 
     fn put(&mut self, char: char) {

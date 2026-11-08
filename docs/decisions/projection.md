@@ -52,6 +52,8 @@ Native output is not reported. A change has `feature`, `reason`, `field` and the
 
 All forms share block layout: one list-marker set, continuation lines indented by the marker width, a quote prefix on every line including blank ones, one table cell separator. A target overrides a rule only where the platform renders differently. In `entities` targets a range nested in a range of the same style is dropped.
 
+The LinkedIn reserved set is escaped with a backslash except `#` at the start or after whitespace and before a letter, digit or `_`: Little Text Format reads that as a hashtag, which the author wrote.
+
 A heading is rendered as bold text wherever the form has bold (the `b` tag, the strong delimiter, the bold entity), and as plain text elsewhere. This holds on every target, including the platforms with native headings (Telegram rich messages, MAX, Discord, Slack `markdown`); native heading constructs are never emitted.
 
 ## Fields
