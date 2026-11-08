@@ -6,7 +6,7 @@ pub const RENDERER: Renderer = Renderer { blocks, inline: markdown::inline };
 
 pub fn blocks(context: &mut Context, nodes: &[Node]) {
     let placed_ids = references(nodes);
-    let leading = context.items().iter().any(|item| !placed_ids.contains_key(item.id));
+    let leading = context.items().iter().any(|item| !placed_ids.contains_key(item.id) && !dropped(context, item.id));
     let mut gap = if leading { 2 } else { 0 };
     let mut previous = leading.then_some(false);
     if leading {
@@ -49,6 +49,7 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
 }
 
 fn dropped(context: &Context, id: &str) -> bool {
-    let maximum = context.target.form.blocks().and_then(|form| form.items).unwrap_or(usize::MAX);
-    context.position(id).is_none_or(|index| index >= maximum)
+    let Some(form) = context.target.form.blocks() else { return true };
+    let maximum = form.items.unwrap_or(usize::MAX);
+    context.position(id).is_none_or(|index| index >= maximum || !form.shows(&context.items()[index]))
 }

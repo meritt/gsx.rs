@@ -5,7 +5,7 @@ use crate::measure::{self, Fact, MediaKind, Placement};
 
 use super::change::{Change, Feature, FieldName, Slot, Truncated};
 use super::facts::{Facts, Format, MediaFact};
-use super::table::{BlocksForm, Spoilers, Target, When};
+use super::table::{BlocksForm, Spoilers, Target, Unplaced, When};
 use super::{Measurement, shortened};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,6 +26,7 @@ pub struct Attachment {
 pub enum Block {
     Text(String),
     Media { items: Vec<Item>, layout: Option<Layout> },
+    File(Item),
     Separator,
 }
 
@@ -38,6 +39,7 @@ pub(super) struct Anchor {
 
 pub(super) struct Laid {
     pub blocks: Vec<Block>,
+    pub attachments: Vec<Attachment>,
     pub changes: Vec<Change>,
     pub measurements: Vec<Measurement>,
 }
@@ -215,9 +217,6 @@ impl Layouter {
     }
 
     fn item(&mut self, fact: &MediaFact, range: Option<Range>, slot: (usize, usize)) -> Item {
-        if !(fact.inline && self.form.formats.contains(&fact.format)) {
-            self.change(FieldName::Text, range, When::Inline);
-        }
         if fact.spoiler && !self.form.spoiler {
             let slot = Slot { block: Some(slot.0 as u32), item: slot.1 as u32 };
             self.change_at(FieldName::Text, range, When::Spoiler, Some(slot));
@@ -243,20 +242,24 @@ impl Layouter {
             Kind::MediaGroup { layout, .. } => Some(*layout),
             _ => None,
         });
-        if ids.is_empty() {
+        let shown: Vec<&MediaFact> = ids.iter().copied().filter(|fact| self.form.shows(fact)).collect();
+        if shown.is_empty() {
             return;
         }
         if cut {
             self.change(FieldName::Text, range, When::Cut);
         }
+        let (placed, files): (Vec<&MediaFact>, Vec<&MediaFact>) =
+            shown.into_iter().partition(|fact| self.form.places(fact));
         let grouped = layout.is_some_and(|layout| {
-            ids.len() > 1 && self.form.group.is_some_and(|(native, maximum)| native == layout && ids.len() <= maximum)
+            placed.len() > 1
+                && self.form.group.is_some_and(|(native, maximum)| native == layout && placed.len() <= maximum)
         });
-        if ids.len() > 1 && layout.is_some() && !grouped {
+        if placed.len() > 1 && layout.is_some() && !grouped {
             self.change(FieldName::Text, range, When::Group);
         }
         let first = self.laid.blocks.len();
-        let items: Vec<Item> = ids
+        let items: Vec<Item> = placed
             .iter()
             .enumerate()
             .map(|(index, fact)| self.item(fact, range, if grouped { (first, index) } else { (first + index, 0) }))
@@ -267,6 +270,29 @@ impl Layouter {
             for item in items {
                 self.laid.blocks.push(Block::Media { items: vec![item], layout: None });
             }
+        }
+        for fact in files {
+            self.unplaced(fact, range);
+        }
+    }
+
+    fn unplaced(&mut self, fact: &MediaFact, range: Option<Range>) {
+        self.change(FieldName::Text, range, When::Inline);
+        let (slot, carried) = match self.form.unplaced {
+            Unplaced::File => (Slot { block: Some(self.laid.blocks.len() as u32), item: 0 }, self.form.spoiler),
+            Unplaced::Attach => (Slot { block: None, item: self.laid.attachments.len() as u32 }, false),
+        };
+        if fact.spoiler && !carried {
+            self.change_at(FieldName::Text, range, When::Spoiler, Some(slot));
+        }
+        if authored(fact).is_some() {
+            self.change_at(FieldName::Alt, range, When::Refused, Some(slot));
+        }
+        let reference = format!("media:{}", fact.id);
+        let spoiler = fact.spoiler && carried;
+        match self.form.unplaced {
+            Unplaced::File => self.laid.blocks.push(Block::File(Item { reference, alt: None, spoiler })),
+            Unplaced::Attach => self.laid.attachments.push(Attachment { reference, alt: None, spoiler }),
         }
     }
 }
@@ -285,7 +311,7 @@ pub(super) fn layout(
         target,
         form,
         resolved: super::resolved(facts),
-        laid: Laid { blocks: vec![], changes: vec![], measurements: vec![] },
+        laid: Laid { blocks: vec![], attachments: vec![], changes: vec![], measurements: vec![] },
     };
     let ranges = references(children);
     let indexes = positions(items);
@@ -326,6 +352,9 @@ pub(super) fn layout(
         layouter.media(&kept, Some(node), anchor.cut);
     }
     layouter.text(&text[cursor..]);
+    for fact in items.iter().take(maximum).filter(|fact| !form.shows(fact)) {
+        layouter.unplaced(fact, ranges.get(fact.id).map(|&top| children[top].range));
+    }
     if let Some(ceiling) = form.ceiling {
         let count: usize = layouter
             .laid

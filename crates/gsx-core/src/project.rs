@@ -28,7 +28,7 @@ pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
     BlocksForm, Ceiling, Condition, DATE_LABEL, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm,
     LineStart, MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Spoilers, Structure, Style,
-    Target, Truncation, When,
+    Target, Truncation, Unplaced, When,
 };
 
 use layout::Styled;
@@ -753,6 +753,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     let mut changes = vec![];
     let mut required = vec![];
     let mut blocks = vec![];
+    let mut items = vec![];
     let mut alts = vec![];
     let mut derived = false;
     let mut threaded = None;
@@ -837,6 +838,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         if let (Some(form), Source::Body) = (target.form.blocks(), spec.source) {
             let laid = media::layout(target, form, facts, body, &rendered.text, &rendered.anchors);
             blocks = laid.blocks;
+            items = laid.attachments;
             changes.extend(laid.changes);
             measurements.extend(laid.measurements);
         }
@@ -867,7 +869,6 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     } else {
         changes.append(&mut required);
     }
-    let mut items = vec![];
     if target.form.blocks().is_none() {
         let attached = media::attach(target, facts, children);
         items = attached.items;

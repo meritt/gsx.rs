@@ -233,7 +233,12 @@ export interface Item {
   spoiler: boolean;
 }
 
-export type Block = { text: string } | { items: Item[]; layout: Layout | null } | { separator: true };
+export type Block =
+  | { text: string }
+  | { items: Item[]; layout: Layout | null }
+  /** An attached file shown in place, for media no media block can show. */
+  | { file: Item }
+  | { separator: true };
 
 export interface Truncated {
   unit: Unit;
@@ -263,7 +268,7 @@ export interface Projection {
   media: string[];
   /** Present for targets of the `blocks/1` form only. */
   blocks?: Block[];
-  /** Outside the `blocks/1` form, media items with published alt and spoiler state; omitted when empty. */
+  /** Media attached to the message with published alt and spoiler state: every item outside the `blocks/1` form, items no block can show on Slack blocks; omitted when empty. */
   items?: Attachment[];
   /** With `overflow: 'thread'`, when the body did not fit: every post of the thread in order; the top level repeats the first. */
   parts?: Part[];

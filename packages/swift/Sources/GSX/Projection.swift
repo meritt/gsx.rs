@@ -128,7 +128,7 @@ public struct Projection: Sendable, Hashable, Decodable {
     public let media: [String]
     /// Present for targets of the `blocks/1` form only.
     public let blocks: [Block]?
-    /// Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items.
+    /// Media attached to the message with its fitted alt: every media fact item outside the `blocks/1` form, items no block can show on Slack blocks; absent when empty.
     public let items: [Attachment]?
     /// With `overflow: .thread`, when the body did not fit: every post of the thread in order; the top level repeats the first.
     public let parts: [Part]?
@@ -157,16 +157,20 @@ public struct Item: Sendable, Hashable, Decodable {
 public enum Block: Sendable, Hashable, Decodable {
     case text(String)
     case media(items: [Item], layout: Layout?)
+    /// An attached file shown in place, for media no media block can show.
+    case file(Item)
     case separator
 
     enum CodingKeys: String, CodingKey {
-        case text, items, layout, separator
+        case text, items, layout, file, separator
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if let text = try container.decodeIfPresent(String.self, forKey: .text) {
             self = .text(text)
+        } else if let file = try container.decodeIfPresent(Item.self, forKey: .file) {
+            self = .file(file)
         } else if container.contains(.separator) {
             self = .separator
         } else {

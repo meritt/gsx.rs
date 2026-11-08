@@ -1,6 +1,6 @@
 use gsx_core::document::{Layout, Media, parse};
 use gsx_core::project::{
-    Block, Class, Facts, Feature, FieldName, Format, Item, MediaFact, MediaKind, Projection, Slot, project,
+    Attachment, Block, Class, Facts, Feature, FieldName, Format, Item, MediaFact, MediaKind, Projection, Slot, project,
 };
 use gsx_core::targets::target;
 
@@ -73,18 +73,54 @@ fn unplaced_media_lead() {
     assert_eq!(projection.blocks, [single("p"), text("\n\na\n\n"), single("q")]);
 }
 
+fn attachment(id: &str) -> Attachment {
+    Attachment { reference: format!("media:{id}"), alt: None, spoiler: false }
+}
+
 #[test]
-fn media_without_an_inline_variant_blocks_the_projection() {
+fn slack_attaches_media_that_no_block_can_show() {
     let video = MediaFact { format: Format::Video, ..image("v") };
-    let slack = run("slack-blocks", "::media{id=\"v\"}", &[video]);
-    assert_eq!(reasons(&slack), [(Class::Blocked, Feature::Media, "media_inline_unavailable")]);
-    assert_eq!(slack.changes[0].code().as_deref(), Some("MEDIA_INLINE_UNAVAILABLE"));
-    let discord = run("discord-blocks", "::media{id=\"p\"}", &[MediaFact { inline: false, ..image("p") }]);
-    assert_eq!(reasons(&discord), [(Class::Blocked, Feature::Media, "media_inline_unavailable")]);
+    let slack = run("slack-blocks", "Demo\n\n::media{id=\"v\"}", &[video]);
+    assert_eq!(slack.blocks, [text("Demo")]);
+    assert_eq!(slack.items, [attachment("v")]);
+    assert_eq!(reasons(&slack), [(Class::Approximated, Feature::Media, "media_attached")]);
+    let hidden = run("slack-blocks", "::media{id=\"p\"}", &[MediaFact { inline: false, ..image("p") }]);
+    assert_eq!((hidden.blocks.len(), hidden.items.len()), (0, 1));
+    let mixed = [image("p"), video, image("q")];
+    let group = run("slack-blocks", "::media{ids=\"p,v,q\" layout=\"slideshow\"}", &mixed);
+    assert_eq!(group.blocks, [Block::Media { items: vec![item("p"), item("q")], layout: Some(Layout::Slideshow) }]);
+    assert_eq!(group.items, [attachment("v")]);
+    assert_eq!(reasons(&group), [(Class::Approximated, Feature::Media, "media_attached")]);
+    let marked = MediaFact { alt: Some("A demo"), spoiler: true, ..video };
+    let slots: Vec<_> = run("slack-blocks", "::media{id=\"v\"}", &[marked])
+        .changes
+        .iter()
+        .map(|change| (change.reason, change.field, change.slot))
+        .collect();
+    let slot = Some(Slot { block: None, item: 0 });
+    assert_eq!(
+        slots,
+        [
+            ("media_attached", FieldName::Text, None),
+            ("media_spoiler_omitted", FieldName::Text, slot),
+            ("media_alt_omitted", FieldName::Alt, slot)
+        ]
+    );
+}
+
+#[test]
+fn discord_shows_media_outside_galleries_as_files_in_place() {
+    let audio = MediaFact { format: Format::Audio, alt: Some("Theme"), spoiler: true, ..image("a") };
+    let discord = run("discord-blocks", "Listen\n\n::media{id=\"a\"}\n\nEnd", &[audio]);
+    let file = Item { reference: "media:a".into(), alt: None, spoiler: true };
+    assert_eq!(discord.blocks, [text("Listen\n\n"), Block::File(file), text("\n\nEnd")]);
+    assert_eq!(discord.items, []);
+    assert_eq!(
+        reasons(&discord),
+        [(Class::Approximated, Feature::Media, "media_as_file"), (Class::Omitted, Feature::Media, "media_alt_omitted")]
+    );
+    let video = MediaFact { format: Format::Video, ..image("v") };
     assert_eq!(reasons(&run("discord-blocks", "::media{id=\"v\"}", &[video])), NONE);
-    let videos = [video, MediaFact { format: Format::Video, ..image("w") }];
-    let group = run("slack-blocks", "::media{ids=\"v,w\" layout=\"slideshow\"}", &videos);
-    assert_eq!(reasons(&group), [(Class::Blocked, Feature::Media, "media_inline_unavailable")]);
 }
 
 #[test]

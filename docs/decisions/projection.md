@@ -33,8 +33,8 @@ console.log(target.manifest);
 | `measurements` | Counts and maxima for applicable limits; item or block indices when needed |
 | `changes` | Transformations and blocking conditions, ordered by source position, uncapped |
 | `media` | IDs referenced by document directives; in a thread, those assigned to the part |
-| `blocks` | Block targets: text, media groups and separators in order |
-| `items` | Non-block targets: media references with published alt and spoiler state, in fact order; omitted from JSON when empty |
+| `blocks` | Block targets: text, media groups, files and separators in order |
+| `items` | Media attached to the message with published alt and spoiler state, in fact order: every item on non-block targets, items no block can show on Slack blocks; omitted from JSON when empty |
 | `parts` | Split thread, including the first part also represented at the top level; omitted when unsplit |
 
 Output ranges use the [binding coordinate systems](bindings.md#wire-format). Media references such as `media:photo` are resolved by the caller. In item measurements and changes, `item` indexes the output `items`; on block targets, `block` indexes `blocks` and `item` indexes that block's items.
@@ -51,7 +51,7 @@ Output ranges use the [binding coordinate systems](bindings.md#wire-format). Med
 
 A change includes feature, reason, field and an optional input range. Truncation includes its measurement details. Every non-native transformation is reported, including omitted code info and unsupported nesting; native rendering produces no change. Highlight removal is `unwrapped`, retaining its content. Rules, conditional outcomes, capabilities and manifests derive from the same [target tables](../architecture.md#targets).
 
-Reasons identify the cause without a target prefix unless it is target-specific. Each change belongs to the field that produced it. Alt and spoiler changes are per affected item, even when items share a directive's range. Identical block-group changes without an item index are reported once: two unsupported videos in a Slack slideshow produce one `media_inline_unavailable`. [Target tests](../../crates/gsx-core/tests/targets.rs) check emitted feature/class/reason combinations against the declarations.
+Reasons identify the cause without a target prefix unless it is target-specific. Each change belongs to the field that produced it. Alt and spoiler changes are per affected item, even when items share a directive's range. Identical block-group changes without an item index are reported once: two videos in a Slack slideshow produce one `media_attached`. [Target tests](../../crates/gsx-core/tests/targets.rs) check emitted feature/class/reason combinations against the declarations.
 
 ## Fields and rendering
 
@@ -63,7 +63,7 @@ Form configuration lives in [`project/table.rs`](../../crates/gsx-core/src/proje
 | `entities` | Offset unit, style mapping, heading style, availability gate, code splitting, detection, entity and link caps, whitespace trimming, styled suffixes |
 | `markdown` | Delimiters, native blocks, escapes, provider-owned spans, line-start neutralization, HTML escaping, datetime template, separators, quote depth, URL-label policy |
 | `html` | Block mode and structural limits, tags, exclusive styles, code and quote nesting, code info, empty elements, whitespace trimming |
-| `blocks` | Markdown text form, supported media formats, grouping and item limits, block ceiling, spoilers, separators |
+| `blocks` | Markdown text form, supported media formats, grouping and item limits, block ceiling, spoilers, separators, fallback for media outside a media block |
 
 - Headings become bold where supported and plain text elsewhere. Native heading constructs are not emitted. Link titles are omitted on every target. A native link is also underlined where the target renders underline natively, such as `<u><a href="…">label</a></u>` or `__[label](URL)__`, unless it is inside or contains an authored underline; this adds no change. An entity cap drops these underlines before authored entities. Bare URLs remain text for the platform to link.
 - Text layouts share `– ` bullets, continuation indentation by marker width, `› ` quote prefixes on every line including blank lines, and table separators; Markdown targets keep their native `- ` and `> `. Targets override layout only where their rendering differs. Markdown and HTML forms escape authored text for their target grammar. Blocks render text through the platform's Markdown target.
@@ -110,7 +110,9 @@ console.log(projection.blocks);
 | Empty `items` | Drop all referenced media | Drop all referenced media |
 | Some IDs missing | Report `media_missing`; attach listed IDs | Remove missing IDs and empty directives; close surrounding gaps |
 
-A directive with missing IDs reports one `omitted` `media_missing`. Placing targets close the gap to one separator between neighboring blocks and leave no empty edge section; a group reduced to one item is placed singly without a split change. Attaching targets report `media_attached` only if at least one ID is available, even when the directive lies beyond the text cut. A listed item without `inline` or with an unsupported format reports blocking `media_inline_unavailable`. Unreferenced listed items remain available as attachments.
+A directive with missing IDs reports one `omitted` `media_missing`. Placing targets close the gap to one separator between neighboring blocks and leave no empty edge section; a group reduced to one item is placed singly without a split change. Attaching targets report `media_attached` only if at least one ID is available, even when the directive lies beyond the text cut. Unreferenced listed items remain available as attachments.
+
+A media block takes a listed item only when it is `inline` and its format fits the block: Discord galleries take images, GIFs and videos; Slack image blocks take images and GIFs, since Slack video blocks embed third-party players rather than uploaded files. Other items are still published. Discord shows each as a `file` block in place, because Components V2 messages display only attachments referenced by a component (`approximated` `media_as_file`). Slack attaches them to the message as files in `items`, shared together with the blocks, and closes their gap like missing media (`approximated` `media_attached`). Neither fallback carries alt (`omitted` `media_alt_omitted`); Discord files keep spoilers, Slack attachments report `media_spoiler_omitted`.
 
 Alt uses the longest grapheme prefix plus ellipsis that fits every applicable item limit (`approximated` `media_alt_truncated`). If the ellipsis cannot fit, alt is omitted (`omitted` `media_alt_omitted`). Published alt is returned in `items` or block items.
 

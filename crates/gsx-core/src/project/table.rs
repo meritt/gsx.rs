@@ -5,7 +5,7 @@ use crate::document::{Layout, Node};
 
 use super::Context;
 use super::change::{Class, Feature, FieldName};
-use super::facts::{Facts, Format};
+use super::facts::{Facts, Format, MediaFact};
 use crate::measure::{self, MediaKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -281,12 +281,29 @@ pub struct BlocksForm {
     pub ceiling: Option<Ceiling>,
     pub spoiler: bool,
     pub separator: bool,
+    pub unplaced: Unplaced,
+}
+
+impl BlocksForm {
+    pub fn places(&self, fact: &MediaFact) -> bool {
+        fact.inline && self.formats.contains(&fact.format)
+    }
+
+    pub fn shows(&self, fact: &MediaFact) -> bool {
+        self.places(fact) || self.unplaced == Unplaced::File
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Ceiling {
     pub blocks: usize,
     pub per_item: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unplaced {
+    File,
+    Attach,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

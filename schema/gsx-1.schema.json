@@ -53,12 +53,12 @@
         "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
         "media": { "type": "array", "items": { "type": "string" } },
         "blocks": {
-          "description": "Present for targets of the blocks/1 form only: text, media and separators in order.",
+          "description": "Present for targets of the blocks/1 form only: text, media, files and separators in order.",
           "type": "array",
           "items": { "$ref": "#/$defs/block" }
         },
         "items": {
-          "description": "Outside the blocks/1 form, media items with their published alt and spoiler state; omitted when empty.",
+          "description": "Media published as message attachments with their alt and spoiler state: every item outside the blocks/1 form, the items no block can show on blocks targets; omitted when empty.",
           "type": "array",
           "items": { "$ref": "#/$defs/attachment" }
         },
@@ -103,22 +103,17 @@
         {
           "type": "object",
           "properties": {
-            "items": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "reference": { "type": "string" },
-                  "alt": { "$ref": "#/$defs/nullableString" },
-                  "spoiler": { "type": "boolean" }
-                },
-                "required": ["reference", "alt", "spoiler"],
-                "additionalProperties": false
-              }
-            },
+            "items": { "type": "array", "items": { "$ref": "#/$defs/attachment" } },
             "layout": { "enum": ["collage", "slideshow", null] }
           },
           "required": ["items", "layout"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "An attached file shown in place, for media the target cannot show in a media block; alt is null.",
+          "properties": { "file": { "$ref": "#/$defs/attachment" } },
+          "required": ["file"],
           "additionalProperties": false
         },
         {

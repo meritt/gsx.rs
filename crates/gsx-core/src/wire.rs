@@ -386,21 +386,27 @@ impl Out {
             }
             Block::Media { items, layout } => {
                 self.raw("{\"items\":");
-                self.list(items, |out, item| {
-                    let Item { reference, alt, spoiler } = item;
-                    out.raw("{\"reference\":");
-                    out.string(reference);
-                    out.key("alt");
-                    out.optional(alt.as_deref());
-                    out.key("spoiler");
-                    out.bool(*spoiler);
-                    out.0.push('}');
-                });
+                self.list(items, Self::item);
                 self.key("layout");
                 self.optional(layout.map(Layout::as_str));
             }
+            Block::File(item) => {
+                self.raw("{\"file\":");
+                self.item(item);
+            }
             Block::Separator => self.raw("{\"separator\":true"),
         }
+        self.0.push('}');
+    }
+
+    fn item(&mut self, item: &Item) {
+        let Item { reference, alt, spoiler } = item;
+        self.raw("{\"reference\":");
+        self.string(reference);
+        self.key("alt");
+        self.optional(alt.as_deref());
+        self.key("spoiler");
+        self.bool(*spoiler);
         self.0.push('}');
     }
 

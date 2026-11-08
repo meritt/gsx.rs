@@ -329,11 +329,12 @@ class Item:
 
 @dataclass(frozen=True)
 class Block:
-    """Text, media items with an optional layout, or a separator."""
+    """Text, media items with an optional layout, an attached file shown in place, or a separator."""
 
     text: Optional[str] = None
     items: Optional[List[Item]] = None
     layout: Optional[str] = None
+    file: Optional[Item] = None
     separator: bool = False
 
 
@@ -367,7 +368,7 @@ class Projection:
     blocks: Optional[List[Block]] = None
     """Present for targets of the blocks/1 form only."""
     items: Optional[List[Attachment]] = None
-    """Outside the blocks/1 form, one per media fact item with its fitted alt; absent without items."""
+    """Media attached to the message with its fitted alt: every media fact item outside the blocks/1 form, items no block can show on Slack blocks; absent when empty."""
     parts: Optional[List["Part"]] = None
     """With overflow "thread", when the body did not fit: every post of the thread in order; the top level repeats the first."""
 
@@ -575,6 +576,8 @@ def _part(part: dict) -> Part:
 def _block(block: dict) -> Block:
     if "text" in block:
         return Block(text=block["text"])
+    if "file" in block:
+        return Block(file=Item(**block["file"]))
     if "separator" in block:
         return Block(separator=True)
     return Block(items=[Item(**item) for item in block["items"]], layout=block["layout"])

@@ -514,11 +514,11 @@ mod tests {
             alt: alt.as_ptr(),
             alt_len: alt.len(),
             spoiler: true,
-            inline: false,
+            inline: true,
         };
         let items = [item];
         let facts = Facts { items: items.as_ptr(), items_len: 1, ..facts };
-        let core_items = [CoreMediaFact { id, format: Format::Gif, alt: Some(alt), spoiler: true, inline: false }];
+        let core_items = [CoreMediaFact { id, format: Format::Gif, alt: Some(alt), spoiler: true, inline: true }];
         let core = CoreFacts { items: Some(&core_items), ..core };
         let discord = targets::target("discord-blocks").unwrap();
         let media = [CoreMedia { id, cover: None }];
