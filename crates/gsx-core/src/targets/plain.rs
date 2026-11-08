@@ -52,7 +52,13 @@ pub(super) const BODY: &[FieldSpec] = &[field(FieldName::Text, Media::Any, Sourc
 
 pub static X: Target = Target {
     normalization: Normalization::Nfc,
-    ..text(Escape::None, "x-plain", plain!(&[]), BODY, &[limit(Text, XWeighted, 280), limit(Alt, CodePoints, 1000)])
+    ..text(
+        Escape::None,
+        "x-plain",
+        plain!(&[]),
+        BODY,
+        &[resolved(Text, XWeighted, Fact::MaxCharacters, 280), limit(Alt, CodePoints, 1000)],
+    )
 };
 
 pub static MASTODON: Target = text(
@@ -85,7 +91,7 @@ pub static INSTAGRAM: Target = text(
     BODY,
     &[
         limit(Text, CodePoints, 2200),
-        limit(Text, Hashtags, 30),
+        resolved(Text, Hashtags, Fact::HashtagLimit, 5),
         limit(Text, Mentions, 20),
         limit(Alt, CodePoints, 1000),
     ],

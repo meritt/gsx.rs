@@ -159,6 +159,7 @@ fn outcome(
         .collect();
     let title = facts.get("title").string();
     let target_url = facts.get("targetUrl").string();
+    let spoiler_text = facts.get("spoilerText").string();
     let limit = |key| facts.get(key).number();
     let facts = Facts {
         media: match facts.get("media").string().as_deref() {
@@ -183,6 +184,8 @@ fn outcome(
         characters_reserved_per_url: limit("charactersReservedPerUrl"),
         caption_limit: limit("captionLimit"),
         description_limit: limit("descriptionLimit"),
+        hashtag_limit: limit("hashtagLimit"),
+        spoiler_text: spoiler_text.as_deref(),
         entities_allowed: matches!(facts.get("entitiesAllowed"), Json::Bool(true)),
         items: matches!(facts.get("items"), Json::Array(_)).then_some(&items[..]),
     };
@@ -199,7 +202,7 @@ fn outcome(
 
 const FACTS: [&str; 2] = [
     "{}",
-    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"entitiesAllowed":true}"#,
+    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"hashtagLimit":3,"spoilerText":"CW","entitiesAllowed":true}"#,
 ];
 const PLACEMENTS: [&str; 3] = ["post", "reel", "story"];
 

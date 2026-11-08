@@ -353,14 +353,15 @@ fn render(
         alts: context.alts,
         prefixes,
     };
-    cap_markers(target, field, &mut rendered);
+    cap_markers(target, &resolved(facts), field, &mut rendered);
     rendered
 }
 
-fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendered) {
+fn cap_markers(target: &'static Target, resolved: &[(Fact, u32)], field: FieldName, rendered: &mut Rendered) {
+    let facts = measure::Facts { resolved, ..measure::Facts::default() };
     for (unit, feature) in [(Unit::Hashtags, Feature::Hashtag), (Unit::Mentions, Feature::Mention)] {
         let cap = target.limits.iter().find(|limit| limit.field == field && limit.unit == unit);
-        let Some(maximum) = cap.and_then(|limit| limit.maximum(&measure::Facts::default())) else {
+        let Some(maximum) = cap.and_then(|limit| limit.maximum(&facts)) else {
             continue;
         };
         let markers = measure::markers(unit, &rendered.text);
@@ -431,6 +432,7 @@ fn resolved(facts: &Facts) -> Vec<(Fact, u32)> {
         (Fact::CharactersReservedPerUrl, facts.characters_reserved_per_url),
         (Fact::CaptionLimit, facts.caption_limit),
         (Fact::DescriptionLimit, facts.description_limit),
+        (Fact::HashtagLimit, facts.hashtag_limit),
     ]
     .into_iter()
     .filter_map(|(fact, value)| value.map(|value| (fact, value)))
@@ -443,7 +445,10 @@ impl Request<'_, '_> {
     }
 
     fn measure(&self, unit: Unit, rendered: &Rendered) -> usize {
-        let text = self.target.form.visible(&rendered.text);
+        let mut text = self.target.form.visible(&rendered.text);
+        if let (Unit::MastodonWeighted, Some(spoiler)) = (unit, self.facts.spoiler_text) {
+            text = std::borrow::Cow::Owned(format!("{spoiler}{text}"));
+        }
         let (urls, elided) = match unit {
             Unit::XWeighted | Unit::Links => (links::x_urls(&text), vec![]),
             Unit::MastodonWeighted => links::mastodon_entities(&text),

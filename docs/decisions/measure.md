@@ -42,13 +42,13 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 | | alt | graphemes and utf8 | 2000 and 20000 |
 | `threads-entities` | text; alt | threads-weighted; code points | 500; 1000 |
 | | text | links | 5 |
-| `x-plain` | text; alt | x-weighted; code points | 280; 1000 |
-| `mastodon-plain` | text | mastodon-weighted | max characters, 500 |
+| `x-plain` | text; alt | x-weighted; code points | max characters, 280; 1000 |
+| `mastodon-plain` | text, with the content warning | mastodon-weighted | max characters, 500 |
 | | alt | code points | description limit, none |
 | `linkedin-plain` | text; alt | code points | 3000; 4086 |
 | `facebook-plain` | text | code points | 63206 |
 | `instagram-plain` | text; alt | code points | 2200; 1000 |
-| | text | hashtags; mentions | 30; 20 |
+| | text | hashtags; mentions | hashtag limit, 5; 20 |
 | `vk-plain` | text; title (video name); alt (video); alt (image) | code points | none; 128; 5000; 2048 |
 | `youtube-plain` | title; description | code points; utf8 | 100; 5000 |
 | | description | hashtags | 60 |
@@ -72,7 +72,10 @@ No dependency: neither `unicode-segmentation` nor ICU4X's segmenter carries RGI_
 | `mastodon-plain`, instance unresolved | vanilla Mastodon: 500, 23 per URL; alt is measured without a maximum and not fitted until the `descriptionLimit` fact gives the instance's limit |
 | Telegram text and caption lengths | code points, though entity offsets are UTF-16. The Bot API gives "characters after entities parsing"; the MTProto config documents `caption_length_limit_*` and `story_caption_length_limit_*` as "UTF-8 length", which TDLib's `utf8_length` counts as characters, the unit it checks bot texts and captions and cuts reply quotes in |
 | `telegram-entities`, capabilities resolved | code points against the resolved maximum |
-| `facebook-plain` | 63 206 code points, the documented post limit |
+| `facebook-plain` | 63 206 code points, the post limit secondary sources give; Meta documents none |
+| `x-plain`, long posts | 280 weighted; the `maxCharacters` fact lifts it for accounts allowed longer posts (25 000 with X Premium) |
+| `mastodon-plain`, content warning | the `spoilerText` fact is not rendered; `StatusLengthValidator` counts it joined before the text, so it is measured with the text |
+| `instagram-plain` hashtags | 5: the app's cap since December 2025; the Graph API reference still says 30, so the `hashtagLimit` fact overrides it |
 
 VK and `slack-plain` text stay unlimited until a primary source documents a limit.
 

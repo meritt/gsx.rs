@@ -117,6 +117,8 @@ struct Setup {
     characters_reserved_per_url: Option<u32>,
     caption_limit: Option<u32>,
     description_limit: Option<u32>,
+    hashtag_limit: Option<u32>,
+    spoiler_text: Option<String>,
     entities_allowed: bool,
     maximum: Option<usize>,
 }
@@ -146,12 +148,17 @@ fn setup() -> impl Strategy<Value = Setup> {
     (
         (0..=MEDIA.len(), prop::option::of(0..KINDS.len()), 0..=IDS.len()),
         prop::collection::vec(item(), 0..=IDS.len()),
-        (prop::option::of("[a-zé🚀 ]{0,24}"), prop::option::of(target_url())),
+        (
+            prop::option::of("[a-zé🚀 ]{0,24}"),
+            prop::option::of(target_url()),
+            prop::option::of("[a-z🚀 ]{0,60}|https://example.com/cw"),
+        ),
         (
             prop::option::of(1..1000u32),
             prop::option::of(0..64u32),
             prop::option::of(1..2000u32),
             prop::option::of(0..2000u32),
+            prop::option::of(0..40u32),
         ),
         (
             any::<bool>(),
@@ -164,8 +171,8 @@ fn setup() -> impl Strategy<Value = Setup> {
             |(
                 (media, kind, media_count),
                 items,
-                (title, target_url),
-                (max_characters, characters_reserved_per_url, caption_limit, description_limit),
+                (title, target_url, spoiler_text),
+                (max_characters, characters_reserved_per_url, caption_limit, description_limit, hashtag_limit),
                 (entities_allowed, maximum, placement, listed),
             )| {
                 Setup {
@@ -181,6 +188,8 @@ fn setup() -> impl Strategy<Value = Setup> {
                     characters_reserved_per_url,
                     caption_limit,
                     description_limit,
+                    hashtag_limit,
+                    spoiler_text,
                     entities_allowed,
                     maximum,
                 }
@@ -280,6 +289,8 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
         characters_reserved_per_url: setup.characters_reserved_per_url,
         caption_limit: setup.caption_limit,
         description_limit: setup.description_limit,
+        hashtag_limit: setup.hashtag_limit,
+        spoiler_text: setup.spoiler_text.as_deref(),
         entities_allowed: setup.entities_allowed,
         items: setup.listed.then_some(&items[..]),
     };

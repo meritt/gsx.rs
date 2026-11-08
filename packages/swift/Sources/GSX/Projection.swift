@@ -67,6 +67,10 @@ public struct Facts: Sendable, Hashable {
     public var charactersReservedPerUrl: UInt32?
     public var captionLimit: UInt32?
     public var descriptionLimit: UInt32?
+    /// Instagram hashtags allowed in a caption; 5 without it.
+    public var hashtagLimit: UInt32?
+    /// Mastodon content warning: not rendered, but counted with the text against the status limit.
+    public var spoilerText: String?
     public var entitiesAllowed: Bool
     /// The media the caller publishes. A referenced id missing from a given list was dropped; without the list, attaching targets treat every id as attached.
     public var items: [MediaFact]?
@@ -81,6 +85,8 @@ public struct Facts: Sendable, Hashable {
         charactersReservedPerUrl: UInt32? = nil,
         captionLimit: UInt32? = nil,
         descriptionLimit: UInt32? = nil,
+        hashtagLimit: UInt32? = nil,
+        spoilerText: String? = nil,
         entitiesAllowed: Bool = false,
         items: [MediaFact]? = nil
     ) {
@@ -93,6 +99,8 @@ public struct Facts: Sendable, Hashable {
         self.charactersReservedPerUrl = charactersReservedPerUrl
         self.captionLimit = captionLimit
         self.descriptionLimit = descriptionLimit
+        self.hashtagLimit = hashtagLimit
+        self.spoilerText = spoilerText
         self.entitiesAllowed = entitiesAllowed
         self.items = items
     }

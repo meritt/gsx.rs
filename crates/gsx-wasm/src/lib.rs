@@ -65,6 +65,8 @@ pub fn project(
     characters_reserved_per_url: Option<u32>,
     caption_limit: Option<u32>,
     description_limit: Option<u32>,
+    hashtag_limit: Option<u32>,
+    spoiler_text: Option<String>,
     entities_allowed: bool,
     listed: bool,
     item_ids: Vec<String>,
@@ -113,6 +115,8 @@ pub fn project(
         characters_reserved_per_url,
         caption_limit,
         description_limit,
+        hashtag_limit,
+        spoiler_text: spoiler_text.as_deref(),
         entities_allowed,
         items: listed.then_some(&items[..]),
     };

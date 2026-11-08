@@ -137,6 +137,9 @@ pub struct Facts {
     pub entities_allowed: bool,
     pub items: *const MediaFact,
     pub items_len: usize,
+    pub hashtag_limit: i64,
+    pub spoiler_text: *const u8,
+    pub spoiler_text_len: usize,
 }
 
 impl Facts {
@@ -169,7 +172,7 @@ impl Facts {
 
     /// # Safety
     /// `title` is `NULL` or points to `title_len` bytes; `target_url` is `NULL` or points to
-    /// `target_url_len` bytes.
+    /// `target_url_len` bytes; `spoiler_text` is `NULL` or points to `spoiler_text_len` bytes.
     unsafe fn core<'a>(&'a self, items: Option<&'a [CoreMediaFact<'a>]>) -> Result<CoreFacts<'a>, String> {
         let limit = |value: i64, what: &str| match value {
             ..0 => Ok(None),
@@ -179,6 +182,8 @@ impl Facts {
         let title = unsafe { optional_string(self.title, self.title_len, "title") }?;
         // SAFETY: the caller promises `target_url` is NULL or points to `target_url_len` readable bytes.
         let target_url = unsafe { optional_string(self.target_url, self.target_url_len, "target_url") }?;
+        // SAFETY: the caller promises `spoiler_text` is NULL or points to `spoiler_text_len` readable bytes.
+        let spoiler_text = unsafe { optional_string(self.spoiler_text, self.spoiler_text_len, "spoiler_text") }?;
         Ok(CoreFacts {
             media: match self.media {
                 GSX_MEDIA_NONE => None,
@@ -202,6 +207,8 @@ impl Facts {
             characters_reserved_per_url: limit(self.characters_reserved_per_url, "characters_reserved_per_url")?,
             caption_limit: limit(self.caption_limit, "caption_limit")?,
             description_limit: limit(self.description_limit, "description_limit")?,
+            hashtag_limit: limit(self.hashtag_limit, "hashtag_limit")?,
+            spoiler_text,
             entities_allowed: self.entities_allowed,
             items,
         })
@@ -442,7 +449,7 @@ mod tests {
             project(text.as_bytes(), "x-plain", None).unwrap(),
             wire::project(text.as_bytes(), &[], x, &CoreFacts::default())
         );
-        let title = "Title";
+        let (title, spoiler) = ("Title", "Spoiler");
         let facts = Facts {
             media: GSX_MEDIA_VIDEO,
             media_count: 1,
@@ -458,6 +465,9 @@ mod tests {
             entities_allowed: true,
             items: ptr::null(),
             items_len: 0,
+            hashtag_limit: 3,
+            spoiler_text: spoiler.as_ptr(),
+            spoiler_text_len: spoiler.len(),
         };
         let core = CoreFacts {
             media: Some(MediaKind::Video),
@@ -465,6 +475,8 @@ mod tests {
             placement: Some(Placement::Story),
             title: Some(title),
             max_characters: Some(100),
+            hashtag_limit: Some(3),
+            spoiler_text: Some(spoiler),
             entities_allowed: true,
             ..CoreFacts::default()
         };

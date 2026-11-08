@@ -11,6 +11,8 @@ pub struct Facts<'a> {
     pub characters_reserved_per_url: Option<u32>,
     pub caption_limit: Option<u32>,
     pub description_limit: Option<u32>,
+    pub hashtag_limit: Option<u32>,
+    pub spoiler_text: Option<&'a str>,
     pub entities_allowed: bool,
     pub items: Option<&'a [MediaFact<'a>]>,
 }

@@ -60,6 +60,7 @@ pub enum Fact {
     CharactersReservedPerUrl,
     DescriptionLimit,
     CaptionLimit,
+    HashtagLimit,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

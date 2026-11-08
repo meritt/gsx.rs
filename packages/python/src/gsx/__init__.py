@@ -274,6 +274,10 @@ class Facts:
     target_url: Optional[str] = None
     description_limit: Optional[int] = None
     placement: Optional[str] = None
+    hashtag_limit: Optional[int] = None
+    """Instagram hashtags allowed in a caption; 5 without it."""
+    spoiler_text: Optional[str] = None
+    """Mastodon content warning: not rendered, but counted with the text against the status limit."""
 
 
 @dataclass(frozen=True)
@@ -396,6 +400,9 @@ class _Facts(ctypes.Structure):
         ("entities_allowed", ctypes.c_bool),
         ("items", ctypes.POINTER(_MediaFact)),
         ("items_len", ctypes.c_size_t),
+        ("hashtag_limit", ctypes.c_int64),
+        ("spoiler_text", ctypes.c_char_p),
+        ("spoiler_text_len", ctypes.c_size_t),
     ]
 
 
@@ -436,6 +443,7 @@ def _facts(facts: Facts) -> _Facts:
         raise ValueError("facts.media_count must be a non-negative int that fits size_t")
     title = None if facts.title is None else facts.title.encode("utf-8")
     target_url = None if facts.target_url is None else facts.target_url.encode("utf-8")
+    spoiler_text = None if facts.spoiler_text is None else facts.spoiler_text.encode("utf-8")
     listed = () if facts.items is None else tuple(facts.items)
     items = None if facts.items is None else (_MediaFact * len(listed))()
     for index, item in enumerate(listed):
@@ -461,6 +469,9 @@ def _facts(facts: Facts) -> _Facts:
         bool(facts.entities_allowed),
         items,
         len(listed),
+        _limit(facts.hashtag_limit, "facts.hashtag_limit"),
+        spoiler_text,
+        0 if spoiler_text is None else len(spoiler_text),
     )
 
 

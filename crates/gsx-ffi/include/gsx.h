@@ -67,6 +67,9 @@ typedef struct gsx_facts {
   bool entities_allowed;
   const struct gsx_media_fact *items;
   size_t items_len;
+  int64_t hashtag_limit;
+  const uint8_t *spoiler_text;
+  size_t spoiler_text_len;
 } gsx_facts;
 
 #ifdef __cplusplus

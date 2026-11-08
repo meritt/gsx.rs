@@ -95,6 +95,8 @@ fn targets(publication: Publication) {
         characters_reserved_per_url: Some(23),
         caption_limit: Some(2048),
         description_limit: Some(1500),
+        hashtag_limit: Some(30),
+        spoiler_text: Some("Spoilers"),
         entities_allowed: true,
         items: Some(&items),
     };

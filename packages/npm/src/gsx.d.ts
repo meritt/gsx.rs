@@ -125,6 +125,10 @@ export interface Facts {
   captionLimit?: number | null;
   /** Mastodon instance media description limit in code points; without it alt is not fitted. */
   descriptionLimit?: number | null;
+  /** Instagram hashtags allowed in a caption; 5 without it. */
+  hashtagLimit?: number | null;
+  /** Mastodon content warning: not rendered, but counted with the text against the status limit. */
+  spoilerText?: string | null;
   entitiesAllowed?: boolean;
   /** The media the caller publishes. A referenced id missing from a given list was dropped; without the list, attaching targets treat every id as attached. */
   items?: Iterable<MediaFact> | null;

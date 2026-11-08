@@ -14,6 +14,8 @@ FACTS = {
     "charactersReservedPerUrl": "characters_reserved_per_url",
     "captionLimit": "caption_limit",
     "descriptionLimit": "description_limit",
+    "hashtagLimit": "hashtag_limit",
+    "spoilerText": "spoiler_text",
     "entitiesAllowed": "entities_allowed",
 }
 

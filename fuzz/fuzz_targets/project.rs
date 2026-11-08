@@ -43,6 +43,8 @@ struct Input<'a> {
     characters_reserved_per_url: Option<u8>,
     caption_limit: Option<u16>,
     description_limit: Option<u16>,
+    hashtag_limit: Option<u8>,
+    spoiler_text: Option<&'a str>,
     entities_allowed: bool,
     maximum: Option<u8>,
     text: &'a str,
@@ -83,6 +85,8 @@ fuzz_target!(|input: Input| {
         characters_reserved_per_url: input.characters_reserved_per_url.map(u32::from),
         caption_limit: input.caption_limit.map(u32::from),
         description_limit: input.description_limit.map(u32::from),
+        hashtag_limit: input.hashtag_limit.map(u32::from),
+        spoiler_text: input.spoiler_text,
         entities_allowed: input.entities_allowed,
         items: input.listed.then_some(&items[..]),
     };
