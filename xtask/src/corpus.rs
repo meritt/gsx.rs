@@ -209,13 +209,16 @@ const PLACEMENTS: [&str; 3] = ["post", "reel", "story"];
 pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> Result {
     let mut sources = std::collections::HashMap::new();
     let mut with_media = Vec::new();
-    for file in inputs {
-        let file = file.as_ref();
+    let files = inputs.iter().map(|file| (file.as_ref(), false)).chain([(selection, true)]);
+    for (file, own) in files {
         let text = read(file)?;
         for line in text.lines().skip(1).filter(|line| !line.is_empty()) {
             let value = Parser { bytes: line.as_bytes(), at: 0 }
                 .value()
                 .ok_or_else(|| format!("{}: not JSON", file.display()))?;
+            if own && !matches!(value.get("markdown"), Json::String(_)) {
+                continue;
+            }
             let media: Vec<String> = value
                 .get("media")
                 .items()

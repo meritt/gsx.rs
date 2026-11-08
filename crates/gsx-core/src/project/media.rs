@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::document::{Kind, Layout, Node, Range};
 use crate::measure::{self, Fact, MediaKind, Placement};
@@ -111,7 +111,7 @@ pub(super) fn attach(target: &'static Target, facts: &Facts, children: &[Node]) 
     let ranges = references(children);
     for (index, fact) in facts.items.unwrap_or_default().iter().enumerate() {
         let alt = authored(fact).and_then(|alt| {
-            let range = ranges.get(fact.id).copied();
+            let range = ranges.get(fact.id).map(|&top| children[top].range);
             let fitted = fit_alt(target, alt, fact.format, range, &resolved, (None, index));
             attached.measurements.extend(fitted.measurements);
             attached.changes.extend(fitted.change);
@@ -126,8 +126,8 @@ pub fn placed(node: &Node) -> Option<Vec<&str>> {
     node.media_ids().map(|ids| ids.iter().map(String::as_str).collect())
 }
 
-pub fn references(nodes: &[Node]) -> HashMap<&str, Range> {
-    fn collect<'a>(node: &'a Node, top: Range, found: &mut HashMap<&'a str, Range>) {
+pub fn references(nodes: &[Node]) -> HashMap<&str, usize> {
+    fn collect<'a>(node: &'a Node, top: usize, found: &mut HashMap<&'a str, usize>) {
         match node.media_ids() {
             Some(ids) => {
                 for id in ids {
@@ -142,8 +142,8 @@ pub fn references(nodes: &[Node]) -> HashMap<&str, Range> {
         }
     }
     let mut found = HashMap::new();
-    for node in nodes {
-        collect(node, node.range, &mut found);
+    for (index, node) in nodes.iter().enumerate() {
+        collect(node, index, &mut found);
     }
     found
 }
@@ -164,14 +164,11 @@ fn kind(format: Format) -> Option<MediaKind> {
     }
 }
 
-type Reported = (&'static str, Option<Range>, &'static str, Option<(Option<u32>, u32)>);
-
 struct Layouter {
     target: &'static Target,
     form: &'static BlocksForm,
     resolved: Vec<(Fact, u32)>,
     laid: Laid,
-    seen: HashSet<Reported>,
 }
 
 impl Layouter {
@@ -181,9 +178,9 @@ impl Layouter {
 
     fn change_at(&mut self, field: FieldName, range: Option<Range>, when: When, slot: Option<Slot>) {
         let (class, reason) = self.target.rule(Feature::Media).outcome(Some(when));
-        let key = (field.name(), range, reason, slot.map(|slot| (slot.block, slot.item)));
-        if self.seen.insert(key) {
-            let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None, slot };
+        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None, slot };
+        let mut run = self.laid.changes.iter().rev().take_while(|reported| reported.range == range);
+        if !run.any(|reported| *reported == change) {
             self.laid.changes.push(change);
         }
     }
@@ -260,13 +257,11 @@ pub(super) fn layout(
         form,
         resolved: super::resolved(facts),
         laid: Laid { blocks: vec![], changes: vec![], measurements: vec![] },
-        seen: HashSet::new(),
     };
     let ranges = references(children);
     let indexes = positions(items);
-    let nodes: HashMap<u32, &Node> = children.iter().map(|node| (node.range.start, node)).collect();
     for fact in items.iter().skip(maximum) {
-        layouter.change(FieldName::Text, ranges.get(fact.id).copied(), When::Count);
+        layouter.change(FieldName::Text, ranges.get(fact.id).map(|&top| children[top].range), When::Count);
     }
     for node in children {
         if placed(node).is_some_and(|ids| ids.iter().any(|id| !indexes.contains_key(id))) {
@@ -277,8 +272,11 @@ pub(super) fn layout(
     for anchor in anchors {
         layouter.text(&text[cursor..anchor.at]);
         cursor = anchor.at;
-        let Some(node) = anchor.node.and_then(|range| nodes.get(&range.start).filter(|node| node.range == range))
-        else {
+        let found = anchor.node.and_then(|range| {
+            let at = children.binary_search_by_key(&range.start, |node| node.range.start).ok()?;
+            Some(&children[at]).filter(|node| node.range == range)
+        });
+        let Some(node) = found else {
             let unplaced: Vec<_> = items.iter().take(maximum).filter(|fact| !ranges.contains_key(fact.id)).collect();
             for fact in unplaced {
                 layouter.media(&[fact], None, false);

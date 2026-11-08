@@ -414,7 +414,8 @@ impl Html {
         if self.media.len() > self.limit() {
             let ranges = references(nodes);
             for medium in self.media.iter().skip(self.limit()) {
-                context.report_when(Feature::Media, ranges.get(medium.id.as_str()).copied(), Some(When::Count));
+                let range = ranges.get(medium.id.as_str()).map(|&top| nodes[top].range);
+                context.report_when(Feature::Media, range, Some(When::Count));
             }
         }
     }
