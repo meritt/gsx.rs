@@ -105,7 +105,7 @@ impl Media {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Source {
     Body,
-    Title { fact: bool, first_line_removed: bool },
+    Title { fact: bool },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -706,10 +706,10 @@ pub fn project(document: &Document, target: &'static Target, facts: &Facts) -> P
 pub fn project_with(document: &Document, target: &'static Target, facts: &Facts, options: &Options) -> Projection {
     let children = document.children();
     let title = target.fields(facts).find_map(|spec| match spec.source {
-        Source::Title { fact, first_line_removed } => Some((fact, first_line_removed)),
+        Source::Title { fact } => Some(fact),
         Source::Body => None,
     });
-    let explicit = title.and_then(|(fact, _)| if fact { facts.title } else { None });
+    let explicit = title.and_then(|fact| if fact { facts.title } else { None });
     let leading = children
         .first()
         .filter(|node| title.is_some() && explicit.is_none() && matches!(node.kind, Kind::Heading { .. }));
@@ -725,7 +725,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         rendered
     };
     let titled = leading.filter(|heading| !draw_heading(heading, FieldName::Title, None).text.is_empty());
-    let removable = title.is_some_and(|(_, removed)| removed) && titled.is_none() && explicit.is_none();
+    let removable = title.is_some() && titled.is_none() && explicit.is_none();
     let removed = removable
         && target.fields(facts).find(|spec| matches!(spec.source, Source::Title { .. })).is_some_and(|spec| {
             let request = Request { target, spec, facts, options };

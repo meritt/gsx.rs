@@ -16,6 +16,8 @@ pub(super) const fn field(name: FieldName, media: Media, source: Source, require
 
 const TITLE_SOURCE: &[Condition] =
     &[Condition { when: When::TitleSource, class: Approximated, reason: "heading_became_title" }];
+const FIRST_LINE: Condition =
+    Condition { when: When::TitleSource, class: Approximated, reason: "first_line_became_title" };
 
 macro_rules! plain {
     ($heading:expr $(, $extra:expr)* $(,)?) => {
@@ -128,12 +130,12 @@ pub static YOUTUBE: Target = text(
             feature: Feature::Title,
             class: Blocked,
             reason: "title_too_long",
-            conditions: &[Condition { when: When::Empty, class: Blocked, reason: "title_empty" }],
+            conditions: &[Condition { when: When::Empty, class: Blocked, reason: "title_empty" }, FIRST_LINE],
         },
         rule(Feature::Hashtag, Approximated, "hashtag_limit_exceeded"),
     ),
     &[
-        field(FieldName::Title, Media::Any, Source::Title { fact: true, first_line_removed: false }, true),
+        field(FieldName::Title, Media::Any, Source::Title { fact: true }, true),
         field(FieldName::Description, Media::Any, Source::Body, false),
     ],
     &[limit(Title, CodePoints, 100), limit(Description, Utf8Bytes, 5000), limit(Description, Hashtags, 60)],
@@ -144,19 +146,10 @@ pub static TIKTOK: Target = text(
     "tiktok-plain",
     plain!(
         TITLE_SOURCE,
-        Rule {
-            feature: Feature::Title,
-            class: Approximated,
-            reason: "title_truncated",
-            conditions: &[Condition {
-                when: When::TitleSource,
-                class: Approximated,
-                reason: "first_line_became_title"
-            }],
-        },
+        Rule { feature: Feature::Title, class: Approximated, reason: "title_truncated", conditions: &[FIRST_LINE] },
     ),
     &[
-        field(FieldName::Title, Media::Image, Source::Title { fact: false, first_line_removed: true }, false),
+        field(FieldName::Title, Media::Image, Source::Title { fact: false }, false),
         field(FieldName::Text, Media::Any, Source::Body, false),
     ],
     &[
