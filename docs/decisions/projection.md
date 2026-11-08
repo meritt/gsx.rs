@@ -74,3 +74,13 @@ Generated ellipsis, cut position and the gap before a block are node fields. A t
 - Per field, a lower bound from the retained segments, then a monotone search: a gallop from the point the overflow ratio predicts (upper bound × maximum / measured value), a binary search, and a rescan of up to 64 units.
 - A later cut measures less than an earlier one only when the earlier cut sits inside an inline container (link, datetime, styled span render differently when cut) or keeps a partial word (ellipsis back-off depends on closing punctuation; X and Mastodon weigh completed URLs and mentions differently). Above such cuts lengths only grow, so the rescan stops at the first clean cut above the boundary and scans the whole window only when that cut fits.
 - Every target uses the monotone search: O(log n) renders of the document plus at most 64 rescan probes. `tests/fit.rs` checks it against exhaustive search for every target on the corpus and generated inputs.
+
+## Threads
+
+The `overflow` fact chooses what a body that does not fit becomes: `truncate`, the default, fits it as above; `thread` splits it into a thread of posts on a target that publishes threads (`x-plain`, `bluesky-entities`, `threads-entities`, `mastodon-plain`). Other targets ignore the fact, and a thread is never implied.
+
+- The body is rendered whole and split greedily: each part is the longest rest of it that fits every text limit and ends at a paragraph break, else at a sentence end, else after a word, else at a grapheme boundary. A cut never falls inside a link, a link facet or a URL; the whitespace at the cut is dropped. Parts carry no numbering.
+- Links, entities and measurements belong to the part that holds them; a styled range across a cut is split in two.
+- A media directive goes with the part that holds its position; listed items no directive references go with the first part. A target URL goes with the first part.
+- `parts` lists every part as `{fields, measurements, media, items}` in order; the top-level `fields`, `measurements`, `media` and `items` are the first part's. A body that fits yields no `parts`.
+- The split is one `approximated` `text_threaded` change; rendering changes are reported once, at their source range.

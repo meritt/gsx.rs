@@ -180,7 +180,7 @@ public enum Unit: String, Sendable, Hashable, Decodable {
     case xWeighted = "x-weighted"
     case mastodonWeighted = "mastodon-weighted"
     case threadsWeighted = "threads-weighted"
-    case hashtags, mentions
+    case hashtags, mentions, links
 }
 
 public struct Measurement: Sendable, Hashable, Decodable {
