@@ -46,6 +46,7 @@ pub struct Styled {
     pub value: Option<String>,
     pub span: Span<usize>,
     pub source: Option<(Feature, Range)>,
+    pub decoration: bool,
 }
 
 #[derive(Debug, Default)]
@@ -237,7 +238,12 @@ impl Writer {
 
     pub fn style(&mut self, style: Style, value: Option<String>, mark: usize, source: Option<(Feature, Range)>) {
         let span = mark..self.out.text.len();
-        self.out.styled.push(Styled { style, value, span, source });
+        self.out.styled.push(Styled { style, value, span, source, decoration: false });
+    }
+
+    pub fn decorate(&mut self, style: Style, mark: usize) {
+        let span = mark..self.out.text.len();
+        self.out.styled.push(Styled { style, value: None, span, source: None, decoration: true });
     }
 
     pub fn eligible(&mut self, span: Span<usize>) {

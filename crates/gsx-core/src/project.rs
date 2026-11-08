@@ -157,12 +157,16 @@ impl<'a> Context<'a> {
         draw: impl FnOnce(&mut Self),
     ) {
         let mark = self.writer.mark();
-        self.open.push(style);
-        draw(self);
-        self.open.pop();
+        self.within(style, draw);
         if !self.open.contains(&style) {
             self.writer.style(style, value, mark, Some((feature, node.range)));
         }
+    }
+
+    pub fn within(&mut self, style: Style, draw: impl FnOnce(&mut Self)) {
+        self.open.push(style);
+        draw(self);
+        self.open.pop();
     }
 
     pub fn inside(&self, style: Style) -> bool {

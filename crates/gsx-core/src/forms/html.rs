@@ -1,4 +1,4 @@
-use super::{media, wrapper};
+use super::{media, underlined, wrapper};
 use crate::document::{Align, Kind, Layout, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
@@ -81,13 +81,17 @@ pub(super) fn escape(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
-fn formatting(nodes: &[Node]) -> usize {
+fn formatting(nodes: &[Node], decorated: bool) -> usize {
     nodes
         .iter()
         .map(|node| match node.kind {
             Kind::InlineCode { .. } => 1,
-            Kind::Link { .. } | Kind::Datetime { .. } => 1 + formatting(&node.children),
-            ref kind if wrapper(kind).is_some() => 1 + formatting(&node.children),
+            Kind::Link { .. } => {
+                1 + usize::from(decorated && !underlined(&node.children)) + formatting(&node.children, decorated)
+            }
+            Kind::Underline => 1 + formatting(&node.children, false),
+            Kind::Datetime { .. } => 1 + formatting(&node.children, decorated),
+            ref kind if wrapper(kind).is_some() => 1 + formatting(&node.children, decorated),
             _ => 0,
         })
         .max()
@@ -340,11 +344,26 @@ impl Html {
             context.report_when(feature, Some(node.range), Some(When::Nested));
             return self.inline(context, &node.children);
         }
+        let underline = self.form.tag(Feature::Underline).filter(|_| {
+            feature == Feature::Link
+                && !self.open.iter().any(|element| element.feature == Some(Feature::Underline))
+                && !underlined(&node.children)
+        });
+        if let Some(tag) = underline {
+            let start = format!("<{tag}>");
+            context.writer().raw(&start);
+            let end = format!("</{tag}>");
+            self.open.push(Element { start, end, feature: None, range: node.range, exclusive: false });
+        }
         let name = start[1..].split([' ', '>']).next().unwrap_or("");
         let end = format!("</{name}>");
         let element = Element { start, end, feature: Some(feature), range: node.range, exclusive };
         if !self.wrapped(context, element, &node.children) && feature == Feature::Link {
             context.report_when(feature, Some(node.range), Some(When::LabelInvisible));
+        }
+        if underline.is_some() {
+            let element = self.open.pop().expect("the underline pushed above");
+            context.writer().raw(&element.end);
         }
     }
 
@@ -634,7 +653,8 @@ impl Html {
             }
             if prose {
                 let heading = matches!(node.kind, Kind::Heading { .. });
-                let depth = level + usize::from(heading) + formatting(&node.children);
+                let decorated = self.form.tag(Feature::Underline).is_some();
+                let depth = level + usize::from(heading) + formatting(&node.children, decorated);
                 if paragraph {
                     self.deepen(context, node.range, depth);
                 } else {
@@ -714,7 +734,9 @@ impl Html {
                     if context.done() {
                         break;
                     }
-                    let formatted = row.children.iter().map(|cell| formatting(&cell.children)).max().unwrap_or(0);
+                    let decorated = self.form.tag(Feature::Underline).is_some();
+                    let formatted =
+                        row.children.iter().map(|cell| formatting(&cell.children, decorated)).max().unwrap_or(0);
                     self.count(context, row.range, level + 1 + formatted);
                     if let Some(limits) = self.form.structure
                         && row.children.len() > limits.columns

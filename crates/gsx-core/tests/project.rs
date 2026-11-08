@@ -273,6 +273,41 @@ fn bluesky_facets_use_byte_offsets_and_skip_literals() {
 }
 
 #[test]
+fn links_are_underlined_where_underline_is_native() {
+    let facts = Facts::default();
+    let link = "[docs](https://example.com)";
+    assert_eq!(
+        text(&run("telegram-html", link, &facts), FieldName::Text),
+        "<u><a href=\"https://example.com/\">docs</a></u>"
+    );
+    assert_eq!(text(&run("discord-markdown", link, &facts), FieldName::Text), "__[docs](https://example.com/)__");
+    assert_eq!(text(&run("slack-markdown", link, &facts), FieldName::Text), "[docs](https://example.com/)");
+    let outer = run("telegram-html", "++see [docs](https://example.com)++", &facts);
+    assert_eq!(text(&outer, FieldName::Text), "<u>see <a href=\"https://example.com/\">docs</a></u>");
+    let inner = run("discord-markdown", "[++docs++](https://example.com)", &facts);
+    assert_eq!(text(&inner, FieldName::Text), "[__docs__](https://example.com/)");
+    let allowed = Facts { entities_allowed: true, ..Facts::default() };
+    let projection = run("telegram-entities", link, &allowed);
+    assert_eq!(
+        entities(&projection),
+        [(Style::Underline, 0, 4, None), (Style::Link, 0, 4, Some("https://example.com/"))]
+    );
+    assert_eq!(reasons(&projection), []);
+}
+
+#[test]
+fn entity_cap_drops_link_underlines_first() {
+    let links = (0..60).map(|index| format!("[l{index}](https://example.com/{index})")).collect::<Vec<_>>();
+    let markdown = format!("{} **end**", links.join(" "));
+    let facts = Facts { entities_allowed: true, caption_limit: Some(1024), ..Facts::default() };
+    let projection = run("telegram-entities", &markdown, &facts);
+    let found = entities(&projection);
+    let count = |style: Style| found.iter().filter(|entity| entity.0 == style).count();
+    assert_eq!((found.len(), count(Style::Link), count(Style::Bold), count(Style::Underline)), (100, 60, 1, 39));
+    assert_eq!(reasons(&projection), []);
+}
+
+#[test]
 fn threads_spoilers_skip_prefixes_and_ellipsis() {
     let projection = run("threads-entities", "> ||один\nдва|| три", &Facts::default());
     assert_eq!(text(&projection, FieldName::Text), "› один\n› два три");

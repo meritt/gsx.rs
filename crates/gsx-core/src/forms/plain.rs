@@ -1,4 +1,4 @@
-use super::{media, wrapper};
+use super::{media, underlined, wrapper};
 use crate::document::{Kind, Node};
 use crate::project::links::{self, bluesky::visible};
 use crate::project::{CELL, Class, Context, DATE_LABEL, Feature, QUOTE, RULE, Renderer, Style, When, href, marker};
@@ -168,6 +168,12 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                     context.within_link(|context| inline(context, &node.children));
                     match context.native(Feature::Link) {
                         Some(style) if visible(context.writer().since(mark)) => {
+                            if let Some(underline) = context.native(Feature::Underline)
+                                && !context.inside(Style::Underline)
+                                && !underlined(&node.children)
+                            {
+                                context.writer().decorate(underline, mark);
+                            }
                             context.writer().style(style, Some(href), mark, Some((Feature::Link, node.range)));
                         }
                         Some(_) => context.report_when(Feature::Link, Some(node.range), Some(When::LabelInvisible)),

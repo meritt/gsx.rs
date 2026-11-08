@@ -1,7 +1,9 @@
-use super::{media, wrapper};
+use super::{media, underlined, wrapper};
 use crate::document::{Align, Kind, Node, Provenance};
 use crate::project::links::accepted;
-use crate::project::{CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, RULE, Renderer, When, href};
+use crate::project::{
+    CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, RULE, Renderer, Style, When, href,
+};
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
 
@@ -217,14 +219,24 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                         continue;
                     }
                 }
+                let underline = form
+                    .delimiter(Feature::Underline)
+                    .filter(|_| !context.inside(Style::Underline) && !underlined(&node.children))
+                    .unwrap_or_default();
                 context.writer().source(node.range);
-                context.writer().push("[");
+                context.writer().push(&format!("{underline}["));
                 inline_at(context, &node.children, cell);
                 context.writer().source(node.range);
-                context.writer().push(&format!("]({})", raw(destination(&href), cell)));
+                context.writer().push(&format!("]({}){underline}", raw(destination(&href), cell)));
             }
             Kind::Datetime { unix, .. } => datetime(context, node, *unix, cell),
             kind => match wrapper(kind) {
+                Some(Feature::Underline) if let Some(delimiter) = form.delimiter(Feature::Underline) => {
+                    context.writer().source(node.range);
+                    context.writer().push(delimiter);
+                    context.within(Style::Underline, |context| inline_at(context, &node.children, cell));
+                    context.writer().push(delimiter);
+                }
                 Some(feature) if let Some(delimiter) = form.delimiter(feature) => {
                     context.writer().source(node.range);
                     context.writer().push(delimiter);

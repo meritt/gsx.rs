@@ -65,7 +65,7 @@ fn detected(written: &Written, out: &mut Vec<Styled>) {
             Autolink::Tag { tag, .. } => (Style::Tag, tag),
             Autolink::Mention { handle, .. } => (Style::Mention, handle),
         };
-        out.push(Styled { style, value: Some(value), span: range, source: None });
+        out.push(Styled { style, value: Some(value), span: range, source: None, decoration: false });
     }
 }
 
@@ -127,6 +127,15 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
     }
     styled.sort_by_key(|entity| (entity.span.start, std::cmp::Reverse(entity.span.end)));
     let mut capped = vec![];
+    if let Some(cap) = form.cap {
+        let decorations = styled.iter().filter(|entity| entity.decoration).count();
+        let mut kept = decorations - styled.len().saturating_sub(cap).min(decorations);
+        styled.retain(|entity| {
+            let keep = !entity.decoration || kept > 0;
+            kept -= usize::from(entity.decoration && keep);
+            keep
+        });
+    }
     if let Some(cap) = form.cap
         && styled.len() > cap
     {
