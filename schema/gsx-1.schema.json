@@ -161,7 +161,8 @@
             "tag",
             "pre",
             "blockquote",
-            "date"
+            "date",
+            "mention"
           ]
         },
         "range": {
@@ -169,7 +170,7 @@
           "$ref": "#/$defs/range"
         },
         "value": {
-          "description": "The URL of a link, the tag of a tag, the language of a pre, the UNIX time of a date in decimal; null otherwise.",
+          "description": "The URL of a link, the tag of a tag, the handle of a mention (to resolve to a DID), the language of a pre, the UNIX time of a date in decimal; null otherwise.",
           "$ref": "#/$defs/nullableString"
         }
       },

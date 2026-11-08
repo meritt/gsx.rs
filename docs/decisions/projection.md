@@ -74,6 +74,8 @@ All forms share block layout: one list-marker set, continuation lines indented b
 
 The LinkedIn reserved set is escaped with a backslash except `#` at the start or after whitespace and before a letter, digit or `_`: Little Text Format reads that as a hashtag, which the author wrote.
 
+`bluesky-entities` finds facets in authored text as the atproto `RichText.detectFacets` does: links, tags, and mentions. A mention is `@` at the start, after whitespace or after `(`, followed by a handle of ASCII letters, digits, `.` and `-` up to a word boundary. A facet needs the account's DID, which only the network knows, so the `mention` range carries the handle and the caller resolves it, dropping the range when resolution fails, as `detectFacets` does. Where atproto keeps a candidate whose last label is a known TLD, gsx checks the handle syntax (labels of 1 to 63 characters without a leading or trailing `-`, at least two, the last starting with a letter, 253 characters in all) and leaves the rest to that resolution, which spares the TLD list.
+
 On Discord, whose markdown has no rule:
 
 - A thematic break is `———`, the rule every text form writes (`textual_fallback` `thematic_break_as_text`). On `discord-blocks` a top-level break is a `separator` block, a Components V2 Separator, and no change; one after the cut is dropped.

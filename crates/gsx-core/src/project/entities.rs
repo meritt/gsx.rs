@@ -63,6 +63,7 @@ fn detected(written: &Written, out: &mut Vec<Styled>) {
         let (style, value) = match autolink {
             Autolink::Link { uri, .. } => (Style::Link, uri),
             Autolink::Tag { tag, .. } => (Style::Tag, tag),
+            Autolink::Mention { handle, .. } => (Style::Mention, handle),
         };
         out.push(Styled { style, value: Some(value), span: range, source: None });
     }

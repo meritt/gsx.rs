@@ -191,7 +191,7 @@ public struct Field: Sendable, Hashable, Decodable {
 }
 
 public enum Style: String, Sendable, Hashable, Decodable {
-    case bold, italic, underline, strikethrough, spoiler, code, link, tag, pre, blockquote, date
+    case bold, italic, underline, strikethrough, spoiler, code, link, tag, pre, blockquote, date, mention
 }
 
 public struct Entity: Sendable, Hashable, Decodable {

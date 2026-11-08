@@ -157,6 +157,7 @@ pub enum Style {
     Pre,
     Blockquote,
     Date,
+    Mention,
 }
 
 pub const DATE_LABEL: usize = 127;
@@ -175,6 +176,7 @@ impl Style {
             Style::Pre => "pre",
             Style::Blockquote => "blockquote",
             Style::Date => "date",
+            Style::Mention => "mention",
         }
     }
 }

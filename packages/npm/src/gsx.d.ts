@@ -158,7 +158,8 @@ export type Style =
   | 'tag'
   | 'pre'
   | 'blockquote'
-  | 'date';
+  | 'date'
+  | 'mention';
 
 export type Unit =
   | 'graphemes'

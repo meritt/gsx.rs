@@ -11,12 +11,13 @@ const MAX_TAG_LENGTH: usize = 64;
 pub enum Autolink {
     Link { range: Range<usize>, uri: String },
     Tag { range: Range<usize>, tag: String },
+    Mention { range: Range<usize>, handle: String },
 }
 
 impl Autolink {
     pub fn range(&self) -> &Range<usize> {
         match self {
-            Autolink::Link { range, .. } | Autolink::Tag { range, .. } => range,
+            Autolink::Link { range, .. } | Autolink::Tag { range, .. } | Autolink::Mention { range, .. } => range,
         }
     }
 }
@@ -128,10 +129,51 @@ fn tags(text: &str, links: &[Autolink]) -> Vec<Autolink> {
     found
 }
 
+fn handle(value: &str) -> bool {
+    let label = |label: &str| {
+        (1..=63).contains(&label.len())
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    };
+    let mut labels = value.split('.');
+    let last = labels.next_back().filter(|last| last.starts_with(|char: char| char.is_ascii_alphabetic()));
+    value.len() <= 253 && value.contains('.') && last.is_some_and(label) && labels.all(label)
+}
+
+fn mentions(text: &str, links: &[Autolink]) -> Vec<Autolink> {
+    let bytes = text.as_bytes();
+    let word = |at: usize| bytes.get(at).is_some_and(|&byte| byte.is_ascii_alphanumeric() || byte == b'_');
+    let mut found = vec![];
+    for (at, _) in text.match_indices('@') {
+        if text[..at].chars().next_back().is_some_and(|char| !space(char) && char != '(') {
+            continue;
+        }
+        let body = at + 1;
+        let run = text[body..]
+            .find(|char: char| !(char.is_ascii_alphanumeric() || matches!(char, '.' | '-')))
+            .map_or(text.len(), |end| body + end);
+        let mut end = run;
+        while end > body && word(end - 1) == word(end) {
+            end -= 1;
+        }
+        let range = at..end;
+        if end == body
+            || !handle(&text[body..end])
+            || links.iter().any(|link| link.range().start < range.end && range.start < link.range().end)
+        {
+            continue;
+        }
+        found.push(Autolink::Mention { handle: text[body..end].to_owned(), range });
+    }
+    found
+}
+
 pub fn autolinks(text: &str) -> Vec<Autolink> {
     let links = links(text);
     let tags = tags(text, &links);
-    let mut all: Vec<Autolink> = links.into_iter().chain(tags).collect();
+    let mentions = mentions(text, &links);
+    let mut all: Vec<Autolink> = links.into_iter().chain(tags).chain(mentions).collect();
     all.sort_by_key(|item| item.range().start);
     all
 }
