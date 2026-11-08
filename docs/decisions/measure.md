@@ -51,6 +51,7 @@ Every `Target` declares its `limits` beside its rules and form in `crates/gsx-co
 | | text | hashtags; mentions | 30; 20 |
 | `vk-plain` | text; title (video name); alt (video); alt (image) | code points | none; 128; 5000; 2048 |
 | `youtube-plain` | title; description | code points; utf8 | 100; 5000 |
+| | description | hashtags | 60 |
 | `tiktok-plain` | text (video); text (photo post); title (photo post) | utf16 | 2200; 4000; 90 |
 
 Not measured here: Telegram rich structure limits (blocks, nesting, media, table columns), hashtag, mention and media counts, NFC normalization before X counting, URL and mention detection.

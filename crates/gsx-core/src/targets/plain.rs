@@ -119,12 +119,13 @@ pub static YOUTUBE: Target = text(
             reason: "title_too_long",
             conditions: &[Condition { when: When::Empty, class: Blocked, reason: "title_empty" }],
         },
+        rule(Feature::Hashtag, Approximated, "hashtag_limit_exceeded"),
     ),
     &[
         field(FieldName::Title, Media::Any, Source::Title { fact: true, first_line_removed: false }, true),
         field(FieldName::Description, Media::Any, Source::Body, false),
     ],
-    &[limit(Title, CodePoints, 100), limit(Description, Utf8Bytes, 5000)],
+    &[limit(Title, CodePoints, 100), limit(Description, Utf8Bytes, 5000), limit(Description, Hashtags, 60)],
 );
 
 pub static TIKTOK: Target = text(
