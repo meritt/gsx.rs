@@ -59,12 +59,17 @@ import Testing
 }
 
 @Test func laysOutBlocksWithMediaFacts() throws {
-    let facts = Facts(media: .image, mediaCount: 1, items: [MediaFact(id: "p", format: .gif, alt: "A cat", spoiler: true)])
+    let gif = MediaFact(id: "p", format: .gif, alt: "A cat", spoiler: true, inline: true)
+    let facts = Facts(media: .image, mediaCount: 1, items: [gif])
     let blocks = try GSX.project("a\n\n::media{id=\"p\"}", target: "discord-blocks", facts: facts, media: [Media(id: "p")])
     let laid = try #require(blocks.blocks)
     #expect(laid.first == .text("a\n\n"))
     guard case .media(let items, let layout) = laid.last else { Issue.record("no media block in \(laid)"); return }
     #expect(items.map(\.reference) == ["media:p"] && items.first?.spoiler == true && layout == nil)
+    let audio = Facts(media: .audio, mediaCount: 1, items: [MediaFact(id: "s", format: .audio, inline: true)])
+    let filed = try GSX.project("::media{id=\"s\"}", target: "discord-blocks", facts: audio, media: [Media(id: "s")])
+    guard case .file(let file) = filed.blocks?.first else { Issue.record("no file block in \(String(describing: filed.blocks))"); return }
+    #expect(file.reference == "media:s" && file.alt == nil)
     #expect(try GSX.project("a", target: "x-plain").blocks == nil)
     #expect(GSX.targets.contains { $0.name == "discord-blocks" && $0.form == .blocks })
 }
