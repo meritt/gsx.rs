@@ -70,6 +70,10 @@ const photo = [{ id: 'p', format: 'image', alt: 'A long description' }];
 gsx.project('Photo\n\n::media{id="p"}', 'mastodon-plain', { descriptionLimit: 8, items: photo }, [{ id: 'p' }]).items;
 // [{ reference: 'media:p', alt: 'A long…' }]; changes: media_attached, media_alt_truncated
 
+const long = Array.from({ length: 6 }, (_, n) => `Paragraph ${n} has a few words in it, enough to fill a post.`).join('\n\n');
+gsx.project(long, 'bluesky-entities', { overflow: 'thread' }).parts.length;
+// 2: paragraphs 0–4, then paragraph 5; changes: text_threaded
+
 gsx.parse('a\u0000'); // throws ParseError { code: 'MARKDOWN_INVALID_TEXT', range: [1, 2] }
 ```
 
@@ -100,7 +104,7 @@ gsx.serialize("#  Release\n\n__gsx__ ships [today](https://example.com).")
 gsx.parse("a\x00")  # raises gsx.ParseError: MARKDOWN_INVALID_TEXT, Range(start=1, end=2)
 ```
 
-Every binding also returns the raw JSON (`parseJSON`, `parse_json`, …) described by [`schema/gsx-1.schema.json`](schema/gsx-1.schema.json). A change carries one of five classes: `approximated`, `textual_fallback`, `unwrapped`, `omitted`, `blocked`. `targets()` lists every target with its manifest and digest.
+Every binding also returns the raw JSON (`parseJSON`, `parse_json`, …) described by [`schema/gsx-1.schema.json`](schema/gsx-1.schema.json). A change carries one of five classes: `approximated`, `textual_fallback`, `unwrapped`, `omitted`, `blocked`. `targets()` lists every target with its manifest, digest, the codes its `blocked` changes can carry and whether it splits threads.
 
 ## Performance
 
