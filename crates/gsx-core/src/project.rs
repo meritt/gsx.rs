@@ -22,7 +22,7 @@ pub use entities::Entity;
 pub use facts::{Facts, Format, MediaFact, Overflow};
 pub use fit::WINDOW;
 pub(crate) use layout::blank;
-pub use layout::{CELL, ELLIPSIS, RULE, Writer, marker, single_line};
+pub use layout::{CELL, ELLIPSIS, QUOTE, RULE, Writer, marker, single_line};
 pub use links::href;
 pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{

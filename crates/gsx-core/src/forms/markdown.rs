@@ -5,6 +5,8 @@ use crate::project::{CELL, Class, Context, Feature, LineStart, MarkdownForm, Pie
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
 
+const QUOTE: &str = "> ";
+
 fn form(context: &Context) -> &'static MarkdownForm {
     context.target.form.markdown().expect("a markdown renderer runs on a markdown form")
 }
@@ -78,7 +80,7 @@ pub(crate) fn block(context: &mut Context, node: &Node, depth: u32) {
                 blocks_at(context, &node.children, depth + 1);
             } else {
                 context.writer().source(node.range);
-                context.writer().open_quote();
+                context.writer().open_quote(QUOTE);
                 blocks_at(context, &node.children, depth + 1);
                 context.writer().close();
             }

@@ -9,7 +9,7 @@ pub const BULLET: &str = "– ";
 pub const CHECKED: &str = "☑ ";
 pub const UNCHECKED: &str = "☐ ";
 pub const RULE: &str = "———";
-pub const QUOTE: &str = "> ";
+pub const QUOTE: &str = "› ";
 pub const CELL: &str = " | ";
 pub const ELLIPSIS: &str = "…";
 
@@ -30,13 +30,13 @@ pub fn marker(ordered: bool, start: Option<u32>, index: usize, checked: Option<b
 
 #[derive(Debug)]
 enum Prefix {
-    Quote { pending: bool },
+    Quote { pending: bool, mark: &'static str },
     Item { width: usize, marker: Option<String> },
 }
 
 impl Prefix {
     fn pending(&self) -> bool {
-        matches!(self, Prefix::Quote { pending: true } | Prefix::Item { marker: Some(_), .. })
+        matches!(self, Prefix::Quote { pending: true, .. } | Prefix::Item { marker: Some(_), .. })
     }
 }
 
@@ -192,8 +192,8 @@ impl Writer {
         self.out.links.push(start..self.out.text.len());
     }
 
-    pub fn open_quote(&mut self) {
-        self.prefixes.push(Prefix::Quote { pending: true });
+    pub fn open_quote(&mut self, mark: &'static str) {
+        self.prefixes.push(Prefix::Quote { pending: true, mark });
     }
 
     pub fn open_item(&mut self, marker: String) {
@@ -281,9 +281,9 @@ impl Writer {
         let mut prefixes = std::mem::take(&mut self.prefixes);
         for prefix in &mut prefixes[range] {
             match prefix {
-                Prefix::Quote { pending } => {
+                Prefix::Quote { pending, mark } => {
                     *pending = false;
-                    QUOTE.chars().for_each(|char| self.put(char));
+                    mark.chars().for_each(|char| self.put(char));
                 }
                 Prefix::Item { marker: marker @ Some(_), .. } => {
                     marker.take().unwrap().chars().for_each(|char| self.put(char));

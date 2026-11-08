@@ -1,7 +1,7 @@
 use super::{media, wrapper};
 use crate::document::{Kind, Node};
 use crate::project::links::{self, bluesky::visible};
-use crate::project::{CELL, Class, Context, DATE_LABEL, Feature, RULE, Renderer, Style, When, href, marker};
+use crate::project::{CELL, Class, Context, DATE_LABEL, Feature, QUOTE, RULE, Renderer, Style, When, href, marker};
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
 
@@ -69,7 +69,7 @@ fn block(context: &mut Context, node: &Node) {
             None => {
                 context.report(Feature::Blockquote, node.range);
                 context.writer().source(node.range);
-                context.writer().open_quote();
+                context.writer().open_quote(QUOTE);
                 blocks(context, &node.children);
                 context.writer().close();
             }

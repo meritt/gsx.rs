@@ -233,7 +233,7 @@ fn list_item_continuation_is_indented() {
 #[test]
 fn quote_prefixes_every_line() {
     let projection = run("facebook-plain", "> one\n>\n> two", &Facts::default());
-    assert_eq!(text(&projection, FieldName::Text), "> one\n> \n> two");
+    assert_eq!(text(&projection, FieldName::Text), "› one\n› \n› two");
 }
 
 #[test]
@@ -275,7 +275,7 @@ fn bluesky_facets_use_byte_offsets_and_skip_literals() {
 #[test]
 fn threads_spoilers_skip_prefixes_and_ellipsis() {
     let projection = run("threads-entities", "> ||один\nдва|| три", &Facts::default());
-    assert_eq!(text(&projection, FieldName::Text), "> один\n> два три");
+    assert_eq!(text(&projection, FieldName::Text), "› один\n› два три");
     assert_eq!(entities(&projection), [(Style::Spoiler, 2, 7, None), (Style::Spoiler, 9, 12, None)]);
     let document = parse("||secret words here||", &[]).unwrap();
     let options = Options { search: None, maximum: Some(10) };
