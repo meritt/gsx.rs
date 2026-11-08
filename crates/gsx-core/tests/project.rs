@@ -202,7 +202,7 @@ fn placement_selects_limits() {
 #[test]
 fn list_item_continuation_is_indented() {
     let projection = run("facebook-plain", "- one\n\n  more\n- two", &Facts::default());
-    assert_eq!(text(&projection, FieldName::Text), "• one\n\n  more\n• two");
+    assert_eq!(text(&projection, FieldName::Text), "– one\n\n  more\n– two");
 }
 
 #[test]

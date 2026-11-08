@@ -5,7 +5,7 @@ use crate::document::Range;
 use super::change::Feature;
 use super::table::{Escape, Style};
 
-pub const BULLET: &str = "• ";
+pub const BULLET: &str = "– ";
 pub const CHECKED: &str = "☑ ";
 pub const UNCHECKED: &str = "☐ ";
 pub const RULE: &str = "———";

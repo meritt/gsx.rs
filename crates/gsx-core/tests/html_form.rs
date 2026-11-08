@@ -64,7 +64,7 @@ fn lost_code_info_is_reported() {
 #[test]
 fn list_continuation_skips_preformatted_lines() {
     let telegram = run("telegram-html", "- a\n\n  ```\n  x\n  y\n  ```\n\n  b");
-    assert_eq!(text(&telegram), "• a\n\n  <pre>x\ny</pre>\n\n  b");
+    assert_eq!(text(&telegram), "– a\n\n  <pre>x\ny</pre>\n\n  b");
 }
 
 #[test]
