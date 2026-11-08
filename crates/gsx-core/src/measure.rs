@@ -6,10 +6,15 @@ mod tables;
 
 use std::ops::Range;
 
+pub(crate) use grapheme::Segmenter;
 pub use grapheme::{Clusters, clusters};
 pub use rules::{Condition, Context, Field, Limit, Maximum, Measurement, MediaKind, Placement, Rendering};
 pub(crate) use rules::{given, limit, resolved, unlimited};
 pub use tables::UNICODE_VERSION;
+
+pub fn blank(text: &str) -> bool {
+    text.chars().all(|char| char.is_whitespace() || emoji::contains(&tables::DEFAULT_IGNORABLE, char))
+}
 
 pub const X_URL_WEIGHT: usize = 23;
 pub const MASTODON_RESERVED_PER_URL: u32 = 23;
@@ -25,11 +30,12 @@ pub enum Unit {
     ThreadsWeighted,
     Hashtags,
     Mentions,
+    Links,
 }
 
 impl Unit {
     pub const fn counts_markers(self) -> bool {
-        matches!(self, Unit::Hashtags | Unit::Mentions)
+        matches!(self, Unit::Hashtags | Unit::Mentions | Unit::Links)
     }
 
     pub const fn name(self) -> &'static str {
@@ -43,6 +49,7 @@ impl Unit {
             Unit::ThreadsWeighted => "threads-weighted",
             Unit::Hashtags => "hashtags",
             Unit::Mentions => "mentions",
+            Unit::Links => "links",
         }
     }
 }
@@ -53,6 +60,7 @@ pub enum Fact {
     CharactersReservedPerUrl,
     DescriptionLimit,
     CaptionLimit,
+    HashtagLimit,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -83,6 +91,7 @@ pub fn measure(unit: Unit, text: &str, facts: &Facts) -> u32 {
         ),
         Unit::ThreadsWeighted => count::threads_weighted(text),
         Unit::Hashtags | Unit::Mentions => markers(unit, text).len(),
+        Unit::Links => count::unique_urls(text, facts.urls),
     };
     u32::try_from(count).unwrap_or(u32::MAX)
 }

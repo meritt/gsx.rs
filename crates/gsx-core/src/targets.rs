@@ -20,6 +20,14 @@ const TEXT: Rule = Rule {
         Condition { when: When::Overflow, class: Blocked, reason: "text_too_long" },
     ],
 };
+const THREADED_TEXT: Rule = Rule {
+    conditions: &[
+        TEXT.conditions[0],
+        TEXT.conditions[1],
+        Condition { when: When::Thread, class: Approximated, reason: "text_threaded" },
+    ],
+    ..TEXT
+};
 
 struct Rules {
     heading: Rule,
@@ -58,11 +66,28 @@ const DEFAULT: Rules = Rules {
         feature: Feature::Media,
         class: Approximated,
         reason: "media_attached",
-        conditions: &[
-            Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
-            Condition { when: When::Overflow, class: Omitted, reason: "media_alt_omitted" },
-        ],
+        conditions: &[ATTACHED[0], ATTACHED[1], ATTACHED[2], SPOILER_OMITTED],
     },
+};
+
+const ATTACHED: [Condition; 3] = [
+    Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
+    Condition { when: When::Overflow, class: Omitted, reason: "media_alt_omitted" },
+    Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
+];
+
+const SPOILER_OMITTED: Condition = Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" };
+
+const SPOILERS_CARRIED: Rule = Rule { conditions: &ATTACHED, ..DEFAULT.media };
+
+const SPOILERS_PER_POST: Rule = Rule {
+    conditions: &[
+        ATTACHED[0],
+        ATTACHED[1],
+        ATTACHED[2],
+        Condition { when: When::Post, class: Approximated, reason: "media_spoiler_widened" },
+    ],
+    ..DEFAULT.media
 };
 
 macro_rules! rules {
@@ -101,7 +126,7 @@ mod limits {
     pub(super) use crate::measure::MediaKind::{Image, Video};
     pub(super) use crate::measure::Placement::{Post, Reel, Story};
     pub(super) use crate::measure::Unit::{
-        CodePoints, Graphemes, Hashtags, MastodonWeighted, Mentions, ThreadsWeighted, Utf8Bytes, Utf16CodeUnits,
+        CodePoints, Graphemes, Hashtags, Links, MastodonWeighted, Mentions, ThreadsWeighted, Utf8Bytes, Utf16CodeUnits,
         XWeighted,
     };
     pub(super) use crate::measure::{Fact, Limit, given, limit, resolved, unlimited};

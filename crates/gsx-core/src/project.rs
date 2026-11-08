@@ -8,6 +8,7 @@ mod media;
 pub mod nfc;
 mod outline;
 mod table;
+mod thread;
 
 use std::collections::HashMap;
 use std::ops::Range as Span;
@@ -18,16 +19,16 @@ use crate::measure::{self, Fact};
 pub use crate::measure::{MediaKind, Placement, Unit};
 pub use change::{Change, Class, Feature, FieldName, Slot, Truncated};
 pub use entities::Entity;
-pub use facts::{Facts, Format, MediaFact};
+pub use facts::{Facts, Format, MediaFact, Overflow};
 pub use fit::WINDOW;
 pub(crate) use layout::blank;
-pub use layout::{CELL, ELLIPSIS, RULE, Writer, marker, single_line};
+pub use layout::{CELL, ELLIPSIS, QUOTE, RULE, Writer, marker, single_line};
 pub use links::href;
-pub use media::{Attachment, Block, Item, placed, referenced};
+pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
-    BlocksForm, Condition, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm, LineStart,
-    MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Structure, Style, Target, Truncation,
-    When,
+    BlocksForm, Ceiling, Condition, DATE_LABEL, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm,
+    LineStart, MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Spoilers, Structure, Style,
+    Target, Truncation, Unplaced, When,
 };
 
 use layout::Styled;
@@ -60,6 +61,15 @@ pub struct Projection {
     pub media: Vec<String>,
     pub blocks: Vec<Block>,
     pub items: Vec<Attachment>,
+    pub parts: Vec<Part>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Part {
+    pub fields: Vec<Field>,
+    pub measurements: Vec<Measurement>,
+    pub media: Vec<String>,
+    pub items: Vec<Attachment>,
 }
 
 impl Projection {
@@ -85,14 +95,33 @@ pub struct Context<'a> {
     link_depth: u32,
     open: Vec<Style>,
     allowed: bool,
-    items: &'a [MediaFact<'a>],
+    items: Option<&'a [MediaFact<'a>]>,
+    positions: HashMap<&'a str, usize>,
     anchors: Vec<Anchor>,
     alts: Vec<(usize, Option<String>)>,
+    urls: Vec<String>,
+    url_cap: Option<usize>,
 }
 
 impl<'a> Context<'a> {
     pub fn items(&self) -> &[MediaFact<'_>] {
-        self.items
+        self.items.unwrap_or_default()
+    }
+
+    pub fn position(&self, id: &str) -> Option<usize> {
+        self.positions.get(id).copied()
+    }
+
+    pub fn admit(&mut self, href: &str) -> bool {
+        let Some(cap) = self.url_cap else { return true };
+        if self.urls.iter().any(|url| url == href) {
+            return true;
+        }
+        let admitted = self.urls.len() < cap;
+        if admitted {
+            self.urls.push(href.to_owned());
+        }
+        admitted
     }
 
     pub fn published_alt(&mut self, item: usize, alt: Option<String>) {
@@ -119,14 +148,33 @@ impl<'a> Context<'a> {
         self.open_form().and_then(|form| form.heading)
     }
 
-    pub fn styled(&mut self, style: Style, feature: Feature, node: &Node, draw: impl FnOnce(&mut Self)) {
+    pub fn styled(
+        &mut self,
+        style: Style,
+        value: Option<String>,
+        feature: Feature,
+        node: &Node,
+        draw: impl FnOnce(&mut Self),
+    ) {
         let mark = self.writer.mark();
+        self.within(style, draw);
+        if !self.open.contains(&style) {
+            self.writer.style(style, value, mark, Some((feature, node.range)));
+        }
+    }
+
+    pub fn within(&mut self, style: Style, draw: impl FnOnce(&mut Self)) {
         self.open.push(style);
         draw(self);
         self.open.pop();
-        if !self.open.contains(&style) {
-            self.writer.style(style, None, mark, Some((feature, node.range)));
-        }
+    }
+
+    pub fn inside(&self, style: Style) -> bool {
+        self.open.contains(&style)
+    }
+
+    pub fn nested(&self) -> bool {
+        !self.open.is_empty() || self.link_depth > 0
     }
 
     pub fn within_link(&mut self, draw: impl FnOnce(&mut Self)) {
@@ -137,6 +185,19 @@ impl<'a> Context<'a> {
 
     pub fn report(&mut self, feature: Feature, range: Range) {
         self.report_when(feature, Some(range), None);
+    }
+
+    pub fn report_media(&mut self, node: &Node) {
+        self.anchor(Some(node));
+        let ids = node.media_ids().unwrap_or_default();
+        let listed = |id: &String| self.items.is_none() || self.positions.contains_key(id.as_str());
+        let (some_listed, some_missing) = (ids.iter().any(listed), !ids.iter().all(listed));
+        if some_missing {
+            self.report_when(Feature::Media, Some(node.range), Some(When::Missing));
+        }
+        if some_listed {
+            self.report(Feature::Media, node.range);
+        }
     }
 
     pub fn report_when(&mut self, feature: Feature, range: Option<Range>, when: Option<When>) {
@@ -236,11 +297,31 @@ struct Rendered {
     changes: Vec<Change>,
     anchors: Vec<Anchor>,
     alts: Vec<(usize, Option<String>)>,
+    prefixes: Vec<Span<usize>>,
 }
 
 impl Rendered {
     fn text(text: String) -> Self {
-        Rendered { text, links: vec![], styled: vec![], changes: vec![], anchors: vec![], alts: vec![] }
+        Rendered {
+            text,
+            links: vec![],
+            styled: vec![],
+            changes: vec![],
+            anchors: vec![],
+            alts: vec![],
+            prefixes: vec![],
+        }
+    }
+
+    fn unprefixed(&self) -> String {
+        let mut out = String::with_capacity(self.text.len());
+        let mut cursor = 0;
+        for prefix in &self.prefixes {
+            out.push_str(&self.text[cursor..prefix.start]);
+            cursor = prefix.end;
+        }
+        out.push_str(&self.text[cursor..]);
+        out
     }
 }
 
@@ -262,8 +343,14 @@ fn render(
         open: vec![],
         allowed: facts.entities_allowed,
         items: facts.items,
+        positions: media::positions(facts.items.unwrap_or_default()),
         anchors: vec![],
         alts: vec![],
+        urls: vec![],
+        url_cap: target.form.entities().and_then(|form| form.links).map(|cap| {
+            let reserved = facts.target_url.is_some() && target.handles(Feature::TargetUrl);
+            cap - usize::from(reserved)
+        }),
     };
     draw(&mut context);
     let mut written = std::mem::replace(&mut context.writer, Writer::new(Escape::None)).finish();
@@ -280,20 +367,31 @@ fn render(
         }
         None => vec![],
     };
-    let (text, links) = match target.normalization {
-        Normalization::None => (written.text, written.links),
-        Normalization::Nfc => normalized(&written.text, &written.links),
+    let mut anchors = context.anchors;
+    let (text, links, prefixes) = match target.normalization {
+        Normalization::None => (written.text, written.links, written.prefixes),
+        Normalization::Nfc => {
+            let (mut from, mut to) = (0, 0);
+            for anchor in &mut anchors {
+                to += nfc::nfc(&written.text[from..anchor.at]).len();
+                from = anchor.at;
+                anchor.at = to;
+            }
+            let (text, links) = normalized(&written.text, &written.links);
+            (text, links, vec![])
+        }
     };
     let mut rendered =
-        Rendered { text, links, styled, changes: context.changes, anchors: context.anchors, alts: context.alts };
-    cap_markers(target, field, &mut rendered);
+        Rendered { text, links, styled, changes: context.changes, anchors, alts: context.alts, prefixes };
+    cap_markers(target, &resolved(facts), field, &mut rendered);
     rendered
 }
 
-fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendered) {
+fn cap_markers(target: &'static Target, resolved: &[(Fact, u32)], field: FieldName, rendered: &mut Rendered) {
+    let facts = measure::Facts { resolved, ..measure::Facts::default() };
     for (unit, feature) in [(Unit::Hashtags, Feature::Hashtag), (Unit::Mentions, Feature::Mention)] {
         let cap = target.limits.iter().find(|limit| limit.field == field && limit.unit == unit);
-        let Some(maximum) = cap.and_then(|limit| limit.maximum(&measure::Facts::default())) else {
+        let Some(maximum) = cap.and_then(|limit| limit.maximum(&facts)) else {
             continue;
         };
         let markers = measure::markers(unit, &rendered.text);
@@ -301,6 +399,7 @@ fn cap_markers(target: &'static Target, field: FieldName, rendered: &mut Rendere
             continue;
         };
         rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links);
+        rendered.prefixes.clear();
         let (class, reason) = target.rule(feature).outcome(None);
         let truncated = Some(Truncated { unit, maximum, value: markers.len() as u32, exact: true });
         rendered.changes.push(Change { class, feature, reason, field, range: None, truncated, slot: None });
@@ -339,6 +438,13 @@ fn normalized(text: &str, links: &[Span<usize>]) -> (String, Vec<Span<usize>>) {
 
 type Probe = (Rendered, Vec<usize>);
 
+fn within(limits: &[Bound], values: &[usize]) -> bool {
+    limits
+        .iter()
+        .zip(values)
+        .all(|(limit, value)| limit.unit.counts_markers() || limit.maximum.is_none_or(|maximum| *value <= maximum))
+}
+
 struct Fitted {
     rendered: Rendered,
     measurements: Vec<Measurement>,
@@ -363,6 +469,7 @@ fn resolved(facts: &Facts) -> Vec<(Fact, u32)> {
         (Fact::CharactersReservedPerUrl, facts.characters_reserved_per_url),
         (Fact::CaptionLimit, facts.caption_limit),
         (Fact::DescriptionLimit, facts.description_limit),
+        (Fact::HashtagLimit, facts.hashtag_limit),
     ]
     .into_iter()
     .filter_map(|(fact, value)| value.map(|value| (fact, value)))
@@ -375,9 +482,12 @@ impl Request<'_, '_> {
     }
 
     fn measure(&self, unit: Unit, rendered: &Rendered) -> usize {
-        let text = self.target.form.visible(&rendered.text);
+        let mut text = self.target.form.visible(&rendered.text);
+        if let (Unit::MastodonWeighted, Some(spoiler)) = (unit, self.facts.spoiler_text) {
+            text = std::borrow::Cow::Owned(format!("{spoiler}{text}"));
+        }
         let (urls, elided) = match unit {
-            Unit::XWeighted => (links::x_urls(&text), vec![]),
+            Unit::XWeighted | Unit::Links => (links::x_urls(&text), vec![]),
             Unit::MastodonWeighted => links::mastodon_entities(&text),
             _ => (vec![], vec![]),
         };
@@ -393,9 +503,14 @@ impl Request<'_, '_> {
 
     fn limits(&self) -> Vec<Bound> {
         let field = self.spec.name;
-        let placement = [Placement::Post, Placement::Reel, Placement::Story].into_iter().find(|&placement| {
-            self.target.applicable(field, measure::Context { placement, media: self.facts.media }).next().is_some()
-        });
+        let placement = self
+            .facts
+            .placement
+            .into_iter()
+            .chain([Placement::Post, Placement::Reel, Placement::Story])
+            .find(|&placement| {
+                self.target.applicable(field, measure::Context { placement, media: self.facts.media }).next().is_some()
+            });
         let Some(placement) = placement else {
             return vec![];
         };
@@ -406,7 +521,7 @@ impl Request<'_, '_> {
             .applicable(field, measure::Context { placement, media: self.facts.media })
             .map(|limit| Bound { unit: limit.unit, maximum: limit.maximum(&facts).map(|maximum| maximum as usize) })
             .collect();
-        if let Some(first) = limits.first_mut() {
+        if let Some(first) = limits.iter_mut().find(|limit| !limit.unit.counts_markers()) {
             first.maximum = self.options.maximum.or(first.maximum);
         }
         limits
@@ -415,7 +530,7 @@ impl Request<'_, '_> {
     fn fits(&self, rendered: &Rendered) -> bool {
         let limits = self.limits();
         let values = self.values(&limits, rendered);
-        limits.iter().zip(values).all(|(limit, value)| limit.maximum.is_none_or(|maximum| value <= maximum))
+        within(&limits, &values)
     }
 
     fn values(&self, limits: &[Bound], rendered: &Rendered) -> Vec<usize> {
@@ -446,15 +561,14 @@ impl Request<'_, '_> {
         let full = draw(None);
         let limits = self.limits();
         let values = self.values(&limits, &full);
-        let fits = |values: &[usize]| {
-            limits.iter().zip(values).all(|(limit, value)| limit.maximum.is_none_or(|maximum| *value <= maximum))
-        };
+        let fits = |values: &[usize]| within(&limits, values);
         let measurements = self.measurements(&limits, &values);
         if fits(&values) {
             return Fitted { rendered: full, measurements };
         }
-        let ratio = |measurement: &Measurement| {
-            measurement.maximum.map_or(0.0, |maximum| measurement.value as f64 / maximum.max(1) as f64)
+        let ratio = |measurement: &Measurement| match measurement.maximum {
+            Some(maximum) if !measurement.unit.counts_markers() => measurement.value as f64 / maximum.max(1) as f64,
+            _ => 0.0,
         };
         let worst = measurements
             .iter()
@@ -481,6 +595,7 @@ impl Request<'_, '_> {
             limits
                 .iter()
                 .zip(values)
+                .filter(|(limit, _)| !limit.unit.counts_markers())
                 .filter_map(|(limit, &value)| limit.maximum.map(|maximum| value as f64 / maximum.max(1) as f64))
                 .fold(0.0, f64::max)
         };
@@ -514,9 +629,14 @@ impl Request<'_, '_> {
     }
 }
 
-fn appended(mut rendered: Rendered, url: Option<&str>) -> Rendered {
+fn appended(target: &Target, mut rendered: Rendered, url: Option<&str>) -> Rendered {
     if let Some(url) = url {
-        if !rendered.text.is_empty() {
+        if measure::blank(&target.form.visible(&rendered.text)) {
+            rendered.text.clear();
+            rendered.links.clear();
+            rendered.styled.clear();
+            rendered.changes.retain(|change| change.feature == Feature::Media);
+        } else {
             rendered.text.push_str("\n\n");
         }
         let start = rendered.text.len();
@@ -590,10 +710,10 @@ pub fn project(document: &Document, target: &'static Target, facts: &Facts) -> P
 pub fn project_with(document: &Document, target: &'static Target, facts: &Facts, options: &Options) -> Projection {
     let children = document.children();
     let title = target.fields(facts).find_map(|spec| match spec.source {
-        Source::Title { fact, first_line_removed } => Some((fact, first_line_removed)),
+        Source::Title { fact } => Some(fact),
         Source::Body => None,
     });
-    let explicit = title.and_then(|(fact, _)| if fact { facts.title } else { None });
+    let explicit = title.and_then(|fact| if fact { facts.title } else { None });
     let leading = children
         .first()
         .filter(|node| title.is_some() && explicit.is_none() && matches!(node.kind, Kind::Heading { .. }));
@@ -609,7 +729,13 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         rendered
     };
     let titled = leading.filter(|heading| !draw_heading(heading, FieldName::Title, None).text.is_empty());
-    let removed = title.is_some_and(|(_, removed)| removed) && titled.is_none() && explicit.is_none();
+    let removable = title.is_some() && titled.is_none() && explicit.is_none();
+    let removed = removable
+        && target.fields(facts).find(|spec| matches!(spec.source, Source::Title { .. })).is_some_and(|spec| {
+            let request = Request { target, spec, facts, options };
+            let blocks = render(target, facts, spec.name, None, |context| (target.renderer.blocks)(context, body));
+            request.fits(&Rendered::text(first_line(&blocks.unprefixed())))
+        });
     let draw_body = |field, cut: Option<&Cut>| {
         let mut rendered = render(target, facts, field, cut, |context| (target.renderer.blocks)(context, body));
         if removed {
@@ -620,31 +746,49 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         rendered
     };
 
-    let target_url = facts.target_url.filter(|_| target.handles(Feature::TargetUrl));
+    let target_url = facts.target_url.filter(|_| target.handles(Feature::TargetUrl)).map(links::accepted);
 
     let mut fields = vec![];
     let mut measurements = vec![];
     let mut changes = vec![];
     let mut required = vec![];
     let mut blocks = vec![];
+    let mut items = vec![];
     let mut alts = vec![];
     let mut derived = false;
+    let mut threaded = None;
     for spec in target.fields(facts) {
         let request = Request { target, spec, facts, options };
         let fitted = match (spec.source, explicit, titled) {
             (Source::Body, ..) => {
-                let suffix = target_url.filter(|_| !derived).filter(|url| {
-                    let fits = request.fits(&Rendered::text(format!("{ELLIPSIS}\n\n{url}")));
+                if !derived && matches!(target_url, Some(None)) {
+                    changes.push(request.change(Feature::TargetUrl, None, Some(When::Refused)));
+                }
+                let suffix = target_url.as_ref().and_then(Option::as_deref).filter(|_| !derived).filter(|url| {
+                    let blank = measure::blank(&target.form.visible(&draw_body(spec.name, None).text));
+                    let least = if blank { (*url).to_owned() } else { format!("{ELLIPSIS}\n\n{url}") };
+                    let fits = request.fits(&Rendered::text(least));
                     if !fits {
                         changes.push(request.change(Feature::TargetUrl, None, Some(When::Overflow)));
                     }
                     fits
                 });
-                let mut fitted = request.fit(
-                    || Outline::of_nodes(document, body),
-                    !removed,
-                    |cut| appended(draw_body(spec.name, cut), suffix),
-                );
+                let full = (facts.overflow == Overflow::Thread && target.threads() && !derived)
+                    .then(|| draw_body(spec.name, None));
+                let split = full.as_ref().and_then(|full| thread::split(&request, full, suffix));
+                let mut fitted = match split {
+                    Some(mut split) => {
+                        let first = split.parts.remove(0);
+                        let anchors = full.map(|full| full.anchors).unwrap_or_default();
+                        threaded = Some((spec.name, split, anchors));
+                        first
+                    }
+                    None => request.fit(
+                        || Outline::of_nodes(document, body),
+                        !removed,
+                        |cut| appended(target, draw_body(spec.name, cut), suffix),
+                    ),
+                };
                 if suffix.is_some() {
                     fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));
                 }
@@ -662,7 +806,8 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             ),
             (Source::Title { .. }, None, None) => {
                 let source = first_line(
-                    &render(target, facts, spec.name, None, |context| (target.renderer.blocks)(context, body)).text,
+                    &render(target, facts, spec.name, None, |context| (target.renderer.blocks)(context, body))
+                        .unprefixed(),
                 );
                 let mut fitted = request.fit(
                     || Outline::of_text(&source),
@@ -672,12 +817,20 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                 if let Some(heading) = leading {
                     fitted.rendered.changes.extend(draw_heading(heading, spec.name, None).changes);
                 }
+                if removed {
+                    let range = body.first().map(|node| node.range);
+                    fitted.rendered.changes.push(request.change(Feature::Title, range, Some(When::TitleSource)));
+                }
                 fitted
             }
         };
         let Fitted { mut rendered, measurements: measured } = fitted;
-        if spec.required && rendered.text.trim().is_empty() {
+        if spec.required && measure::blank(&rendered.text) {
             required.push(request.change(Feature::Title, None, Some(When::Empty)));
+        }
+        let over = |measured: &Measurement| measured.maximum.is_some_and(|maximum| measured.value > maximum);
+        if measured.iter().any(|measured| measured.unit == Unit::Links && over(measured)) {
+            rendered.changes.push(request.change(Feature::Link, None, Some(When::Overflow)));
         }
         changes.append(&mut rendered.changes);
         alts.append(&mut rendered.alts);
@@ -685,6 +838,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         if let (Some(form), Source::Body) = (target.form.blocks(), spec.source) {
             let laid = media::layout(target, form, facts, body, &rendered.text, &rendered.anchors);
             blocks = laid.blocks;
+            items = laid.attachments;
             changes.extend(laid.changes);
             measurements.extend(laid.measurements);
         }
@@ -698,7 +852,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             text: rendered.text,
         });
     }
-    if facts.media_count == 0 && fields.iter().all(|field| target.form.visible(&field.text).trim().is_empty()) {
+    if facts.media_count == 0 && fields.iter().all(|field| measure::blank(&target.form.visible(&field.text))) {
         let end = children.last().map_or(0, |node| node.range.end);
         let (class, reason) = target.rule(Feature::Text).outcome(Some(When::Empty));
         let field =
@@ -715,7 +869,6 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     } else {
         changes.append(&mut required);
     }
-    let mut items = vec![];
     if target.form.blocks().is_none() {
         let attached = media::attach(target, facts, children);
         items = attached.items;
@@ -728,7 +881,72 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     changes.sort_by_key(|change| change.range.map(|range| range.start));
     let mut references = vec![];
     media(children, &mut references);
-    Projection { fields, measurements, changes, media: references, blocks, items }
+    let mut parts = vec![];
+    if let Some(threaded) = threaded {
+        parts = threaded_parts(target, children, threaded, &fields, &measurements, &items);
+        references.clone_from(&parts[0].media);
+        items.clone_from(&parts[0].items);
+    }
+    Projection { fields, measurements, changes, media: references, blocks, items, parts }
+}
+
+fn threaded_parts(
+    target: &'static Target,
+    children: &[Node],
+    (name, split, anchors): (FieldName, thread::Thread, Vec<Anchor>),
+    fields: &[Field],
+    measurements: &[Measurement],
+    items: &[Attachment],
+) -> Vec<Part> {
+    let mut ids: Vec<Vec<String>> = vec![vec![]; split.spans.len()];
+    for anchor in &anchors {
+        let Some(range) = anchor.node else { continue };
+        let Ok(at) = children.binary_search_by_key(&range.start, |node| node.range.start) else { continue };
+        let index = split.spans.iter().rposition(|span| span.start <= anchor.at).unwrap_or(0);
+        for id in children[at].media_ids().unwrap_or_default() {
+            if !ids[index].contains(id) {
+                ids[index].push(id.clone());
+            }
+        }
+    }
+    let placed: Vec<String> = ids.iter().flatten().map(|id| format!("media:{id}")).collect();
+    let mut parts = vec![];
+    let first = fields.iter().find(|field| field.name == name).cloned();
+    let mut rest = split.parts.into_iter();
+    for (index, media) in ids.into_iter().enumerate() {
+        let (field, measured) = if index == 0 {
+            let measured = measurements
+                .iter()
+                .filter(|measurement| {
+                    measurement.field == name && measurement.item.is_none() && measurement.block.is_none()
+                })
+                .copied()
+                .collect();
+            (first.clone(), measured)
+        } else {
+            let Some(Fitted { rendered, measurements }) = rest.next() else { break };
+            let field = Field {
+                name,
+                links: utf16_ranges(&rendered.text, &rendered.links),
+                entities: target
+                    .form
+                    .entities()
+                    .map_or_else(Vec::new, |form| entities::offsets(form, &rendered.text, &rendered.styled)),
+                text: rendered.text,
+            };
+            (Some(field), measurements)
+        };
+        let attached = items
+            .iter()
+            .filter(|item| {
+                media.iter().any(|id| item.reference == format!("media:{id}"))
+                    || (index == 0 && !placed.contains(&item.reference))
+            })
+            .cloned()
+            .collect();
+        parts.push(Part { fields: field.into_iter().collect(), measurements: measured, media, items: attached });
+    }
+    parts
 }
 
 fn explicit_title(request: &Request, title: &str) -> Fitted {

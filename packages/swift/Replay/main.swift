@@ -10,12 +10,16 @@ struct Case: Decodable {
     struct Given: Decodable {
         let media: MediaKind?
         let mediaCount: Int?
+        let placement: Placement?
         let title: String?
         let targetUrl: String?
         let maxCharacters: UInt32?
         let charactersReservedPerUrl: UInt32?
         let captionLimit: UInt32?
         let descriptionLimit: UInt32?
+        let hashtagLimit: UInt32?
+        let spoilerText: String?
+        let overflow: Overflow?
         let entitiesAllowed: Bool?
         let items: [MediaFact]?
     }
@@ -49,14 +53,18 @@ for file in arguments.dropFirst() {
         let facts = Facts(
             media: given?.media,
             mediaCount: given?.mediaCount ?? 0,
+            placement: given?.placement,
             title: given?.title,
             targetUrl: given?.targetUrl,
             maxCharacters: given?.maxCharacters,
             charactersReservedPerUrl: given?.charactersReservedPerUrl,
             captionLimit: given?.captionLimit,
             descriptionLimit: given?.descriptionLimit,
+            hashtagLimit: given?.hashtagLimit,
+            spoilerText: given?.spoilerText,
+            overflow: given?.overflow,
             entitiesAllowed: given?.entitiesAllowed ?? false,
-            items: given?.items ?? []
+            items: given?.items
         )
         let json = try input.target.map { try GSX.projectJSON(input.markdown, target: $0, facts: facts, media: media) }
             ?? GSX.parseJSON(input.markdown, media: media)

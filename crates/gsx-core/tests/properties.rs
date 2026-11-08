@@ -1,10 +1,18 @@
 mod support;
+#[path = "support/schema.rs"]
+mod validator;
+
+use std::sync::LazyLock;
 
 use gsx_core::document::{Document, Media, Node, Range, parse};
+use gsx_core::wire;
 use proptest::prelude::*;
 use support::markup::{boundaries, markup};
+use validator::{Schema, deep};
 
 const MEDIA: &[Media<'static>] = &[Media { id: "a", cover: None }, Media { id: "b", cover: Some("c") }];
+
+static SCHEMA: LazyLock<Schema> = LazyLock::new(Schema::load);
 
 fn check(range: Range, boundaries: &[bool], what: &str) -> Result<(), TestCaseError> {
     prop_assert!(range.start <= range.end, "{what} {range:?} is reversed");
@@ -61,7 +69,8 @@ fn properties(text: &str) -> Result<(), TestCaseError> {
         }
         _ => prop_assert!(false, "outcome differs between runs: {first:?} / {second:?}"),
     }
-    Ok(())
+    let outputs = [wire::parse(text.as_bytes(), MEDIA), wire::serialize(text.as_bytes(), MEDIA)];
+    deep(|| outputs.iter().try_for_each(|out| SCHEMA.check_wire(out))).map_err(TestCaseError::fail)
 }
 
 proptest! {

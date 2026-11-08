@@ -373,6 +373,7 @@ pub enum Name {
     GsxMathInside,
 
     GsxDirectiveTextStart,
+    GsxDirectiveTextMarkerInside,
     GsxDirectiveTextNameStart,
     GsxDirectiveTextNameInside,
     GsxDirectiveTextAfterName,
@@ -764,6 +765,7 @@ pub fn call(tokenizer: &mut Tokenizer, name: Name) -> State {
         Name::GsxMathInside => construct::gsx_math::inside,
 
         Name::GsxDirectiveTextStart => construct::gsx_directive_text::start,
+        Name::GsxDirectiveTextMarkerInside => construct::gsx_directive_text::marker_inside,
         Name::GsxDirectiveTextNameStart => construct::gsx_directive_text::name_start,
         Name::GsxDirectiveTextNameInside => construct::gsx_directive_text::name_inside,
         Name::GsxDirectiveTextAfterName => construct::gsx_directive_text::after_name,

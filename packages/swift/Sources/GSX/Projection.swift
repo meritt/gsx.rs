@@ -13,6 +13,32 @@ public enum MediaKind: String, Sendable, Hashable, Decodable {
     }
 }
 
+/// Selects the limits declared for this placement; without it, or when the target declares none
+/// there, the first of post, reel, story that declares one.
+public enum Placement: String, Sendable, Hashable, Decodable {
+    case post, reel, story
+
+    var native: UInt32 {
+        switch self {
+        case .post: UInt32(GSX_PLACEMENT_POST)
+        case .reel: UInt32(GSX_PLACEMENT_REEL)
+        case .story: UInt32(GSX_PLACEMENT_STORY)
+        }
+    }
+}
+
+/// What a body that does not fit becomes: cut to the limit, or a thread of posts where the target publishes threads.
+public enum Overflow: String, Sendable, Hashable, Decodable {
+    case truncate, thread
+
+    var native: UInt32 {
+        switch self {
+        case .truncate: UInt32(GSX_OVERFLOW_TRUNCATE)
+        case .thread: UInt32(GSX_OVERFLOW_THREAD)
+        }
+    }
+}
+
 /// An attached media item, matched to media references by `id`.
 public struct MediaFact: Sendable, Hashable, Decodable {
     public enum Format: String, Sendable, Hashable, Decodable {
@@ -46,35 +72,50 @@ public struct MediaFact: Sendable, Hashable, Decodable {
 public struct Facts: Sendable, Hashable {
     public var media: MediaKind?
     public var mediaCount: Int
+    public var placement: Placement?
     public var title: String?
     public var targetUrl: String?
     public var maxCharacters: UInt32?
     public var charactersReservedPerUrl: UInt32?
     public var captionLimit: UInt32?
     public var descriptionLimit: UInt32?
+    /// Instagram hashtags allowed in a caption; 5 without it.
+    public var hashtagLimit: UInt32?
+    /// Mastodon content warning: not rendered, but counted with the text against the status limit.
+    public var spoilerText: String?
+    public var overflow: Overflow?
     public var entitiesAllowed: Bool
-    public var items: [MediaFact]
+    /// The media the caller publishes. A referenced id missing from a given list was dropped; without the list, attaching targets treat every id as attached.
+    public var items: [MediaFact]?
 
     public init(
         media: MediaKind? = nil,
         mediaCount: Int = 0,
+        placement: Placement? = nil,
         title: String? = nil,
         targetUrl: String? = nil,
         maxCharacters: UInt32? = nil,
         charactersReservedPerUrl: UInt32? = nil,
         captionLimit: UInt32? = nil,
         descriptionLimit: UInt32? = nil,
+        hashtagLimit: UInt32? = nil,
+        spoilerText: String? = nil,
+        overflow: Overflow? = nil,
         entitiesAllowed: Bool = false,
-        items: [MediaFact] = []
+        items: [MediaFact]? = nil
     ) {
         self.media = media
         self.mediaCount = mediaCount
+        self.placement = placement
         self.title = title
         self.targetUrl = targetUrl
         self.maxCharacters = maxCharacters
         self.charactersReservedPerUrl = charactersReservedPerUrl
         self.captionLimit = captionLimit
         self.descriptionLimit = descriptionLimit
+        self.hashtagLimit = hashtagLimit
+        self.spoilerText = spoilerText
+        self.overflow = overflow
         self.entitiesAllowed = entitiesAllowed
         self.items = items
     }
@@ -87,13 +128,24 @@ public struct Projection: Sendable, Hashable, Decodable {
     public let media: [String]
     /// Present for targets of the `blocks/1` form only.
     public let blocks: [Block]?
-    /// Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items.
+    /// Media attached to the message with its fitted alt: every media fact item outside the `blocks/1` form, items no block can show on Slack blocks; absent when empty.
     public let items: [Attachment]?
+    /// With `overflow: .thread`, when the body did not fit: every post of the thread in order; the top level repeats the first.
+    public let parts: [Part]?
+}
+
+public struct Part: Sendable, Hashable, Decodable {
+    public let fields: [Field]
+    public let measurements: [Measurement]
+    public let media: [String]
+    public let items: [Attachment]
 }
 
 public struct Attachment: Sendable, Hashable, Decodable {
     public let reference: String
     public let alt: String?
+    /// Whether the platform publishes the item hidden: per item, or for the whole post on Mastodon and Threads.
+    public let spoiler: Bool
 }
 
 public struct Item: Sendable, Hashable, Decodable {
@@ -105,15 +157,22 @@ public struct Item: Sendable, Hashable, Decodable {
 public enum Block: Sendable, Hashable, Decodable {
     case text(String)
     case media(items: [Item], layout: Layout?)
+    /// An attached file shown in place, for media no media block can show.
+    case file(Item)
+    case separator
 
     enum CodingKeys: String, CodingKey {
-        case text, items, layout
+        case text, items, layout, file, separator
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if let text = try container.decodeIfPresent(String.self, forKey: .text) {
             self = .text(text)
+        } else if let file = try container.decodeIfPresent(Item.self, forKey: .file) {
+            self = .file(file)
+        } else if container.contains(.separator) {
+            self = .separator
         } else {
             self = .media(
                 items: try container.decode([Item].self, forKey: .items),
@@ -136,7 +195,7 @@ public struct Field: Sendable, Hashable, Decodable {
 }
 
 public enum Style: String, Sendable, Hashable, Decodable {
-    case bold, italic, underline, strikethrough, spoiler, code, link, tag
+    case bold, italic, underline, strikethrough, spoiler, code, link, tag, pre, blockquote, date, mention
 }
 
 public struct Entity: Sendable, Hashable, Decodable {
@@ -154,7 +213,7 @@ public enum Unit: String, Sendable, Hashable, Decodable {
     case xWeighted = "x-weighted"
     case mastodonWeighted = "mastodon-weighted"
     case threadsWeighted = "threads-weighted"
-    case hashtags, mentions
+    case hashtags, mentions, links
 }
 
 public struct Measurement: Sendable, Hashable, Decodable {
@@ -210,7 +269,7 @@ public struct Change: Sendable, Hashable, Decodable {
     public let field: FieldName
     public let range: Range<Int>?
     public let truncated: Truncated?
-    /// Alt changes: the block and the item in it on blocks targets, else the index in `items`.
+    /// Alt and spoiler changes: the block and the item in it on blocks targets, else the index in `items`.
     public let block: Int?
     public let item: Int?
 
@@ -237,6 +296,10 @@ public struct Target: Sendable, Hashable, Decodable {
     public let offsets: Offsets?
     public let digest: String
     public let manifest: String
+    /// Every code a blocked change of this target can carry.
+    public let codes: [String]
+    /// Whether `overflow: .thread` applies.
+    public let threads: Bool
 }
 
 struct ProjectionWire: Decodable {

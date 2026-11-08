@@ -21,3 +21,7 @@ fn wrapper(kind: &Kind) -> Option<Feature> {
         _ => return None,
     })
 }
+
+fn underlined(nodes: &[Node]) -> bool {
+    nodes.iter().any(|node| matches!(node.kind, Kind::Underline) || underlined(&node.children))
+}

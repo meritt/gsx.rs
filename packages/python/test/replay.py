@@ -7,12 +7,16 @@ import gsx
 FACTS = {
     "media": "media",
     "mediaCount": "media_count",
+    "placement": "placement",
     "title": "title",
     "targetUrl": "target_url",
     "maxCharacters": "max_characters",
     "charactersReservedPerUrl": "characters_reserved_per_url",
     "captionLimit": "caption_limit",
     "descriptionLimit": "description_limit",
+    "hashtagLimit": "hashtag_limit",
+    "spoilerText": "spoiler_text",
+    "overflow": "overflow",
     "entitiesAllowed": "entities_allowed",
 }
 
@@ -30,7 +34,8 @@ def main(out, files):
             media = [gsx.Media(item["id"], item.get("cover")) for item in case["media"]]
             target = case.get("target")
             given = dict(case.get("facts", {}))
-            items = tuple(gsx.MediaFact(**item) for item in given.pop("items", []))
+            listed = given.pop("items", None)
+            items = None if listed is None else tuple(gsx.MediaFact(**item) for item in listed)
             facts = gsx.Facts(items=items, **{FACTS[key]: value for key, value in given.items()})
             raw = gsx.project_json(markdown, target, facts, media) if target else gsx.parse_json(markdown, media)
             wire = json.loads(raw)

@@ -137,8 +137,8 @@ pub(super) fn reserved_offset(raw: &str) -> Option<usize> {
         }
         if byte == b':'
             && slashes % 2 == 0
-            && raw[index..].starts_with(":time")
-            && !bytes.get(index + 5).is_some_and(|next| next.is_ascii_alphanumeric() || b"_.-".contains(next))
+            && raw[index..].starts_with("::time")
+            && !bytes.get(index + 6).is_some_and(|next| next.is_ascii_alphanumeric() || b"_.-".contains(next))
         {
             return Some(index);
         }
@@ -172,7 +172,7 @@ fn closing_end(bytes: &[u8], start: usize, close: u8) -> usize {
 }
 
 pub(super) fn reserved_end(bytes: &[u8], start: usize) -> usize {
-    let mut end = start + 5;
+    let mut end = start + 6;
     if bytes.get(end) == Some(&b'[') {
         end = closing_end(bytes, end + 1, b']');
         if bytes.get(end.wrapping_sub(1)) != Some(&b']') {

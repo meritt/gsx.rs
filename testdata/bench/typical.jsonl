@@ -10,8 +10,8 @@
 {"id":"basic.link","markdown":"The [road to Amber](https://en.wikipedia.org/wiki/The_Chronicles_of_Amber) begins in Arden."}
 {"id":"basic.link-title","markdown":"The [Amber chronicle](https://en.wikipedia.org/wiki/The_Chronicles_of_Amber \"The Chronicles of Amber\") rests on the shelf."}
 {"id":"basic.inline-code","markdown":"The map marks the route as `Arden / Amber`."}
-{"id":"basic.datetime","markdown":"The lanterns are lit at :time[sunset]{datetime=\"2026-09-27T18:00:00+03:00\"}."}
-{"id":"basic.unix-time","markdown":"The watch begins at :time[dawn]{unix=\"1790474400\"}."}
+{"id":"basic.datetime","markdown":"The lanterns are lit at ::time[sunset]{datetime=\"2026-09-27T18:00:00+03:00\"}."}
+{"id":"basic.unix-time","markdown":"The watch begins at ::time[dawn]{unix=\"1790474400\"}."}
 {"id":"basic.heading","markdown":"## An evening in Amber\n\nThe garden paths are quiet."}
 {"id":"basic.quote","markdown":"> The sea remembers every road to Amber."}
 {"id":"basic.bullets","markdown":"- Amber garden\n- Arden road\n- Harbor quay"}

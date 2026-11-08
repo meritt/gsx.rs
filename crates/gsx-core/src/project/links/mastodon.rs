@@ -2,8 +2,7 @@ use std::ops::Range;
 
 use super::tables::{LATIN_FOLDED, PRECEDING};
 use super::twitter::{
-    Chains, MAX_LABEL_LENGTH, MAX_TCO_SLUG_LENGTH, MAX_URL_LENGTH, ascii_length, at, idna, is, literal, member, parens,
-    tco,
+    Chains, MAX_LABEL_LENGTH, MAX_TCO_SLUG_LENGTH, MAX_URL_LENGTH, ascii_length, at, idna, is, literal, parens, tco,
 };
 use super::unicode::{mention, word};
 
@@ -187,7 +186,7 @@ fn url(chains: &mut Chains, start: usize) -> Option<Found> {
 fn next(chains: &mut Chains, from: usize) -> Option<Found> {
     let text = chains.text;
     for start in from..=text.len() {
-        if at(text, start).is_some_and(|unit| member(PRECEDING, unit))
+        if at(text, start).is_some_and(|unit| PRECEDING.contains(unit))
             && let Some(found) = url(chains, start + 1)
         {
             return Some(found);
@@ -291,7 +290,7 @@ pub fn mentions(text: &[u16]) -> Vec<Mention> {
             }
         }
         let after = offset(end);
-        let refused = at(text, after).is_some_and(|unit| unit == 0x40 || unit == 0xFF20 || member(LATIN_FOLDED, unit))
+        let refused = at(text, after).is_some_and(|unit| unit == 0x40 || unit == 0xFF20 || LATIN_FOLDED.contains(unit))
             || text[after..].starts_with(&[0x3A, 0x2F, 0x2F]);
         if !refused && domain.is_none_or(|length| length <= MAX_MENTION_DOMAIN_LENGTH) {
             found.push(Mention { range: start..after, local: offset(local) });

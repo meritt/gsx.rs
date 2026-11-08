@@ -4,9 +4,12 @@ use crate::syntax::util::constant::{
 };
 use std::str;
 
-pub fn decode_named(value: &str, html5: bool) -> Option<String> {
-    let mut iter = if html5 { CHARACTER_REFERENCES.iter() } else { CHARACTER_REFERENCES_HTML_4.iter() };
-    iter.find(|d| d.0 == value).map(|d| d.1.into())
+pub fn decode_named(value: &str, html5: bool) -> Option<&'static str> {
+    if html5 {
+        let at = CHARACTER_REFERENCES.binary_search_by(|d| d.0.cmp(value)).ok()?;
+        return Some(CHARACTER_REFERENCES[at].1);
+    }
+    CHARACTER_REFERENCES_HTML_4.iter().find(|d| d.0 == value).map(|d| d.1)
 }
 
 pub fn decode_numeric(value: &str, radix: u32) -> String {
@@ -26,7 +29,7 @@ pub fn decode(value: &str, marker: u8, html5: bool) -> Option<String> {
     match marker {
         b'#' => Some(decode_numeric(value, 10)),
         b'x' => Some(decode_numeric(value, 16)),
-        b'&' => decode_named(value, html5),
+        b'&' => decode_named(value, html5).map(String::from),
         _ => unreachable!("Unexpected marker `{}`", marker),
     }
 }

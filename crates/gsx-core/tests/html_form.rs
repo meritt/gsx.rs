@@ -64,7 +64,7 @@ fn lost_code_info_is_reported() {
 #[test]
 fn list_continuation_skips_preformatted_lines() {
     let telegram = run("telegram-html", "- a\n\n  ```\n  x\n  y\n  ```\n\n  b");
-    assert_eq!(text(&telegram), "• a\n\n  <pre>x\ny</pre>\n\n  b");
+    assert_eq!(text(&telegram), "– a\n\n  <pre>x\ny</pre>\n\n  b");
 }
 
 #[test]
@@ -134,7 +134,8 @@ fn image<'a>(id: &'a str, alt: Option<&'a str>) -> MediaFact<'a> {
 fn rich(markdown: &str, items: &[MediaFact]) -> Projection {
     let media: Vec<_> = items.iter().map(|item| Media { id: item.id, cover: None }).collect();
     let document = parse(markdown, &media).unwrap();
-    let facts = Facts { media: Some(MediaKind::Image), media_count: items.len(), items, ..Facts::default() };
+    let facts =
+        Facts { media: Some(MediaKind::Image), media_count: items.len(), items: Some(items), ..Facts::default() };
     project(&document, target("telegram-html-rich").unwrap(), &facts)
 }
 
@@ -152,7 +153,7 @@ fn rich_places_media_inline_with_unreferenced_items_first() {
         "<img src=\"media:p\"/><br><video src=\"media:g\"></video><br><p>a</p><br><br>\
          <video src=\"media:v\" tg-spoiler></video><br><br><p>b</p><br><br><audio src=\"media:a\"></audio>"
     );
-    assert_eq!(changes(&projection), []);
+    assert_eq!(changes(&projection), [("media", "omitted", "media_spoiler_omitted")]);
     assert_eq!(text(&rich("", &[image("p", None)])), "<img src=\"media:p\"/>");
     assert_eq!(blocked(&rich("", &[image("p", None)])), [] as [String; 0]);
 }
@@ -213,6 +214,23 @@ fn rich_alts_become_figcaptions() {
 }
 
 #[test]
+fn rich_reports_the_spoiler_it_cannot_put_on_audio() {
+    let items = [
+        MediaFact { format: Format::Audio, spoiler: true, ..image("a", None) },
+        MediaFact { spoiler: true, ..image("p", None) },
+    ];
+    let projection = rich("::media{id=\"a\"}\n\n::media{id=\"p\"}", &items);
+    assert_eq!(text(&projection), "<audio src=\"media:a\"></audio><br><br><img src=\"media:p\" tg-spoiler/>");
+    let spoilers: Vec<_> = projection
+        .changes
+        .iter()
+        .filter(|change| change.reason == "media_spoiler_omitted")
+        .map(|change| (change.class.name(), change.slot))
+        .collect();
+    assert_eq!(spoilers, [("omitted", Some(Slot { block: None, item: 0 }))]);
+}
+
+#[test]
 fn rich_alts_share_the_text_budget() {
     let body = "x".repeat(32_768 - 6 - 7 - 1);
     let items = [image("p", Some("abc def")), image("q", Some("long alt text")), image("r", Some("z"))];
@@ -230,6 +248,31 @@ fn rich_alts_share_the_text_budget() {
     assert_eq!(slots, [Some(Slot { block: None, item: 1 }), Some(Slot { block: None, item: 2 })]);
     let alts: Vec<_> = projection.items.iter().map(|item| item.alt.as_deref()).collect();
     assert_eq!(alts, [Some("abc def"), Some("…"), None]);
+}
+
+#[test]
+fn rich_keeps_captions_before_the_cut() {
+    let markdown = format!("Intro\n\n::media{{id=\"a\"}}\n\n{}\n\n::media{{id=\"b\"}}", "word ".repeat(7000));
+    let projection = rich(&markdown, &[image("a", Some("Described")), image("b", Some("Later"))]);
+    assert!(text(&projection).contains("<figure><img src=\"media:a\"/><figcaption>Described</figcaption></figure>"));
+    assert_eq!(projection.measurements[0].value, 32_768);
+    assert_eq!(projection.items[0].alt.as_deref(), Some("Described"));
+    assert_ne!(projection.items[1].alt.as_deref(), Some("Later"));
+    assert!(changes(&projection).contains(&("text", "approximated", "text_truncated")));
+    let slots: Vec<_> = projection.changes.iter().filter_map(|change| change.slot).collect();
+    assert_eq!(slots, [Slot { block: None, item: 1 }]);
+}
+
+#[test]
+fn rich_shares_the_rest_with_a_caption_too_long_to_keep_whole() {
+    let alt = "described ".repeat(4000);
+    let markdown = format!("Intro\n\n::media{{id=\"a\"}}\n\n{}", "word ".repeat(7000));
+    let projection = rich(&markdown, &[image("a", Some(&alt))]);
+    let body = text(&projection);
+    assert!(body.matches("word").count() > 6000);
+    assert!(projection.measurements[0].value <= 32_768);
+    assert_ne!(projection.items[0].alt.as_deref(), Some(alt.as_str()));
+    assert!(changes(&projection).contains(&("text", "approximated", "text_truncated")));
 }
 
 #[test]

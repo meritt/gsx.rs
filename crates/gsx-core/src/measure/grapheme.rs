@@ -25,20 +25,6 @@ const INCB_EXTEND: u8 = 3;
 struct Property(u8);
 
 impl Property {
-    fn of(char: char) -> Property {
-        let point = char as u32;
-        if point < 0x7F {
-            return Property(match point {
-                0x0A => LF,
-                0x0D => CR,
-                0x00..0x20 => CONTROL,
-                _ => OTHER,
-            });
-        }
-        let index = BREAK.partition_point(|entry| entry >> 8 <= point) - 1;
-        Property((BREAK[index] & 0xFF) as u8)
-    }
-
     fn class(self) -> u8 {
         self.0 & 0x0F
     }
@@ -69,16 +55,35 @@ enum Conjunct {
 }
 
 #[derive(Clone, Debug, Default)]
-pub(super) struct Segmenter {
+pub(crate) struct Segmenter {
     previous: Option<u8>,
     regional_odd: bool,
     emoji: Emoji,
     conjunct: Conjunct,
+    range: (u32, u32, u8),
 }
 
 impl Segmenter {
-    pub(super) fn starts(&mut self, char: char) -> bool {
-        let next = Property::of(char);
+    fn property(&mut self, char: char) -> Property {
+        let point = char as u32;
+        if point < 0x7F {
+            return Property(match point {
+                0x0A => LF,
+                0x0D => CR,
+                0x00..0x20 => CONTROL,
+                _ => OTHER,
+            });
+        }
+        if !(self.range.0..self.range.1).contains(&point) {
+            let index = BREAK.partition_point(|entry| entry >> 8 <= point) - 1;
+            let end = BREAK.get(index + 1).map_or(u32::MAX, |entry| entry >> 8);
+            self.range = (BREAK[index] >> 8, end, (BREAK[index] & 0xFF) as u8);
+        }
+        Property(self.range.2)
+    }
+
+    pub(crate) fn starts(&mut self, char: char) -> bool {
+        let next = self.property(char);
         let class = next.class();
         let starts = self.previous.is_none_or(|previous| self.breaks(previous, next));
         self.regional_odd =

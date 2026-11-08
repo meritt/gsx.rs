@@ -1,9 +1,9 @@
-use super::{media, wrapper};
+use super::{media, underlined, wrapper};
 use crate::document::{Align, Kind, Layout, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
     CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Slot, Truncated,
-    When, blank, href, marker, placed, referenced, shortened,
+    When, blank, href, marker, placed, references, shortened,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks: render, inline: render_inline };
@@ -45,6 +45,7 @@ struct Figure {
     start: usize,
     end: usize,
     group: bool,
+    cut: bool,
     range: Option<Range>,
     alts: Vec<(usize, Option<String>)>,
 }
@@ -80,13 +81,17 @@ pub(super) fn escape(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
-fn formatting(nodes: &[Node]) -> usize {
+fn formatting(nodes: &[Node], decorated: bool) -> usize {
     nodes
         .iter()
         .map(|node| match node.kind {
             Kind::InlineCode { .. } => 1,
-            Kind::Link { .. } | Kind::Datetime { .. } => 1 + formatting(&node.children),
-            ref kind if wrapper(kind).is_some() => 1 + formatting(&node.children),
+            Kind::Link { .. } => {
+                1 + usize::from(decorated && !underlined(&node.children)) + formatting(&node.children, decorated)
+            }
+            Kind::Underline => 1 + formatting(&node.children, false),
+            Kind::Datetime { .. } => 1 + formatting(&node.children, decorated),
+            ref kind if wrapper(kind).is_some() => 1 + formatting(&node.children, decorated),
             _ => 0,
         })
         .max()
@@ -151,11 +156,11 @@ impl Html {
     fn blocks(&mut self, context: &mut Context, nodes: &[Node]) {
         let mut first = true;
         for node in nodes {
-            if context.done() {
-                break;
-            }
             if media(node) {
-                context.report(Feature::Media, node.range);
+                context.report_media(node);
+                continue;
+            }
+            if context.done() {
                 continue;
             }
             if !first {
@@ -339,11 +344,26 @@ impl Html {
             context.report_when(feature, Some(node.range), Some(When::Nested));
             return self.inline(context, &node.children);
         }
+        let underline = self.form.tag(Feature::Underline).filter(|_| {
+            feature == Feature::Link
+                && !self.open.iter().any(|element| element.feature == Some(Feature::Underline))
+                && !underlined(&node.children)
+        });
+        if let Some(tag) = underline {
+            let start = format!("<{tag}>");
+            context.writer().raw(&start);
+            let end = format!("</{tag}>");
+            self.open.push(Element { start, end, feature: None, range: node.range, exclusive: false });
+        }
         let name = start[1..].split([' ', '>']).next().unwrap_or("");
         let end = format!("</{name}>");
         let element = Element { start, end, feature: Some(feature), range: node.range, exclusive };
         if !self.wrapped(context, element, &node.children) && feature == Feature::Link {
             context.report_when(feature, Some(node.range), Some(When::LabelInvisible));
+        }
+        if underline.is_some() {
+            let element = self.open.pop().expect("the underline pushed above");
+            context.writer().raw(&element.end);
         }
     }
 
@@ -410,10 +430,12 @@ impl Html {
                 spoiler: fact.spoiler,
             })
             .collect();
-        for medium in self.media.iter().skip(self.limit()) {
-            let range =
-                nodes.iter().find(|node| referenced(std::slice::from_ref(node), &medium.id)).map(|node| node.range);
-            context.report_when(Feature::Media, range, Some(When::Count));
+        if self.media.len() > self.limit() {
+            let ranges = references(nodes);
+            for medium in self.media.iter().skip(self.limit()) {
+                let range = ranges.get(medium.id.as_str()).map(|&top| nodes[top].range);
+                context.report_when(Feature::Media, range, Some(When::Count));
+            }
         }
     }
 
@@ -421,7 +443,7 @@ impl Html {
         let mut kept = vec![];
         let mut missing = false;
         for id in ids {
-            match self.media.iter().position(|medium| medium.id == *id) {
+            match context.position(id) {
                 Some(index) if index < self.limit() => kept.push(index),
                 Some(_) => {}
                 None => missing = true,
@@ -451,7 +473,7 @@ impl Html {
         context.writer().raw(&markup);
         let end = context.writer().mark();
         let alts = vec![(index, self.media[index].alt.clone())];
-        self.figures.push(Figure { start, end, group: false, range, alts });
+        self.figures.push(Figure { start, end, group: false, cut: context.done(), range, alts });
     }
 
     fn place(&mut self, context: &mut Context, node: &Node, indices: &[usize], level: usize) {
@@ -479,7 +501,14 @@ impl Html {
                 let end = context.writer().mark();
                 context.writer().raw(&format!("</{name}>"));
                 let alts = indices.iter().map(|&index| (index, self.media[index].alt.clone())).collect();
-                self.figures.push(Figure { start, end, group: true, range: Some(node.range), alts });
+                self.figures.push(Figure {
+                    start,
+                    end,
+                    group: true,
+                    cut: context.done(),
+                    range: Some(node.range),
+                    alts,
+                });
                 return;
             }
             context.report_when(Feature::Media, Some(node.range), Some(When::Group));
@@ -503,8 +532,15 @@ impl Html {
         let maximum = limit.and_then(|limit| limit.maximum(&facts)).map_or(usize::MAX, |maximum| maximum as usize);
         let body = cost(&context.target.form.visible(context.writer().since(0)));
         let Some(mut remaining) = maximum.checked_sub(body) else { return };
+        let cut = context.done();
         let mut inserts = vec![];
+        let mut kept = 0;
         for figure in std::mem::take(&mut self.figures) {
+            let before = if cut && !figure.cut {
+                Some(cost(&context.target.form.visible(&context.writer().since(0)[..figure.end])))
+            } else {
+                None
+            };
             let mut entries: Vec<String> = vec![];
             for (index, (item, alt)) in figure.alts.iter().enumerate() {
                 let Some(alt) = alt.as_deref().filter(|alt| !alt.trim().is_empty()) else { continue };
@@ -513,10 +549,11 @@ impl Html {
                 let overhead = cost(&format!("{separator}{prefix}"));
                 let room = remaining.saturating_sub(overhead);
                 let value = cost(alt);
-                let text = if room == 0 {
-                    String::new()
-                } else if value <= room {
+                let whole = before.is_some_and(|before| before + kept + overhead + value <= maximum);
+                let text = if whole || value <= room {
                     alt.to_owned()
+                } else if room == 0 {
+                    String::new()
                 } else {
                     shortened(alt, |candidate| cost(candidate) <= room)
                 };
@@ -536,7 +573,9 @@ impl Html {
                     context.published_alt(*item, Some(text.clone()).filter(|text| !text.is_empty()));
                 }
                 if !text.is_empty() {
-                    remaining -= overhead + cost(&text);
+                    let spent = overhead + cost(&text);
+                    remaining = remaining.saturating_sub(spent);
+                    kept += spent;
                     entries.push(prefix + &text);
                 }
             }
@@ -561,8 +600,9 @@ impl Html {
         let mut paragraph = false;
         let mut carry = 0;
         if level == 1 {
+            let placed_ids = references(nodes);
             let unplaced: Vec<usize> = (0..self.media.len().min(self.limit()))
-                .filter(|&index| !referenced(nodes, &self.media[index].id))
+                .filter(|&index| !placed_ids.contains_key(self.media[index].id.as_str()))
                 .collect();
             for index in unplaced {
                 if !first {
@@ -613,7 +653,8 @@ impl Html {
             }
             if prose {
                 let heading = matches!(node.kind, Kind::Heading { .. });
-                let depth = level + usize::from(heading) + formatting(&node.children);
+                let decorated = self.form.tag(Feature::Underline).is_some();
+                let depth = level + usize::from(heading) + formatting(&node.children, decorated);
                 if paragraph {
                     self.deepen(context, node.range, depth);
                 } else {
@@ -693,7 +734,9 @@ impl Html {
                     if context.done() {
                         break;
                     }
-                    let formatted = row.children.iter().map(|cell| formatting(&cell.children)).max().unwrap_or(0);
+                    let decorated = self.form.tag(Feature::Underline).is_some();
+                    let formatted =
+                        row.children.iter().map(|cell| formatting(&cell.children, decorated)).max().unwrap_or(0);
                     self.count(context, row.range, level + 1 + formatted);
                     if let Some(limits) = self.form.structure
                         && row.children.len() > limits.columns

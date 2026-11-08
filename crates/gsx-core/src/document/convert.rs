@@ -631,7 +631,7 @@ fn convert_node(node: &tree::Node, end: usize, context: &Context) -> Converted {
         T::TextDirective if node.extra().name == "time" => {
             let raw = &context.text[start..node.end];
             let next = context.text.as_bytes().get(node.end);
-            if !raw.starts_with(":time[") || !raw.contains(']') || next == Some(&b'{') {
+            if !raw.starts_with("::time[") || !raw.contains(']') || next == Some(&b'{') {
                 return Converted::One(
                     context.refused(Code::MarkdownMalformed, context.malformed(start), start, end),
                     false,

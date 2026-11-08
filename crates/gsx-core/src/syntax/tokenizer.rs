@@ -460,12 +460,12 @@ impl<'a> Tokenizer<'a> {
 
         let mut value = Subresult {
             done: false,
-            gfm_footnote_definitions: self.tokenize_state.gfm_footnote_definitions.split_off(0),
-            definitions: self.tokenize_state.definitions.split_off(0),
+            gfm_footnote_definitions: std::mem::take(&mut self.tokenize_state.gfm_footnote_definitions),
+            definitions: std::mem::take(&mut self.tokenize_state.definitions),
         };
 
         if resolve {
-            let resolvers = self.resolvers.split_off(0);
+            let resolvers = std::mem::take(&mut self.resolvers);
             let mut index = 0;
             let defs = &mut value.definitions;
             let fn_defs = &mut value.gfm_footnote_definitions;

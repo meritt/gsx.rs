@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use gsx_core::document::{Document, parse};
 use gsx_core::project::{
-    Class, Facts, Feature, FieldName, MediaKind, Options, Projection, Style, Target, project, project_with,
+    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Placement, Projection, Style,
+    Target, Unit, project, project_with,
 };
 use gsx_core::targets::{TARGETS, target};
 
@@ -35,6 +36,31 @@ fn whitespace_free_runs_project_linearly() {
         let large = parse(&pattern.repeat(4 * times), &[]).unwrap();
         for target in TARGETS {
             let (short, long) = (fastest(&small, target), fastest(&large, target));
+            let floor = short.max(std::time::Duration::from_millis(2));
+            assert!(long < floor * 10, "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
+        }
+    }
+}
+
+#[test]
+fn threads_split_linearly() {
+    let threaded = |document: &Document, target: &'static Target| {
+        let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+        (0..2)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                assert!(project(document, target, &facts).parts.len() > 1, "{} did not split", target.name);
+                started.elapsed()
+            })
+            .min()
+            .unwrap()
+    };
+    for pattern in ["word ", "x", "One sentence here. "] {
+        let times = 20_000 / pattern.len();
+        let small = parse(&pattern.repeat(times), &[]).unwrap();
+        let large = parse(&pattern.repeat(4 * times), &[]).unwrap();
+        for target in TARGETS.iter().filter(|target| target.threads()) {
+            let (short, long) = (threaded(&small, target), threaded(&large, target));
             let floor = short.max(std::time::Duration::from_millis(2));
             assert!(long < floor * 10, "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
         }
@@ -118,15 +144,96 @@ fn mastodon_limit_follows_instance_fact() {
 }
 
 #[test]
+fn attached_media_report_only_listed_items() {
+    let markdown = "Look\n\n::media{id=\"a\"}\n\n::media{ids=\"b,c\" layout=\"collage\"}\n\n::media{id=\"c\"}";
+    let items = [MediaFact { id: "c", format: Format::Image, alt: None, spoiler: false, inline: false }];
+    let listed = Facts { media: Some(MediaKind::Image), media_count: 1, items: Some(&items), ..Facts::default() };
+    let unlisted = Facts { items: None, ..listed };
+    let attached = (Class::Approximated, "media_attached");
+    let missing = (Class::Omitted, "media_missing");
+    for target in TARGETS.iter().filter(|target| target.form.blocks().is_none() && target.name != "telegram-html-rich")
+    {
+        let media = |facts: &Facts| -> Vec<_> {
+            run(target.name, markdown, facts)
+                .changes
+                .iter()
+                .filter(|change| change.feature == Feature::Media)
+                .map(|change| (change.range.unwrap().start, (change.class, change.reason)))
+                .collect()
+        };
+        assert_eq!(media(&listed), [(6, missing), (23, missing), (23, attached), (60, attached)], "{}", target.name);
+        assert_eq!(media(&unlisted), [(6, attached), (23, attached), (60, attached)], "{}", target.name);
+    }
+}
+
+#[test]
+fn media_after_the_cut_still_report_their_change() {
+    let markdown = format!("{}\n\n::media{{id=\"c\"}}", "word ".repeat(2000));
+    let items = [MediaFact { id: "c", format: Format::Image, alt: None, spoiler: false, inline: false }];
+    let facts = Facts { media: Some(MediaKind::Image), media_count: 1, items: Some(&items), ..Facts::default() };
+    let mut cut = vec![];
+    for target in TARGETS.iter().filter(|target| target.form.blocks().is_none() && target.name != "telegram-html-rich")
+    {
+        let projection = run(target.name, &markdown, &facts);
+        let reasons: Vec<_> = projection.changes.iter().map(|change| change.reason).collect();
+        if reasons.contains(&"text_truncated") {
+            cut.push(target.name);
+            assert!(reasons.contains(&"media_attached"), "{}: {reasons:?}", target.name);
+        }
+    }
+    assert!(cut.contains(&"x-plain") && cut.contains(&"telegram-html") && cut.contains(&"discord-markdown"), "{cut:?}");
+}
+
+#[test]
+fn telegram_limits_count_code_points() {
+    let emoji = "\u{1F600}";
+    let cases = [
+        ("telegram-html", Facts { media: Some(MediaKind::Image), media_count: 1, ..Facts::default() }, 1024),
+        ("telegram-entities", Facts { caption_limit: Some(200), ..Facts::default() }, 200),
+    ];
+    for (name, facts, maximum) in cases {
+        let full = run(name, &emoji.repeat(maximum), &facts);
+        assert_eq!(text(&full, FieldName::Text), emoji.repeat(maximum), "{name}");
+        let measurement = full.measurements.iter().find(|item| item.field == FieldName::Text).unwrap();
+        assert_eq!(
+            (measurement.unit, measurement.value, measurement.maximum),
+            (Unit::CodePoints, maximum, Some(maximum))
+        );
+        let over = run(name, &emoji.repeat(maximum + 1), &facts);
+        assert_eq!(text(&over, FieldName::Text), format!("{}…", emoji.repeat(maximum - 1)), "{name}");
+        assert!(reasons(&over).contains(&(Class::Approximated, Feature::Text, "text_truncated")), "{name}");
+    }
+}
+
+#[test]
+fn placement_selects_limits() {
+    let body = "word ".repeat(300);
+    let image = |placement| Facts { media: Some(MediaKind::Image), media_count: 1, placement, ..Facts::default() };
+    let maximum = |name, facts: &Facts| {
+        let projection = run(name, &body, facts);
+        projection.measurements.iter().find(|item| item.field == FieldName::Text).unwrap().maximum
+    };
+    assert_eq!(maximum("telegram-html", &image(None)), Some(1024));
+    assert_eq!(maximum("telegram-html", &image(Some(Placement::Post))), Some(1024));
+    assert_eq!(maximum("telegram-html", &image(Some(Placement::Story))), Some(2048));
+    let story = run("telegram-html", &body, &image(Some(Placement::Story)));
+    assert_eq!(text(&story, FieldName::Text), body.trim_end());
+    assert_eq!(
+        maximum("telegram-entities", &Facts { placement: Some(Placement::Post), ..Facts::default() }),
+        Some(200)
+    );
+}
+
+#[test]
 fn list_item_continuation_is_indented() {
     let projection = run("facebook-plain", "- one\n\n  more\n- two", &Facts::default());
-    assert_eq!(text(&projection, FieldName::Text), "• one\n\n  more\n• two");
+    assert_eq!(text(&projection, FieldName::Text), "– one\n\n  more\n– two");
 }
 
 #[test]
 fn quote_prefixes_every_line() {
     let projection = run("facebook-plain", "> one\n>\n> two", &Facts::default());
-    assert_eq!(text(&projection, FieldName::Text), "> one\n> \n> two");
+    assert_eq!(text(&projection, FieldName::Text), "› one\n› \n› two");
 }
 
 #[test]
@@ -166,9 +273,44 @@ fn bluesky_facets_use_byte_offsets_and_skip_literals() {
 }
 
 #[test]
+fn links_are_underlined_where_underline_is_native() {
+    let facts = Facts::default();
+    let link = "[docs](https://example.com)";
+    assert_eq!(
+        text(&run("telegram-html", link, &facts), FieldName::Text),
+        "<u><a href=\"https://example.com/\">docs</a></u>"
+    );
+    assert_eq!(text(&run("discord-markdown", link, &facts), FieldName::Text), "__[docs](https://example.com/)__");
+    assert_eq!(text(&run("slack-markdown", link, &facts), FieldName::Text), "[docs](https://example.com/)");
+    let outer = run("telegram-html", "++see [docs](https://example.com)++", &facts);
+    assert_eq!(text(&outer, FieldName::Text), "<u>see <a href=\"https://example.com/\">docs</a></u>");
+    let inner = run("discord-markdown", "[++docs++](https://example.com)", &facts);
+    assert_eq!(text(&inner, FieldName::Text), "[__docs__](https://example.com/)");
+    let allowed = Facts { entities_allowed: true, ..Facts::default() };
+    let projection = run("telegram-entities", link, &allowed);
+    assert_eq!(
+        entities(&projection),
+        [(Style::Underline, 0, 4, None), (Style::Link, 0, 4, Some("https://example.com/"))]
+    );
+    assert_eq!(reasons(&projection), []);
+}
+
+#[test]
+fn entity_cap_drops_link_underlines_first() {
+    let links = (0..60).map(|index| format!("[l{index}](https://example.com/{index})")).collect::<Vec<_>>();
+    let markdown = format!("{} **end**", links.join(" "));
+    let facts = Facts { entities_allowed: true, caption_limit: Some(1024), ..Facts::default() };
+    let projection = run("telegram-entities", &markdown, &facts);
+    let found = entities(&projection);
+    let count = |style: Style| found.iter().filter(|entity| entity.0 == style).count();
+    assert_eq!((found.len(), count(Style::Link), count(Style::Bold), count(Style::Underline)), (100, 60, 1, 39));
+    assert_eq!(reasons(&projection), []);
+}
+
+#[test]
 fn threads_spoilers_skip_prefixes_and_ellipsis() {
     let projection = run("threads-entities", "> ||один\nдва|| три", &Facts::default());
-    assert_eq!(text(&projection, FieldName::Text), "> один\n> два три");
+    assert_eq!(text(&projection, FieldName::Text), "› один\n› два три");
     assert_eq!(entities(&projection), [(Style::Spoiler, 2, 7, None), (Style::Spoiler, 9, 12, None)]);
     let document = parse("||secret words here||", &[]).unwrap();
     let options = Options { search: None, maximum: Some(10) };

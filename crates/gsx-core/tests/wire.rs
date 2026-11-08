@@ -1,13 +1,46 @@
-use gsx_core::document::Media;
+use gsx_core::document::{Limit, Media};
 use gsx_core::project::{Facts, MediaKind};
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire::{invalid_text, parse, project, serialize, targets};
 
 #[test]
+fn runs_inputs_at_the_depth_limits_within_a_thread_stack() {
+    let containers = Limit::ContainerDepth.maximum() as usize;
+    let inlines = Limit::InlineDepth.maximum() as usize;
+    let lists: String = (0..containers - 1).flat_map(|level| ["  ".repeat(level), "- a\n".to_owned()]).collect();
+    let mixed: String = (0..containers / 2).flat_map(|level| ["    ".repeat(level), "- > a\n".to_owned()]).collect();
+    let inline = format!("{}a{}", "**".repeat(inlines), "**".repeat(inlines));
+    let link =
+        format!("[{}![a](https://e.com/i){}](https://e.com)", "**".repeat(inlines - 2), "**".repeat(inlines - 2));
+    let directives = format!("{}a{}", "::x[**".repeat(inlines / 2), "**]".repeat(inlines / 2));
+    let inputs = [
+        format!("{}{link}", "> ".repeat(containers)),
+        format!("{}{directives}", "> ".repeat(containers)),
+        format!("{lists}{}- {inline}\n", "  ".repeat(containers - 1)),
+        format!("{mixed}{}- > {inline}\n", "    ".repeat(containers / 2)),
+    ];
+    let stack = if cfg!(debug_assertions) { 1 << 20 } else { 128 << 10 };
+    std::thread::Builder::new()
+        .stack_size(stack)
+        .spawn(move || {
+            for input in &inputs {
+                assert!(!parse(input.as_bytes(), &[]).contains("\"error\""), "{input}");
+                assert!(serialize(input.as_bytes(), &[]).contains("\"serialized\""), "{input}");
+                for target in TARGETS {
+                    assert!(project(input.as_bytes(), &[], target, &Facts::default()).contains("\"projection\""));
+                }
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
 fn writes_serialized_source_or_the_parse_error() {
     assert_eq!(serialize("Title\n=====\n\n_a_\t\"q\"".as_bytes(), &[]), r##"{"serialized":"# Title\n\n*a*\t\"q\""}"##);
     assert_eq!(serialize(b"ab\xff", &[]), parse(b"ab\xff", &[]));
-    let deep = ">".repeat(65);
+    let deep = ">".repeat(33);
     assert_eq!(serialize(deep.as_bytes(), &[]), parse(deep.as_bytes(), &[]));
 }
 
@@ -121,8 +154,8 @@ fn writes_errors() {
         r#"{"error":{"code":"MARKDOWN_INVALID_TEXT","range":[2,3],"details":{"codePoint":1}}}"#
     );
     assert_eq!(
-        parse(">".repeat(65).as_bytes(), &[]),
-        r#"{"error":{"code":"MARKDOWN_TOO_COMPLEX","range":[64,65],"details":{"limit":"containerDepth","maximum":64}}}"#
+        parse(">".repeat(33).as_bytes(), &[]),
+        r#"{"error":{"code":"MARKDOWN_TOO_COMPLEX","range":[32,33],"details":{"limit":"containerDepth","maximum":32}}}"#
     );
 }
 

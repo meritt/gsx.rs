@@ -288,11 +288,11 @@ pub fn reference_collapsed_open(tokenizer: &mut Tokenizer) -> State {
 }
 
 pub fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
-    let labels = tokenizer.tokenize_state.labels.split_off(0);
+    let labels = std::mem::take(&mut tokenizer.tokenize_state.labels);
     inject_labels(tokenizer, &labels);
-    let starts = tokenizer.tokenize_state.label_starts.split_off(0);
+    let starts = std::mem::take(&mut tokenizer.tokenize_state.label_starts);
     mark_as_data(tokenizer, &starts);
-    let starts = tokenizer.tokenize_state.label_starts_loose.split_off(0);
+    let starts = std::mem::take(&mut tokenizer.tokenize_state.label_starts_loose);
     mark_as_data(tokenizer, &starts);
 
     tokenizer.map.consume(&mut tokenizer.events);

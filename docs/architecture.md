@@ -1,68 +1,61 @@
 # Architecture
 
-gsx parses `gsx/1` text into a document whose ranges are UTF-16 offsets of the input, writes it back as canonical `gsx/1`, and projects it onto a publishing target: text fields fitted to the platform's limits plus every change the projection made. Results are byte-identical in Rust, WebAssembly, Swift and Python. The rules are specified in [decisions/](decisions/readme.md).
-
-gsx returns a representation: text, markup or entities, measurements, a media plan and changes. The caller owns credentials, transport, media upload, publication options and the provider request (`sendMediaGroup`, `attach://…`).
-
-## Components
-
-```text
-                      gsx-core            parser, document, serializer, measurement, projection;
-                          │               no I/O, no unsafe
-             ┌────────────┴────────────┐
-         gsx-wasm                   gsx-ffi              C ABI; the only unsafe code
-   gsx.wasm + gsx.js          ┌────────┴─────────┐
-  (@meritt/gsx-wasm)   GSXFFI.xcframework      libgsx
-                         + GSX (Swift)      + gsx (Python, ctypes)
-```
-
-Dependencies point down only. Bindings pass text in, take JSON out and decode it; they add no rules ([bindings.md](decisions/bindings.md)).
+`gsx-core` owns the `gsx/1` model and all format rules. Bindings translate inputs, types and errors; callers own credentials, uploads, account resolution and publication. The core has no I/O or `unsafe` code.
 
 ## Pipeline
 
-```text
-text ─► source ─► syntax ─► document ─┬─► serialize ─► canonical gsx/1
-         │          │          │      │
-         │          │          │      └─► project(target, facts) ─► fields, measurements, changes, media, blocks
-         │          │          └─ node arena, validation, diagnostics
-         │          └─ tokenizer: markers, content ranges, budgets
-         └─ line endings, line index, UTF-8 ↔ UTF-16
+The parser produces one document for serialization and projection; bindings expose these operations through a shared JSON writer.
+
+```mermaid
+flowchart LR
+    input[Input] --> source[Source normalization and offsets]
+    source --> syntax[Syntax events]
+    syntax --> document[Document and diagnostics]
+    document --> serialize[Canonical serialization]
+    document --> project[Projection]
+    target[Target rules and facts] --> project
+    project --> output[Fields, measurements, changes and media]
 ```
 
-| Module | Owns |
-|---|---|
-| `source` | line endings, line index, offset mapping, complexity budgets ([limits](decisions/conformance.md#limits)) |
-| `syntax` | the `gsx/1` tokenizer, derived from markdown-rs 1.0.0 ([parser.md](decisions/parser.md)) |
-| `document` | node arena, builder, validation, diagnostics |
-| `serialize` | canonical `gsx/1` ([serialize.md](decisions/serialize.md)) |
-| `measure` | length units ([measure.md](decisions/measure.md)) |
-| `project` | target framework, change classes, media plan, fitting, manifest, digest ([projection.md](decisions/projection.md)) |
-| `forms` | `plain`, `entities`, `markdown`, `html`, `blocks` |
-| `targets` | one table per target: node type → output rule, change class, reason |
-| `wire` | the JSON every binding returns, described by [`schema/gsx-1.schema.json`](../schema/gsx-1.schema.json) |
+| Core module | Responsibility |
+| --- | --- |
+| `source`, `syntax` | Normalization, source positions, tokenizer and complexity budgets |
+| `document` | Node tree, markers, validation and diagnostics |
+| `serialize` | Canonical text and source fallback |
+| `measure` | Unicode segmentation, length units and field limits |
+| `project` | Field derivation, fitting, threads and media plans |
+| `forms` | Plain text, entities, Markdown, HTML and blocks |
+| `targets` | Rules, form configuration and limits per target |
+| `wire` | JSON encoding shared by all bindings |
+
+Module paths are relative to [`crates/gsx-core/src`](../crates/gsx-core/src). Contract details live in [decisions/](decisions/readme.md).
+
+The tokenizer and document model do not depend on projection or bindings. Projection depends on the document and measurement layers; forms implement its renderer interface, and targets select forms and rules. Renderer callbacks keep platform modules out of the projection engine. Serialization depends on the document and reparses through the same grammar. [Parser ownership](decisions/parser.md) explains the event-stream boundary.
+
+A target's rule table drives rendering outcomes, capabilities and its manifest. Keep behavior in that table and shared form configuration so declarations cannot drift from rendering. Bindings share the Rust wire writer; byte-for-byte parity is enforced by [consumer replay](../AGENTS.md#replay-and-performance).
+
+## Bindings
+
+```text
+gsx-core
+├── gsx-wasm -> gsx.wasm + gsx.js -> @meritt/gsx-wasm
+└── gsx-ffi
+    ├── GSXFFI.xcframework -> GSX (Swift)
+    └── libgsx -> gsx (Python, ctypes)
+```
+
+[`gsx-ffi`](../crates/gsx-ffi) owns the C ABI and its unsafe boundary. Package contracts are in [bindings.md](decisions/bindings.md).
 
 ## Targets
 
-A name is `<platform>-<form>[-<variant>]`: the current platform name in lowercase (`x`, not `twitter`), a form, and a variant only to separate two targets of one form on one platform.
+Names follow `<platform>-<form>[-<variant>]`, using the current lowercase platform name (`x`, not `twitter`). A variant distinguishes targets of the same platform and form. `targets()` returns the configured targets, capabilities and manifests; these describe this release's behavior.
 
-| Target | Platform surface |
-| --- | --- |
-| `x-plain` | post |
-| `mastodon-plain` | status |
-| `linkedin-plain` | post, Little Text Format |
-| `facebook-plain` | post, caption |
-| `instagram-plain` | caption |
-| `vk-plain` | wall post |
-| `youtube-plain` | video title and description |
-| `tiktok-plain` | video and photo post caption |
-| `slack-plain` | file upload comment (`file_initial_comment`) |
-| `telegram-entities` | story caption with entities via MTProto |
-| `bluesky-entities` | post text with facets |
-| `threads-entities` | post text with spoilers |
-| `telegram-html` | Bot API messages and captions, `parse_mode: HTML` |
-| `telegram-html-rich` | rich message HTML with native blocks |
-| `max-html` | MAX messages, HTML |
-| `discord-markdown` | message content |
-| `slack-markdown` | message text in Slack markdown |
-| `discord-blocks` | message components |
-| `slack-blocks` | Block Kit message |
+| Form | Targets | Rule table |
+| --- | --- | --- |
+| Plain | `x-plain`, `mastodon-plain`, `linkedin-plain`, `facebook-plain`, `instagram-plain`, `vk-plain`, `youtube-plain`, `tiktok-plain`, `slack-plain` | [plain.rs](../crates/gsx-core/src/targets/plain.rs) |
+| Entities | `telegram-entities`, `bluesky-entities`, `threads-entities` | [entities.rs](../crates/gsx-core/src/targets/entities.rs) |
+| HTML | `telegram-html`, `telegram-html-rich`, `max-html` | [html.rs](../crates/gsx-core/src/targets/html.rs) |
+| Markdown | `discord-markdown`, `slack-markdown` | [markdown.rs](../crates/gsx-core/src/targets/markdown.rs) |
+| Blocks | `discord-blocks`, `slack-blocks` | [blocks.rs](../crates/gsx-core/src/targets/blocks.rs) |
+
+`telegram-entities` represents MTProto story captions; `telegram-html` represents Bot API messages and captions with HTML parse mode; `telegram-html-rich` represents rich-message HTML. `discord-blocks` represents Components V2 and `slack-blocks` represents Block Kit. `slack-plain` represents a file upload comment, and `linkedin-plain` uses Little Text Format escaping. `youtube-plain` produces a title and description; TikTok photo posts and VK videos also have derived title fields.

@@ -5,7 +5,7 @@ use crate::document::{Layout, Node};
 
 use super::Context;
 use super::change::{Class, Feature, FieldName};
-use super::facts::{Facts, Format};
+use super::facts::{Facts, Format, MediaFact};
 use crate::measure::{self, MediaKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,6 +28,10 @@ pub enum When {
     Count,
     Spoiler,
     Truncated,
+    Refused,
+    Thread,
+    Code,
+    Post,
 }
 
 impl When {
@@ -51,6 +55,10 @@ impl When {
             When::Count => "count",
             When::Spoiler => "spoiler",
             When::Truncated => "truncated",
+            When::Refused => "refused",
+            When::Thread => "thread",
+            When::Code => "code",
+            When::Post => "post",
         }
     }
 }
@@ -97,7 +105,7 @@ impl Media {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Source {
     Body,
-    Title { fact: bool, first_line_removed: bool },
+    Title { fact: bool },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,7 +154,13 @@ pub enum Style {
     Code,
     Link,
     Tag,
+    Pre,
+    Blockquote,
+    Date,
+    Mention,
 }
+
+pub const DATE_LABEL: usize = 127;
 
 impl Style {
     pub const fn name(self) -> &'static str {
@@ -159,6 +173,10 @@ impl Style {
             Style::Code => "code",
             Style::Link => "link",
             Style::Tag => "tag",
+            Style::Pre => "pre",
+            Style::Blockquote => "blockquote",
+            Style::Date => "date",
+            Style::Mention => "mention",
         }
     }
 }
@@ -178,6 +196,7 @@ pub struct EntityForm {
     pub code_splits: bool,
     pub detection: Detection,
     pub cap: Option<usize>,
+    pub links: Option<usize>,
     pub trim: bool,
     pub styled_suffix: bool,
 }
@@ -240,6 +259,7 @@ pub struct MarkdownForm {
     pub datetime: &'static str,
     pub separators: &'static str,
     pub quote_depth: Option<u32>,
+    pub url_labels: bool,
 }
 
 impl MarkdownForm {
@@ -258,8 +278,32 @@ pub struct BlocksForm {
     pub formats: &'static [Format],
     pub group: Option<(Layout, usize)>,
     pub items: Option<usize>,
-    pub ceiling: Option<usize>,
+    pub ceiling: Option<Ceiling>,
     pub spoiler: bool,
+    pub separator: bool,
+    pub unplaced: Unplaced,
+}
+
+impl BlocksForm {
+    pub fn places(&self, fact: &MediaFact) -> bool {
+        fact.inline && self.formats.contains(&fact.format)
+    }
+
+    pub fn shows(&self, fact: &MediaFact) -> bool {
+        self.places(fact) || self.unplaced == Unplaced::File
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ceiling {
+    pub blocks: usize,
+    pub per_item: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unplaced {
+    File,
+    Attach,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -377,6 +421,14 @@ pub struct Target {
     pub normalization: Normalization,
     pub renderer: Renderer,
     pub limits: &'static [measure::Limit],
+    pub spoilers: Spoilers,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Spoilers {
+    None,
+    Items(&'static [Format]),
+    Post,
 }
 
 impl Target {
@@ -409,6 +461,27 @@ impl Target {
         self.rules.iter().any(|rule| rule.feature == feature)
     }
 
+    pub fn codes(&self) -> Vec<String> {
+        let mut codes: Vec<String> = vec![];
+        let blocked = self.rules.iter().flat_map(|rule| {
+            std::iter::once((rule.class, rule.reason))
+                .chain(rule.conditions.iter().map(|condition| (condition.class, condition.reason)))
+        });
+        for (_, reason) in blocked.filter(|(class, _)| *class == Class::Blocked) {
+            let code = reason.to_ascii_uppercase();
+            if !codes.contains(&code) {
+                codes.push(code);
+            }
+        }
+        codes
+    }
+
+    pub fn threads(&self) -> bool {
+        self.rules.iter().any(|rule| {
+            rule.feature == Feature::Text && rule.conditions.iter().any(|condition| condition.when == When::Thread)
+        })
+    }
+
     pub fn class(&self, feature: Feature) -> Class {
         self.rule(feature).class
     }
@@ -438,6 +511,9 @@ impl Target {
         );
         if self.normalization == Normalization::Nfc {
             let _ = writeln!(out, "normalization nfc {}", super::nfc::UNICODE_VERSION);
+        }
+        if self.spoilers != Spoilers::None {
+            let _ = writeln!(out, "spoilers {:?}", self.spoilers);
         }
         for rule in self.rules {
             let _ = writeln!(out, "feature {} {} {}", rule.feature.name(), rule.class.name(), rule.reason);
@@ -478,7 +554,8 @@ impl Target {
 
     pub fn digest(&self) -> String {
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-        for byte in self.manifest().bytes().chain(measure::UNICODE_VERSION.bytes()) {
+        let version = env!("CARGO_PKG_VERSION").bytes();
+        for byte in self.manifest().bytes().chain(measure::UNICODE_VERSION.bytes()).chain(version) {
             hash = (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
         }
         format!("{hash:016x}")

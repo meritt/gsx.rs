@@ -20,6 +20,7 @@ __all__ = [
     "Item",
     "Marker",
     "Measurement",
+    "Part",
     "Media",
     "MediaFact",
     "Node",
@@ -270,9 +271,16 @@ class Facts:
     characters_reserved_per_url: Optional[int] = None
     caption_limit: Optional[int] = None
     entities_allowed: bool = False
-    items: Tuple[MediaFact, ...] = ()
+    items: Optional[Tuple[MediaFact, ...]] = None
     target_url: Optional[str] = None
     description_limit: Optional[int] = None
+    placement: Optional[str] = None
+    hashtag_limit: Optional[int] = None
+    """Instagram hashtags allowed in a caption; 5 without it."""
+    spoiler_text: Optional[str] = None
+    """Mastodon content warning: not rendered, but counted with the text against the status limit."""
+    overflow: Optional[str] = None
+    """What a body that does not fit becomes: "truncate" (the default) or "thread" where the target publishes threads."""
 
 
 @dataclass(frozen=True)
@@ -305,8 +313,11 @@ class Measurement:
 
 @dataclass(frozen=True)
 class Attachment:
+    """A media item as published: alt fitted, and hidden when the platform carries its spoiler."""
+
     reference: str
     alt: Optional[str]
+    spoiler: bool
 
 
 @dataclass(frozen=True)
@@ -318,11 +329,13 @@ class Item:
 
 @dataclass(frozen=True)
 class Block:
-    """Text, or media items with an optional layout."""
+    """Text, media items with an optional layout, an attached file shown in place, or a separator."""
 
     text: Optional[str] = None
     items: Optional[List[Item]] = None
     layout: Optional[str] = None
+    file: Optional[Item] = None
+    separator: bool = False
 
 
 @dataclass(frozen=True)
@@ -355,7 +368,17 @@ class Projection:
     blocks: Optional[List[Block]] = None
     """Present for targets of the blocks/1 form only."""
     items: Optional[List[Attachment]] = None
-    """Outside the blocks/1 form, one per media fact item with its fitted alt; absent without items."""
+    """Media attached to the message with its fitted alt: every media fact item outside the blocks/1 form, items no block can show on Slack blocks; absent when empty."""
+    parts: Optional[List["Part"]] = None
+    """With overflow "thread", when the body did not fit: every post of the thread in order; the top level repeats the first."""
+
+
+@dataclass(frozen=True)
+class Part:
+    fields: List[Field]
+    measurements: List[Measurement]
+    media: List[str]
+    items: List[Attachment]
 
 
 @dataclass(frozen=True)
@@ -365,6 +388,10 @@ class Target:
     offsets: Optional[str]
     digest: str
     manifest: str
+    codes: List[str]
+    """Every code a blocked change of this target can carry."""
+    threads: bool
+    """Whether overflow "thread" applies."""
 
 
 class _MediaFact(ctypes.Structure):
@@ -383,6 +410,7 @@ class _Facts(ctypes.Structure):
     _fields_ = [
         ("media", ctypes.c_uint32),
         ("media_count", ctypes.c_size_t),
+        ("placement", ctypes.c_uint32),
         ("title", ctypes.c_char_p),
         ("title_len", ctypes.c_size_t),
         ("target_url", ctypes.c_char_p),
@@ -394,6 +422,10 @@ class _Facts(ctypes.Structure):
         ("entities_allowed", ctypes.c_bool),
         ("items", ctypes.POINTER(_MediaFact)),
         ("items_len", ctypes.c_size_t),
+        ("hashtag_limit", ctypes.c_int64),
+        ("spoiler_text", ctypes.c_char_p),
+        ("spoiler_text_len", ctypes.c_size_t),
+        ("overflow", ctypes.c_uint32),
     ]
 
 
@@ -412,6 +444,8 @@ _lib.gsx_targets.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
 _lib.gsx_targets.restype = ctypes.c_void_p
 
 _KINDS = {None: 0, "image": 1, "video": 2, "gif": 3, "audio": 4}
+_PLACEMENTS = {None: 0, "post": 1, "reel": 2, "story": 3}
+_OVERFLOWS = {None: 0, "truncate": 0, "thread": 1}
 _FORMATS = {"image": 0, "gif": 1, "video": 2, "audio": 3}
 
 
@@ -426,13 +460,19 @@ def _limit(value: Optional[int], name: str) -> int:
 def _facts(facts: Facts) -> _Facts:
     if facts.media not in _KINDS:
         raise ValueError("facts.media must be 'image', 'video', 'gif', 'audio' or None")
+    if facts.placement not in _PLACEMENTS:
+        raise ValueError("facts.placement must be 'post', 'reel', 'story' or None")
+    if facts.overflow not in _OVERFLOWS:
+        raise ValueError("facts.overflow must be 'truncate', 'thread' or None")
     count = facts.media_count
     if not isinstance(count, int) or isinstance(count, bool) or not 0 <= count < 1 << 8 * ctypes.sizeof(ctypes.c_size_t):
         raise ValueError("facts.media_count must be a non-negative int that fits size_t")
     title = None if facts.title is None else facts.title.encode("utf-8")
     target_url = None if facts.target_url is None else facts.target_url.encode("utf-8")
-    items =(_MediaFact * len(facts.items))()
-    for index, item in enumerate(facts.items):
+    spoiler_text = None if facts.spoiler_text is None else facts.spoiler_text.encode("utf-8")
+    listed = () if facts.items is None else tuple(facts.items)
+    items = None if facts.items is None else (_MediaFact * len(listed))()
+    for index, item in enumerate(listed):
         if item.format not in _FORMATS:
             raise ValueError("facts.items format must be 'image', 'gif', 'video' or 'audio'")
         id_ = item.id.encode("utf-8")
@@ -443,6 +483,7 @@ def _facts(facts: Facts) -> _Facts:
     return _Facts(
         _KINDS[facts.media],
         facts.media_count,
+        _PLACEMENTS[facts.placement],
         title,
         0 if title is None else len(title),
         target_url,
@@ -453,7 +494,11 @@ def _facts(facts: Facts) -> _Facts:
         _limit(facts.description_limit, "facts.description_limit"),
         bool(facts.entities_allowed),
         items,
-        len(facts.items),
+        len(listed),
+        _limit(facts.hashtag_limit, "facts.hashtag_limit"),
+        spoiler_text,
+        0 if spoiler_text is None else len(spoiler_text),
+        _OVERFLOWS[facts.overflow],
     )
 
 
@@ -477,19 +522,8 @@ def _range(value: Optional[list]) -> Optional[Range]:
 def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Media] = ()) -> Projection:
     projection = _unwrap(project_json(text, target, facts, media), "projection")
     return Projection(
-        fields=[
-            Field(
-                item["name"],
-                item["text"],
-                [Range(*link) for link in item["links"]],
-                [Entity(entity["style"], Range(*entity["range"]), entity["value"]) for entity in item["entities"]],
-            )
-            for item in projection["fields"]
-        ],
-        measurements=[
-            Measurement(item["field"], item["unit"], item["value"], item["maximum"], item.get("block"), item.get("item"))
-            for item in projection["measurements"]
-        ],
+        fields=_fields(projection["fields"]),
+        measurements=_measurements(projection["measurements"]),
         changes=[
             Change(
                 item["class"],
@@ -507,12 +541,45 @@ def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Medi
         media=projection["media"],
         blocks=None if "blocks" not in projection else [_block(block) for block in projection["blocks"]],
         items=None if "items" not in projection else [Attachment(**item) for item in projection["items"]],
+        parts=None if "parts" not in projection else [_part(part) for part in projection["parts"]],
+    )
+
+
+def _fields(fields: list) -> List[Field]:
+    return [
+        Field(
+            item["name"],
+            item["text"],
+            [Range(*link) for link in item["links"]],
+            [Entity(entity["style"], Range(*entity["range"]), entity["value"]) for entity in item["entities"]],
+        )
+        for item in fields
+    ]
+
+
+def _measurements(measurements: list) -> List[Measurement]:
+    return [
+        Measurement(item["field"], item["unit"], item["value"], item["maximum"], item.get("block"), item.get("item"))
+        for item in measurements
+    ]
+
+
+def _part(part: dict) -> Part:
+    return Part(
+        _fields(part["fields"]),
+        _measurements(part["measurements"]),
+        part["media"],
+        [Attachment(**item) for item in part["items"]],
     )
 
 
 def _block(block: dict) -> Block:
     if "text" in block:
         return Block(text=block["text"])
+    if "file" in block:
+        return Block(file=Item(**block["file"]))
+    if "separator" in block:
+        return Block(separator=True)
     return Block(items=[Item(**item) for item in block["items"]], layout=block["layout"])
 
 

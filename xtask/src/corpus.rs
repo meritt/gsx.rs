@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use gsx_core::document::Media;
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Target};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target};
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire;
 
@@ -159,6 +159,7 @@ fn outcome(
         .collect();
     let title = facts.get("title").string();
     let target_url = facts.get("targetUrl").string();
+    let spoiler_text = facts.get("spoilerText").string();
     let limit = |key| facts.get(key).number();
     let facts = Facts {
         media: match facts.get("media").string().as_deref() {
@@ -170,14 +171,28 @@ fn outcome(
             Some(other) => return Err(format!("{place}: no media kind {other}")),
         },
         media_count: limit("mediaCount").unwrap_or(0) as usize,
+        placement: match facts.get("placement").string().as_deref() {
+            None => None,
+            Some("post") => Some(Placement::Post),
+            Some("reel") => Some(Placement::Reel),
+            Some("story") => Some(Placement::Story),
+            Some(other) => return Err(format!("{place}: no placement {other}")),
+        },
         title: title.as_deref(),
         target_url: target_url.as_deref(),
         max_characters: limit("maxCharacters"),
         characters_reserved_per_url: limit("charactersReservedPerUrl"),
         caption_limit: limit("captionLimit"),
         description_limit: limit("descriptionLimit"),
+        hashtag_limit: limit("hashtagLimit"),
+        spoiler_text: spoiler_text.as_deref(),
+        overflow: match facts.get("overflow").string().as_deref() {
+            None | Some("truncate") => Overflow::Truncate,
+            Some("thread") => Overflow::Thread,
+            Some(other) => return Err(format!("{place}: no overflow {other}")),
+        },
         entities_allowed: matches!(facts.get("entitiesAllowed"), Json::Bool(true)),
-        items: &items,
+        items: matches!(facts.get("items"), Json::Array(_)).then_some(&items[..]),
     };
     Ok(match (String::from_utf16(units).ok(), operation, target) {
         (Some(text), Operation::Project, Some(target)) => wire::project(text.as_bytes(), &media, target, &facts),
@@ -192,19 +207,23 @@ fn outcome(
 
 const FACTS: [&str; 2] = [
     "{}",
-    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"entitiesAllowed":true}"#,
+    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"hashtagLimit":3,"spoilerText":"CW","overflow":"thread","entitiesAllowed":true}"#,
 ];
+const PLACEMENTS: [&str; 3] = ["post", "reel", "story"];
 
 pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> Result {
     let mut sources = std::collections::HashMap::new();
     let mut with_media = Vec::new();
-    for file in inputs {
-        let file = file.as_ref();
+    let files = inputs.iter().map(|file| (file.as_ref(), false)).chain([(selection, true)]);
+    for (file, own) in files {
         let text = read(file)?;
         for line in text.lines().skip(1).filter(|line| !line.is_empty()) {
             let value = Parser { bytes: line.as_bytes(), at: 0 }
                 .value()
                 .ok_or_else(|| format!("{}: not JSON", file.display()))?;
+            if own && !matches!(value.get("markdown"), Json::String(_)) {
+                continue;
+            }
             let media: Vec<String> = value
                 .get("media")
                 .items()
@@ -242,11 +261,14 @@ pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> 
     let mut lines = vec!["{\"corpus\":\"gsx-projection\"}".to_owned()];
     for target in TARGETS {
         for facts in FACTS {
-            for id in &ids {
+            for (index, id) in ids.iter().enumerate() {
                 let (input, items) =
                     sources.get(id).ok_or_else(|| format!("{}: no input for {id}", selection.display()))?;
                 let facts = match facts.strip_suffix('}') {
-                    Some(given) if facts != "{}" => format!("{given},\"items\":[{items}]}}"),
+                    Some(given) if facts != "{}" => {
+                        let placement = PLACEMENTS[index % PLACEMENTS.len()];
+                        format!("{given},\"placement\":\"{placement}\",\"items\":[{items}]}}")
+                    }
                     _ => facts.to_owned(),
                 };
                 lines.push(format!(

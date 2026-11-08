@@ -349,7 +349,20 @@ jobs:
           cargo bench -p gsx-core --bench instructions --locked -- --save-baseline=base
 
       - name: Compare
-        run: cargo bench -p gsx-core --bench instructions --locked -- --baseline=base --callgrind-limits="$CALLGRIND_LIMITS"
+        run: |
+          status=0
+          cargo bench -p gsx-core --bench instructions --locked -- --baseline=base --callgrind-limits="$CALLGRIND_LIMITS" 2>&1 | tee "$RUNNER_TEMP/instructions.log" || status=$?
+          if [ "$status" -ne 3 ]; then
+            exit "$status"
+          fi
+          {
+            echo "### Instructions above ${CALLGRIND_LIMITS#ir=} of the base commit"
+            echo
+            echo '```text'
+            sed -n '/^Regressions:/,/^Gungraun result:/p' "$RUNNER_TEMP/instructions.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning title=Instructions::Instruction counts grew by more than ${CALLGRIND_LIMITS#ir=}; the job summary lists the benchmarks"
 
       - name: Save
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
@@ -360,4 +373,67 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
+          key: ${{ steps.restore.outputs.cache-primary-key }}
+
+  fuzz:
+    name: Fuzz
+    if: ${{ github.ref_type != 'tag' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    concurrency:
+      group: ci-fuzz-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    permissions:
+      contents: read
+    env:
+      FUZZ_TOOLCHAIN: nightly-2026-11-01
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Restore
+        id: restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/tools/
+            fuzz/target/
+          key: fuzz-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('fuzz/Cargo.lock', '.github/workflows/ci.yml') }}
+          restore-keys: fuzz-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml') }}-
+
+      - name: Setup
+        run: |
+          rustup toolchain install
+          rustup toolchain install "$FUZZ_TOOLCHAIN" --profile minimal
+
+      - name: Install
+        run: |
+          cargo install --locked cargo-fuzz@0.13.2 --root target/tools
+          echo "$GITHUB_WORKSPACE/target/tools/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: |
+          cargo fetch --locked --manifest-path fuzz/Cargo.toml
+          cargo "+$FUZZ_TOOLCHAIN" fuzz build
+
+      - name: Fuzz
+        run: |
+          cargo "+$FUZZ_TOOLCHAIN" fuzz run parse -- -max_len=4096 -max_total_time=60
+          cargo "+$FUZZ_TOOLCHAIN" fuzz run project -- -max_total_time=60
+
+      - name: Save
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/tools/
+            fuzz/target/
           key: ${{ steps.restore.outputs.cache-primary-key }}

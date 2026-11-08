@@ -1,6 +1,6 @@
 use gsx_core::document::{Layout, Media, parse};
 use gsx_core::project::{
-    Block, Class, Facts, Feature, FieldName, Format, Item, MediaFact, MediaKind, Projection, Slot, project,
+    Attachment, Block, Class, Facts, Feature, FieldName, Format, Item, MediaFact, MediaKind, Projection, Slot, project,
 };
 use gsx_core::targets::target;
 
@@ -11,7 +11,8 @@ fn image(id: &str) -> MediaFact<'_> {
 fn run(name: &str, markdown: &str, items: &[MediaFact]) -> Projection {
     let media: Vec<_> = items.iter().map(|item| Media { id: item.id, cover: None }).collect();
     let document = parse(markdown, &media).unwrap();
-    let facts = Facts { media: Some(MediaKind::Image), media_count: items.len(), items, ..Facts::default() };
+    let facts =
+        Facts { media: Some(MediaKind::Image), media_count: items.len(), items: Some(items), ..Facts::default() };
     project(&document, target(name).unwrap(), &facts)
 }
 
@@ -39,14 +40,14 @@ fn text_segments_carry_the_gaps_around_media() {
     assert_eq!(projection.blocks, [text("a *b*\n\n"), single("p"), text("\n\nc")]);
     let measured = projection.measurements.iter().find(|measured| measured.field == FieldName::Text).unwrap();
     assert_eq!(measured.value, "a *b*\n\n\n\nc".chars().count());
-    assert_eq!(measured.maximum, Some(2000));
+    assert_eq!(measured.maximum, Some(4000));
     assert_eq!(reasons(&projection), NONE);
 }
 
 #[test]
 fn slack_segments_use_slack_markdown() {
-    let projection = run("slack-blocks", "a.b\n\n::media{id=\"p\"}", &[image("p")]);
-    assert_eq!(projection.blocks, [text("a\\.b\n\n"), single("p")]);
+    let projection = run("slack-blocks", "a.b\n\n***\n\n::media{id=\"p\"}", &[image("p")]);
+    assert_eq!(projection.blocks, [text("a.b\n\n---\n\n"), single("p")]);
 }
 
 #[test]
@@ -72,18 +73,54 @@ fn unplaced_media_lead() {
     assert_eq!(projection.blocks, [single("p"), text("\n\na\n\n"), single("q")]);
 }
 
+fn attachment(id: &str) -> Attachment {
+    Attachment { reference: format!("media:{id}"), alt: None, spoiler: false }
+}
+
 #[test]
-fn media_without_an_inline_variant_blocks_the_projection() {
+fn slack_attaches_media_that_no_block_can_show() {
     let video = MediaFact { format: Format::Video, ..image("v") };
-    let slack = run("slack-blocks", "::media{id=\"v\"}", &[video]);
-    assert_eq!(reasons(&slack), [(Class::Blocked, Feature::Media, "media_inline_unavailable")]);
-    assert_eq!(slack.changes[0].code().as_deref(), Some("MEDIA_INLINE_UNAVAILABLE"));
-    let discord = run("discord-blocks", "::media{id=\"p\"}", &[MediaFact { inline: false, ..image("p") }]);
-    assert_eq!(reasons(&discord), [(Class::Blocked, Feature::Media, "media_inline_unavailable")]);
+    let slack = run("slack-blocks", "Demo\n\n::media{id=\"v\"}", &[video]);
+    assert_eq!(slack.blocks, [text("Demo")]);
+    assert_eq!(slack.items, [attachment("v")]);
+    assert_eq!(reasons(&slack), [(Class::Approximated, Feature::Media, "media_attached")]);
+    let hidden = run("slack-blocks", "::media{id=\"p\"}", &[MediaFact { inline: false, ..image("p") }]);
+    assert_eq!((hidden.blocks.len(), hidden.items.len()), (0, 1));
+    let mixed = [image("p"), video, image("q")];
+    let group = run("slack-blocks", "::media{ids=\"p,v,q\" layout=\"slideshow\"}", &mixed);
+    assert_eq!(group.blocks, [Block::Media { items: vec![item("p"), item("q")], layout: Some(Layout::Slideshow) }]);
+    assert_eq!(group.items, [attachment("v")]);
+    assert_eq!(reasons(&group), [(Class::Approximated, Feature::Media, "media_attached")]);
+    let marked = MediaFact { alt: Some("A demo"), spoiler: true, ..video };
+    let slots: Vec<_> = run("slack-blocks", "::media{id=\"v\"}", &[marked])
+        .changes
+        .iter()
+        .map(|change| (change.reason, change.field, change.slot))
+        .collect();
+    let slot = Some(Slot { block: None, item: 0 });
+    assert_eq!(
+        slots,
+        [
+            ("media_attached", FieldName::Text, None),
+            ("media_spoiler_omitted", FieldName::Text, slot),
+            ("media_alt_omitted", FieldName::Alt, slot)
+        ]
+    );
+}
+
+#[test]
+fn discord_shows_media_outside_galleries_as_files_in_place() {
+    let audio = MediaFact { format: Format::Audio, alt: Some("Theme"), spoiler: true, ..image("a") };
+    let discord = run("discord-blocks", "Listen\n\n::media{id=\"a\"}\n\nEnd", &[audio]);
+    let file = Item { reference: "media:a".into(), alt: None, spoiler: true };
+    assert_eq!(discord.blocks, [text("Listen\n\n"), Block::File(file), text("\n\nEnd")]);
+    assert_eq!(discord.items, []);
+    assert_eq!(
+        reasons(&discord),
+        [(Class::Approximated, Feature::Media, "media_as_file"), (Class::Omitted, Feature::Media, "media_alt_omitted")]
+    );
+    let video = MediaFact { format: Format::Video, ..image("v") };
     assert_eq!(reasons(&run("discord-blocks", "::media{id=\"v\"}", &[video])), NONE);
-    let videos = [video, MediaFact { format: Format::Video, ..image("w") }];
-    let group = run("slack-blocks", "::media{ids=\"v,w\" layout=\"slideshow\"}", &videos);
-    assert_eq!(reasons(&group), [(Class::Blocked, Feature::Media, "media_inline_unavailable")]);
 }
 
 #[test]
@@ -192,10 +229,10 @@ fn slack_refuses_more_than_fifty_blocks() {
 
 #[test]
 fn media_after_the_cut_follow_the_text() {
-    let markdown = format!("{}\n\n::media{{id=\"p\"}}", "word ".repeat(500));
+    let markdown = format!("{}\n\n::media{{id=\"p\"}}", "word ".repeat(1000));
     let projection = run("discord-blocks", &markdown, &[image("p")]);
     let [Block::Text(kept), media] = projection.blocks.as_slice() else { panic!("{:?}", projection.blocks) };
-    assert!(kept.ends_with('…') && kept.chars().count() <= 2000);
+    assert!(kept.ends_with('…') && kept.chars().count() <= 4000);
     assert_eq!(media, &single("p"));
     let reasons = reasons(&projection);
     assert!(reasons.contains(&(Class::Approximated, Feature::Text, "text_truncated")));
@@ -209,4 +246,21 @@ fn slack_omits_spoilers() {
     assert_eq!(reasons(&projection), [(Class::Omitted, Feature::Media, "media_spoiler_omitted")]);
     let discord = run("discord-blocks", "::media{id=\"p\"}", &[MediaFact { spoiler: true, ..image("p") }]);
     assert_eq!(discord.blocks, [Block::Media { items: vec![Item { spoiler: true, ..item("p") }], layout: None }]);
+}
+
+#[test]
+fn slack_reports_each_omitted_spoiler_at_its_item() {
+    let items = [MediaFact { spoiler: true, ..image("p") }, image("q"), MediaFact { spoiler: true, ..image("r") }];
+    let grouped = run("slack-blocks", "Look\n\n::media{ids=\"p,q,r\" layout=\"slideshow\"}", &items);
+    let slots: Vec<_> = grouped.changes.iter().map(|change| (change.reason, change.slot)).collect();
+    assert_eq!(
+        slots,
+        [
+            ("media_spoiler_omitted", Some(Slot { block: Some(1), item: 0 })),
+            ("media_spoiler_omitted", Some(Slot { block: Some(1), item: 2 })),
+        ]
+    );
+    let single = run("slack-blocks", "::media{id=\"p\"}\n\n::media{id=\"q\"}\n\n::media{id=\"r\"}", &items);
+    let slots: Vec<_> = single.changes.iter().map(|change| change.slot).collect();
+    assert_eq!(slots, [Some(Slot { block: Some(0), item: 0 }), Some(Slot { block: Some(2), item: 0 })]);
 }

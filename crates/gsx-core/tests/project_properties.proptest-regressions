@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f45973e68d4af74ff63901200a61ce049e037046d0da9aeff492e2f7ef50e2ea # shrinks to input = "", setup = Setup { media: 0, kind: None, media_count: 0, placement: None, listed: false, items: [], title: None, target_url: None, max_characters: None, characters_reserved_per_url: None, caption_limit: None, description_limit: None, hashtag_limit: None, spoiler_text: Some("a🚀 aa🚀a aaa 🚀aaa🚀aa 🚀  🚀a a🚀a🚀"), thread: true, entities_allowed: false, maximum: Some(0) }
+cc d5cdd14499d96905f015f50b55a75c62da2e29bcdbde84bdcc569c7cbb5ff87b # shrinks to input = "_em_\n\n::media{ids=\"a,b\" layout=\"collage\"}\n\n```js\nlet x = 1;\n```\n🚀::media{ids=\"a,b\" layout=\"collage\"}\n- ", setup = Setup { media: 0, kind: None, media_count: 0, placement: None, listed: false, items: [], title: None, target_url: None, max_characters: None, characters_reserved_per_url: None, caption_limit: None, description_limit: None, hashtag_limit: None, spoiler_text: None, thread: false, entities_allowed: true, maximum: None }
+cc ee9f12e2a31ff9d2e36e905cbe1355ccb042f12b2a7b1f56b1d7c5467291e5e3 # shrinks to input = "@alice", setup = Setup { media: 0, kind: None, media_count: 0, placement: None, listed: false, items: [], title: None, target_url: None, max_characters: None, characters_reserved_per_url: None, caption_limit: None, description_limit: None, hashtag_limit: None, spoiler_text: None, thread: false, entities_allowed: false, maximum: Some(0) }

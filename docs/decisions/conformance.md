@@ -1,52 +1,67 @@
 # Conformance
 
-How `gsx/1` resolves each case where the spec, micromark and other parsers disagree. Every rule is pinned by the corpus cases listed; an id such as `A06` appears in a case's `sources` as `known:A06` or `parser:A06`.
+`gsx/1` uses CommonMark 0.31.2 and GFM tokenization with the model restrictions and extensions below. The specification takes precedence over implementation-specific parser behavior. [Parser ownership](parser.md) defines the tokenizer boundary.
 
-## Base syntax
+## Syntax
 
-1. Where the CommonMark 0.31.2/GFM spec and micromark 4.0.3 disagree, the spec wins: A06, A07, A14, A16, A17, A20, A21, K02, L05–L08, L12, Q01, Q02, H15, CS1, LK01, LK10, LK24, HT01, W01.
-2. The spec also governs the cases implementations commonly get wrong: rule of three, astral punctuation, list interruption and looseness, lazy lines, link titles, empty destinations, code span indentation, CDATA, tab before a hard break.
-3. Cases the spec leaves open follow micromark, cmark and markdown-rs where they agree:
+| Construct | Input |
+| --- | --- |
+| Emphasis, strong, strikethrough | `*text*`, `**text**`, `~~text~~` |
+| Underline, highlight, spoiler | `++text++`, `==text==`, `\|\|text\|\|` |
+| Date and time | `::time[Launch]{datetime="2026-11-08T12:00:00Z"}` or `::time[Launch]{unix="1794139200"}` |
+| Media | `::media{id="photo"}` |
+| Media group | `::media{ids="a,b" layout="collage"}` or `layout="slideshow"` |
 
-   | Case | Rule |
-   | --- | --- |
-   | H04 | `---` after a definition-only paragraph is a thematic break |
-   | E03 | C1 numeric references decode to U+FFFD |
-   | LK08 | Destination parentheses nest up to 32 levels |
-   | K05, K09, K11 | A checkbox needs content on its line or a continuation and only opens a paragraph |
-   | W04 | A leading BOM is skipped; offsets still count it |
-   | D01, D03, D04 | Directives follow micromark-extension-directive 4.0.0 |
+Headings, lists, task items, quotes, code, tables and hard breaks retain their structural nodes. Raw HTML, image syntax, reference syntax, footnotes and unsupported directives remain literal text. Math spans bind like inline code but produce literal text in the document. Backslash escapes preserve literal provenance; character references produce authored text.
 
-4. Flanking (A08, A09): `~`, `=`, `+`, `|` form one class. Each is excluded from punctuation when `*`/`_` flanking is computed, as micromark does for `~`.
+Explicit links and angle autolinks accept only absolute HTTP(S) URLs with a host and without credentials. Destinations pass through the WHATWG `url` parser, including IDNA and percent-encoding, and use its serialized URL. Projection-generated link destinations use the same policy. A refused syntactic link becomes literal text with `LINK_LITERALIZED`; bare URL and mention detection belongs to the projection.
 
-## gsx/1 rules
+Media directives occupy top-level blocks, separated from non-media blocks by a blank line; up to three leading spaces are allowed. Invalid contexts produce `MEDIA_REFERENCE_CONTEXT_UNSUPPORTED`. Parse-time `media` declares valid IDs and optional covers. Projection-time `facts.items` describes the selected media and is a separate input ([media](projection.md#media)).
 
-1. **Tolerant parse.** Parsing always yields a document. Malformed constructs become literal text with an error diagnostic and a range; `:time` included. Publishing callers refuse a document with errors; editors show them.
-2. **Rejections carry ranges.** MARKDOWN_TOO_COMPLEX names the limit, its value and the range where it was exceeded. MARKDOWN_INVALID_TEXT names the code point and its range.
-3. **Invalid text.** NUL, other forbidden control characters and lone surrogates are MARKDOWN_INVALID_TEXT, not U+FFFD (LK06, E07). Lone surrogates are detected at the binding boundary, before UTF-8 conversion.
-4. **Budgets count what they name.** Cells count cells, pairs count pairs, lines count lines. Limits are calibrated on `testdata/bench/`.
-5. **Linear parsing.** Every input within the limits parses in linear time. Raw HTML openers (`html-comment-opens`, `html-instruction-opens`, `html-comment-tags`), escaped code ticks, quote paragraphs, setext headings, nested lists and code-tick ramps have no budget of their own and are bench cases. Table rows padded to the header's width are capped by `documentTableCells`.
-6. **One URL path.** Link destinations and URLs a target links on its own (Bluesky facets) pass one WHATWG parse. Accepted: absolute `http`/`https` without credentials (LK16 is literal). Every target and every field uses the serialized `href`. LINK_LITERALIZED is reported only when a syntactic link is refused.
-7. **Autolinks.** `<https://…>` is a link under rule 6.
-8. **Math literals bind like code spans.** `$…$` takes precedence over emphasis regardless of which opens first and is its own node. An escape affects one character: `\||` does not open a literal that swallows the following text.
-9. **Every limited field is measured and fitted.** YouTube titles are fitted with the same rules as descriptions.
-10. **Media directives** stay paragraph-only (two-space indent allowed); elsewhere they are literal with MEDIA_REFERENCE_CONTEXT_UNSUPPORTED.
-11. **Task item ranges stay on their line.** A task item's text range ends at its line ending; it never extends past it, as the mdast position does.
+## Parsing and diagnostics
+
+`document::parse(input, media) -> Result<Document, Error>` returns a document with diagnostics for malformed constructs. Invalid controls or exceeded budgets reject the input instead:
+
+| Result | Meaning |
+| --- | --- |
+| Document with diagnostics | Unsupported or malformed content is retained as text; inspect diagnostic severity before publishing |
+| `MARKDOWN_INVALID_TEXT` | C0 controls except tab, LF and CR; DEL and C1 controls; invalid encoding or lone surrogates at a binding boundary |
+| `MARKDOWN_TOO_COMPLEX` | A budget was exceeded; details identify the limit and maximum |
+
+CRLF and CR normalize to LF. Source ranges still address the original input. A leading BOM is skipped but remains counted in offsets. All range conventions are defined in [bindings.md](bindings.md#wire-format).
+
+The tokenizer bounds link-destination parentheses at 32 levels (`LK08`). A task checkbox needs content on its line or a continuation and opens only a paragraph (`K05`, `K09`, `K11`). The paired delimiters `~`, `=`, `+`, `|` are excluded from punctuation when computing `*` and `_` flanking (`A08`, `A09`). Table spoiler handling runs inside the table grammar.
+
+| Boundary case | Resolution |
+| --- | --- |
+| `---` after a definition-only paragraph (`H04`) | Thematic break |
+| C1 numeric character reference (`E03`) | U+FFFD; literal C1 input is rejected |
+| Math span overlapping emphasis | Math binds first, regardless of opener order |
+| Escaped paired delimiter | The escape affects one character only |
+| Task checkbox content | The first paragraph's range ends at its own content, excluding the next block |
+
+Corpus `sources` retain the `known:` and `parser:` case identifiers for these resolutions. Every gsx extension directive opens with `::`, inline ones included: a text directive starts at two colons not preceded by an unescaped colon, so a single colon is ordinary text. Otherwise directive grammar follows the cases pinned for micromark-extension-directive 4.0.0 (`D01`, `D03`, `D04`); `W04` pins BOM handling.
 
 ## Limits
 
-Exceeding any limit rejects the document with MARKDOWN_TOO_COMPLEX and the range of the construct that went over. The `testdata/bench/` budget cases sit one below each limit; the reject cases exceed one.
+Exceeding a budget rejects the document with the affected source range. Values are defined by [`source::Limit`](../../crates/gsx-core/src/source.rs); counts are enforced during tokenization and event validation.
 
-| Limit | Value | Counts | Where counted |
-| --- | --- | --- | --- |
-| `documentLines` | 16384 | Lines: line endings plus one | Before tokenizing |
-| `containerDepth` | 64 | Nested block quotes, list items and footnote definitions | Document tokenizer; no deeper container opens |
-| `blockDelimiters` | 1024 | Characters of `*`, `_`, `~` sequences that reach attention, per paragraph, heading or cell | Inline tokenizer; later sequences stay text |
-| `blockLabels` | 4096 | `[`, `![`, `[^` label starts, per paragraph, heading or cell | Inline tokenizer; later starts stay text |
-| `blockLabelEnds` | 256 | `]` reached by text, per paragraph, heading or cell | Inline tokenizer; later ends stay text |
-| `documentEscapes` | 4096 | Character escapes | Final events |
-| `documentHardBreaks` | 1024 | Hard breaks, escaped and trailing | Final events |
-| `documentListItems` | 8192 | List items | Final events |
-| `documentMathLiterals` | 1024 | `$…$` literals | Final events |
-| `documentPairedDelimiters` | 1024 | Matched `++`, `==`, `\|\|` pairs | Final events |
-| `documentTableCells` | 8192 | Table cells, each row counted at least at the header's column count | Final events |
+| Limit | Maximum | Count |
+| --- | ---: | --- |
+| `documentUnits` | 262144 | Input UTF-16 code units |
+| `documentLines` | 16384 | Normalized line endings plus one |
+| `containerDepth` | 32 | Nested quotes, list items and footnote definitions |
+| `inlineDepth` | 16 | Nested emphasis, strong, strikethrough, underline, highlight, spoiler, text directives, links and images |
+| `blockDelimiters` | 1024 | Characters of `*`, `_`, `~` sequences reaching attention per paragraph, heading or cell |
+| `blockLabels` | 4096 | `[`, `![`, `[^` label starts per paragraph, heading or cell |
+| `blockLabelEnds` | 256 | `]` reached by text per paragraph, heading or cell |
+| `documentEscapes` | 4096 | Character escapes |
+| `documentHardBreaks` | 1024 | Hard breaks |
+| `documentListItems` | 8192 | List items |
+| `documentMathLiterals` | 1024 | Math spans |
+| `documentPairedDelimiters` | 1024 | Matched underline, highlight and spoiler pairs |
+| `documentTableCells` | 8192 | Cells, each row counted at least at the header width |
+
+Input size and lines are checked before tokenization. Container depth is bounded while opening containers; inline tokenization bounds attention and labels, leaving later delimiters as text while recording the exceeded budget. Final event validation enforces the remaining limits and rejects any recorded overflow. The [corpus](../../testdata/corpus) pins syntax and diagnostic results; [repository checks](../../AGENTS.md#corpus) define regeneration and acceptance.
+
+Parsing must scale linearly within these budgets; adversarial scaling cases are checked in [document tests](../../crates/gsx-core/tests/document.rs). Container and inline depth caps bound every recursive stage. [Wire tests](../../crates/gsx-core/tests/wire.rs) parse, serialize and project depth-limit inputs on a 128 KiB thread stack in release builds.

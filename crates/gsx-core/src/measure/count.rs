@@ -34,6 +34,17 @@ fn valid<'a>(text: &'a str, spans: &'a [Range<usize>]) -> impl Iterator<Item = &
     spans.iter().filter(|span| span.start < span.end && text.get(span.start..span.end).is_some())
 }
 
+pub(super) fn unique_urls(text: &str, urls: &[Range<usize>]) -> usize {
+    let mut seen: Vec<&str> = vec![];
+    for url in valid(text, urls) {
+        let url = &text[url.clone()];
+        if !seen.contains(&url) {
+            seen.push(url);
+        }
+    }
+    seen.len()
+}
+
 fn x_char(char: char) -> usize {
     match char {
         '\0'..='\u{10FF}' | '\u{2000}'..='\u{200D}' | '\u{2010}'..='\u{201F}' | '\u{2032}'..='\u{2037}' => 1,
@@ -43,6 +54,7 @@ fn x_char(char: char) -> usize {
 
 pub(super) fn x_weighted(text: &str, urls: &[Range<usize>]) -> usize {
     let mut urls = valid(text, urls).peekable();
+    let bytes = text.as_bytes();
     let mut weight = 0;
     let mut at = 0;
     while let Some(char) = text[at..].chars().next() {
@@ -50,6 +62,11 @@ pub(super) fn x_weighted(text: &str, urls: &[Range<usize>]) -> usize {
         if let Some(url) = urls.next_if(|url| url.start == at) {
             weight += X_URL_WEIGHT;
             at = url.end;
+            continue;
+        }
+        if char.is_ascii() && bytes.get(at + 1).is_none_or(u8::is_ascii) {
+            weight += 1;
+            at += 1;
             continue;
         }
         let emoji = emoji::rgi_prefix(&text[at..]);

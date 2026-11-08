@@ -1,13 +1,13 @@
 use super::limits::{
-    Alt, Fact, Graphemes, Image, Limit, Only, Story, Text, ThreadsWeighted, Utf8Bytes, Utf16CodeUnits, Video, limit,
-    resolved,
+    Alt, CodePoints, Fact, Graphemes, Limit, Links, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
 };
 use super::plain::BODY;
-use super::{DEFAULT, Rules, rule};
+use super::{DEFAULT, LINK, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
-use crate::project::Class::{Approximated, Omitted, TextualFallback, Unwrapped};
+use crate::project::Class::{Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
-    Condition, Detection, EntityForm, Feature, Form, Normalization, Offsets, Rule, Search, Style, Target, When,
+    Condition, Detection, EntityForm, Feature, Form, Normalization, Offsets, Rule, Search, Spoilers, Style, Target,
+    When,
 };
 
 const fn entities(
@@ -25,6 +25,7 @@ const fn entities(
         normalization: Normalization::None,
         renderer: RENDERER,
         limits,
+        spoilers: Spoilers::None,
     }
 }
 
@@ -36,25 +37,20 @@ static BLUESKY_FORM: EntityForm = EntityForm {
     code_splits: false,
     detection: Detection::Bluesky,
     cap: None,
+    links: None,
     trim: false,
     styled_suffix: true,
 };
 
 pub static BLUESKY: Target = entities(
     "bluesky-entities",
-    rules!(Rules {
-        link: rule(Feature::Link, Omitted, "link_label_invisible"),
-        link_title: rule(Feature::LinkTitle, Approximated, "link_title_unsupported"),
-        ..DEFAULT
-    }),
+    rules!(Rules { link: rule(Feature::Link, Omitted, "link_label_invisible"), text: THREADED_TEXT, ..DEFAULT }),
     &BLUESKY_FORM,
     &[
         limit(Text, Graphemes, 300),
         limit(Text, Utf8Bytes, 3000),
-        limit(Alt, Graphemes, 2000).when(Only(Image)),
-        limit(Alt, Utf8Bytes, 20000).when(Only(Image)),
-        limit(Alt, Graphemes, 1000).when(Only(Video)),
-        limit(Alt, Utf8Bytes, 10000).when(Only(Video)),
+        limit(Alt, Graphemes, 2000),
+        limit(Alt, Utf8Bytes, 20000),
     ],
 );
 
@@ -66,24 +62,43 @@ static THREADS_FORM: EntityForm = EntityForm {
     code_splits: false,
     detection: Detection::None,
     cap: Some(10),
+    links: Some(5),
     trim: false,
     styled_suffix: false,
 };
 
-pub static THREADS: Target = entities(
-    "threads-entities",
-    rules!(
-        Rules { spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"), ..DEFAULT },
-        Rule {
-            feature: Feature::TargetUrl,
-            class: TextualFallback,
-            reason: "target_url_as_text",
-            conditions: &[Condition { when: When::Overflow, class: Omitted, reason: "target_url_omitted" }],
-        },
-    ),
-    &THREADS_FORM,
-    &[limit(Text, ThreadsWeighted, 500)],
-);
+const THREADS_LINK: [Condition; 3] = [
+    LINK.conditions[0],
+    Condition { when: When::Count, class: Unwrapped, reason: "link_limit_exceeded" },
+    Condition { when: When::Overflow, class: Blocked, reason: "link_limit_exceeded" },
+];
+
+pub static THREADS: Target = Target {
+    spoilers: Spoilers::Post,
+    ..entities(
+        "threads-entities",
+        rules!(
+            Rules {
+                spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"),
+                link: Rule { conditions: &THREADS_LINK, ..LINK },
+                text: THREADED_TEXT,
+                media: SPOILERS_PER_POST,
+                ..DEFAULT
+            },
+            Rule {
+                feature: Feature::TargetUrl,
+                class: TextualFallback,
+                reason: "target_url_as_text",
+                conditions: &[
+                    Condition { when: When::Overflow, class: Omitted, reason: "target_url_omitted" },
+                    Condition { when: When::Refused, class: Omitted, reason: "target_url_refused" },
+                ],
+            },
+        ),
+        &THREADS_FORM,
+        &[limit(Text, ThreadsWeighted, 500), limit(Text, Links, 5), limit(Alt, CodePoints, 1000)],
+    )
+};
 
 static TELEGRAM_FORM: EntityForm = EntityForm {
     offsets: Offsets::Utf16,
@@ -95,12 +110,16 @@ static TELEGRAM_FORM: EntityForm = EntityForm {
         (Feature::Spoiler, Style::Spoiler),
         (Feature::InlineCode, Style::Code),
         (Feature::Link, Style::Link),
+        (Feature::CodeBlock, Style::Pre),
+        (Feature::Blockquote, Style::Blockquote),
+        (Feature::Datetime, Style::Date),
     ],
     heading: Some(Style::Bold),
     gated: true,
     code_splits: true,
     detection: Detection::None,
     cap: Some(100),
+    links: None,
     trim: true,
     styled_suffix: true,
 };
@@ -120,7 +139,22 @@ pub static TELEGRAM: Target = entities(
             reason: "heading_as_text",
             conditions: &[CAPPED]
         },
-        code_block: rule(Feature::CodeBlock, Unwrapped, "code_block_unwrapped"),
+        blockquote: Rule {
+            feature: Feature::Blockquote,
+            class: TextualFallback,
+            reason: "blockquote_as_text",
+            conditions: &[
+                CAPPED,
+                Condition { when: When::Nested, class: Unwrapped, reason: "blockquote_cannot_nest" },
+                Condition { when: When::Code, class: Unwrapped, reason: "code_block_cannot_be_quoted" },
+            ],
+        },
+        code_block: Rule {
+            feature: Feature::CodeBlock,
+            class: Unwrapped,
+            reason: "entities_unavailable",
+            conditions: &[CAPPED, Condition { when: When::Info, class: Omitted, reason: "code_block_info_omitted" }],
+        },
         emphasis: gated(Feature::Emphasis),
         strong: gated(Feature::Strong),
         strikethrough: gated(Feature::Strikethrough),
@@ -136,10 +170,19 @@ pub static TELEGRAM: Target = entities(
                 CAPPED
             ],
         },
-        link_title: rule(Feature::LinkTitle, Approximated, "link_title_unsupported"),
-        datetime: rule(Feature::Datetime, Unwrapped, "datetime_unwrapped"),
+        datetime: Rule {
+            feature: Feature::Datetime,
+            class: Unwrapped,
+            reason: "entities_unavailable",
+            conditions: &[
+                CAPPED,
+                Condition { when: When::Nested, class: Unwrapped, reason: "entity_cannot_contain_entity" },
+                Condition { when: When::Overflow, class: Unwrapped, reason: "datetime_label_too_long" },
+                Condition { when: When::Refused, class: Unwrapped, reason: "datetime_out_of_range" },
+            ],
+        },
         ..DEFAULT
     }),
     &TELEGRAM_FORM,
-    &[resolved(Text, Utf16CodeUnits, Fact::CaptionLimit, 200).on(&[Story])],
+    &[resolved(Text, CodePoints, Fact::CaptionLimit, 200).on(&[Story])],
 );

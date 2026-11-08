@@ -115,16 +115,25 @@ export type Wire = { document: Document } | { error: WireError };
 export interface Facts {
   media?: 'image' | 'video' | 'gif' | 'audio' | null;
   mediaCount?: number;
+  /** Selects the limits declared for this placement; without it, or when the target declares none there, the first of post, reel, story that declares one. */
+  placement?: 'post' | 'reel' | 'story' | null;
   title?: string | null;
-  /** Appended after the body on targets that declare `target_url`; never cut. */
+  /** Appended after the body, or replacing a blank body, on targets that declare `target_url`; never cut. */
   targetUrl?: string | null;
   maxCharacters?: number | null;
   charactersReservedPerUrl?: number | null;
   captionLimit?: number | null;
   /** Mastodon instance media description limit in code points; without it alt is not fitted. */
   descriptionLimit?: number | null;
+  /** Instagram hashtags allowed in a caption; 5 without it. */
+  hashtagLimit?: number | null;
+  /** Mastodon content warning: not rendered, but counted with the text against the status limit. */
+  spoilerText?: string | null;
+  /** What a body that does not fit becomes: cut to the limit, or a thread of posts where the target publishes threads. */
+  overflow?: 'truncate' | 'thread' | null;
   entitiesAllowed?: boolean;
-  items?: Iterable<MediaFact>;
+  /** The media the caller publishes. A referenced id missing from a given list was dropped; without the list, attaching targets treat every id as attached. */
+  items?: Iterable<MediaFact> | null;
 }
 
 /** An attached media item, matched to media references by `id`. */
@@ -138,7 +147,19 @@ export interface MediaFact {
 
 export type FieldName = 'text' | 'title' | 'description' | 'alt';
 
-export type Style = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'spoiler' | 'code' | 'link' | 'tag';
+export type Style =
+  | 'bold'
+  | 'italic'
+  | 'underline'
+  | 'strikethrough'
+  | 'spoiler'
+  | 'code'
+  | 'link'
+  | 'tag'
+  | 'pre'
+  | 'blockquote'
+  | 'date'
+  | 'mention';
 
 export type Unit =
   | 'graphemes'
@@ -149,7 +170,8 @@ export type Unit =
   | 'mastodon-weighted'
   | 'threads-weighted'
   | 'hashtags'
-  | 'mentions';
+  | 'mentions'
+  | 'links';
 
 export type Class = 'approximated' | 'textual_fallback' | 'unwrapped' | 'omitted' | 'blocked';
 
@@ -211,7 +233,12 @@ export interface Item {
   spoiler: boolean;
 }
 
-export type Block = { text: string } | { items: Item[]; layout: Layout | null };
+export type Block =
+  | { text: string }
+  | { items: Item[]; layout: Layout | null }
+  /** An attached file shown in place, for media no media block can show. */
+  | { file: Item }
+  | { separator: true };
 
 export interface Truncated {
   unit: Unit;
@@ -229,7 +256,7 @@ export interface Change {
   field: FieldName;
   range: Range | null;
   truncated: Truncated | null;
-  /** Alt changes: the block and the item in it on blocks targets, else the index in `items`. */
+  /** Alt and spoiler changes: the block and the item in it on blocks targets, else the index in `items`. */
   block?: number;
   item?: number;
 }
@@ -241,13 +268,24 @@ export interface Projection {
   media: string[];
   /** Present for targets of the `blocks/1` form only. */
   blocks?: Block[];
-  /** Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items. */
+  /** Media attached to the message with published alt and spoiler state: every item outside the `blocks/1` form, items no block can show on Slack blocks; omitted when empty. */
   items?: Attachment[];
+  /** With `overflow: 'thread'`, when the body did not fit: every post of the thread in order; the top level repeats the first. */
+  parts?: Part[];
+}
+
+export interface Part {
+  fields: Field[];
+  measurements: Measurement[];
+  media: string[];
+  items: Attachment[];
 }
 
 export interface Attachment {
   reference: string;
   alt: string | null;
+  /** Whether the platform publishes the item hidden: per item, or for the whole post on Mastodon and Threads. */
+  spoiler: boolean;
 }
 
 export type ProjectionWire = { projection: Projection } | { error: WireError };
@@ -260,6 +298,10 @@ export interface Target {
   offsets: 'utf8' | 'utf16' | null;
   digest: string;
   manifest: string;
+  /** Every code a blocked change of this target can carry. */
+  codes: string[];
+  /** Whether `overflow: 'thread'` applies. */
+  threads: boolean;
 }
 
 export declare class ParseError extends Error {

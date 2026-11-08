@@ -5,11 +5,11 @@ use crate::document::Range;
 use super::change::Feature;
 use super::table::{Escape, Style};
 
-pub const BULLET: &str = "• ";
+pub const BULLET: &str = "– ";
 pub const CHECKED: &str = "☑ ";
 pub const UNCHECKED: &str = "☐ ";
 pub const RULE: &str = "———";
-pub const QUOTE: &str = "> ";
+pub const QUOTE: &str = "› ";
 pub const CELL: &str = " | ";
 pub const ELLIPSIS: &str = "…";
 
@@ -30,13 +30,13 @@ pub fn marker(ordered: bool, start: Option<u32>, index: usize, checked: Option<b
 
 #[derive(Debug)]
 enum Prefix {
-    Quote { pending: bool },
+    Quote { pending: bool, mark: &'static str },
     Item { width: usize, marker: Option<String> },
 }
 
 impl Prefix {
     fn pending(&self) -> bool {
-        matches!(self, Prefix::Quote { pending: true } | Prefix::Item { marker: Some(_), .. })
+        matches!(self, Prefix::Quote { pending: true, .. } | Prefix::Item { marker: Some(_), .. })
     }
 }
 
@@ -46,6 +46,7 @@ pub struct Styled {
     pub value: Option<String>,
     pub span: Span<usize>,
     pub source: Option<(Feature, Range)>,
+    pub decoration: bool,
 }
 
 #[derive(Debug, Default)]
@@ -123,7 +124,12 @@ impl Writer {
         let mut rest = line;
         while let Some(at) = rest.bytes().position(|byte| escaped.contains(&byte)) {
             self.out.text.push_str(&rest[..at]);
-            self.put(char::from(rest.as_bytes()[at]));
+            let byte = rest.as_bytes()[at];
+            if self.escape == Escape::LinkedIn && byte == b'#' && self.hashtag(&rest[at + 1..]) {
+                self.out.text.push('#');
+            } else {
+                self.put(char::from(byte));
+            }
             rest = &rest[at + 1..];
         }
         self.out.text.push_str(rest);
@@ -187,8 +193,8 @@ impl Writer {
         self.out.links.push(start..self.out.text.len());
     }
 
-    pub fn open_quote(&mut self) {
-        self.prefixes.push(Prefix::Quote { pending: true });
+    pub fn open_quote(&mut self, mark: &'static str) {
+        self.prefixes.push(Prefix::Quote { pending: true, mark });
     }
 
     pub fn open_item(&mut self, marker: String) {
@@ -232,7 +238,12 @@ impl Writer {
 
     pub fn style(&mut self, style: Style, value: Option<String>, mark: usize, source: Option<(Feature, Range)>) {
         let span = mark..self.out.text.len();
-        self.out.styled.push(Styled { style, value, span, source });
+        self.out.styled.push(Styled { style, value, span, source, decoration: false });
+    }
+
+    pub fn decorate(&mut self, style: Style, mark: usize) {
+        let span = mark..self.out.text.len();
+        self.out.styled.push(Styled { style, value: None, span, source: None, decoration: true });
     }
 
     pub fn eligible(&mut self, span: Span<usize>) {
@@ -276,9 +287,9 @@ impl Writer {
         let mut prefixes = std::mem::take(&mut self.prefixes);
         for prefix in &mut prefixes[range] {
             match prefix {
-                Prefix::Quote { pending } => {
+                Prefix::Quote { pending, mark } => {
                     *pending = false;
-                    QUOTE.chars().for_each(|char| self.put(char));
+                    mark.chars().for_each(|char| self.put(char));
                 }
                 Prefix::Item { marker: marker @ Some(_), .. } => {
                     marker.take().unwrap().chars().for_each(|char| self.put(char));
@@ -287,6 +298,11 @@ impl Writer {
             }
         }
         self.prefixes = prefixes;
+    }
+
+    fn hashtag(&self, after: &str) -> bool {
+        self.out.text.chars().next_back().is_none_or(char::is_whitespace)
+            && after.chars().next().is_some_and(|char| char.is_alphanumeric() || char == '_')
     }
 
     fn put(&mut self, char: char) {

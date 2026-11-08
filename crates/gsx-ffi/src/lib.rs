@@ -6,7 +6,7 @@ use std::ptr;
 use std::sync::LazyLock;
 
 use gsx_core::document::Media as CoreMedia;
-use gsx_core::project::{Facts as CoreFacts, Format, MediaFact as CoreMediaFact, MediaKind};
+use gsx_core::project::{Facts as CoreFacts, Format, MediaFact as CoreMediaFact, MediaKind, Overflow, Placement};
 use gsx_core::{targets, wire};
 
 pub use gsx_core::VERSION;
@@ -98,6 +98,13 @@ pub const GSX_MEDIA_VIDEO: u32 = 2;
 pub const GSX_MEDIA_GIF: u32 = 3;
 pub const GSX_MEDIA_AUDIO: u32 = 4;
 
+pub const GSX_PLACEMENT_NONE: u32 = 0;
+pub const GSX_PLACEMENT_POST: u32 = 1;
+pub const GSX_PLACEMENT_REEL: u32 = 2;
+pub const GSX_PLACEMENT_STORY: u32 = 3;
+pub const GSX_OVERFLOW_TRUNCATE: u32 = 0;
+pub const GSX_OVERFLOW_THREAD: u32 = 1;
+
 pub const GSX_FORMAT_IMAGE: u32 = 0;
 pub const GSX_FORMAT_GIF: u32 = 1;
 pub const GSX_FORMAT_VIDEO: u32 = 2;
@@ -120,6 +127,7 @@ pub struct MediaFact {
 pub struct Facts {
     pub media: u32,
     pub media_count: usize,
+    pub placement: u32,
     pub title: *const u8,
     pub title_len: usize,
     pub target_url: *const u8,
@@ -131,13 +139,20 @@ pub struct Facts {
     pub entities_allowed: bool,
     pub items: *const MediaFact,
     pub items_len: usize,
+    pub hashtag_limit: i64,
+    pub spoiler_text: *const u8,
+    pub spoiler_text_len: usize,
+    pub overflow: u32,
 }
 
 impl Facts {
     /// # Safety
-    /// `items` points to `items_len` entries whose `id` points to `id_len` bytes and whose `alt`
-    /// is `NULL` or points to `alt_len` bytes.
-    unsafe fn items(&self) -> Result<Vec<CoreMediaFact<'_>>, String> {
+    /// `items` is `NULL` with `items_len` 0, or points to `items_len` entries whose `id` points to
+    /// `id_len` bytes and whose `alt` is `NULL` or points to `alt_len` bytes.
+    unsafe fn items(&self) -> Result<Option<Vec<CoreMediaFact<'_>>>, String> {
+        if self.items.is_null() && self.items_len == 0 {
+            return Ok(None);
+        }
         // SAFETY: the caller promises `items_len` readable entries.
         let entries = unsafe { slice(self.items, self.items_len, "items") }?;
         let mut list = Vec::with_capacity(entries.len());
@@ -155,13 +170,13 @@ impl Facts {
             };
             list.push(CoreMediaFact { id, format, alt, spoiler: entry.spoiler, inline: entry.inline });
         }
-        Ok(list)
+        Ok(Some(list))
     }
 
     /// # Safety
     /// `title` is `NULL` or points to `title_len` bytes; `target_url` is `NULL` or points to
-    /// `target_url_len` bytes.
-    unsafe fn core<'a>(&'a self, items: &'a [CoreMediaFact<'a>]) -> Result<CoreFacts<'a>, String> {
+    /// `target_url_len` bytes; `spoiler_text` is `NULL` or points to `spoiler_text_len` bytes.
+    unsafe fn core<'a>(&'a self, items: Option<&'a [CoreMediaFact<'a>]>) -> Result<CoreFacts<'a>, String> {
         let limit = |value: i64, what: &str| match value {
             ..0 => Ok(None),
             _ => u32::try_from(value).map(Some).map_err(|_| format!("{what} {value} is over 2^32 - 1")),
@@ -170,6 +185,8 @@ impl Facts {
         let title = unsafe { optional_string(self.title, self.title_len, "title") }?;
         // SAFETY: the caller promises `target_url` is NULL or points to `target_url_len` readable bytes.
         let target_url = unsafe { optional_string(self.target_url, self.target_url_len, "target_url") }?;
+        // SAFETY: the caller promises `spoiler_text` is NULL or points to `spoiler_text_len` readable bytes.
+        let spoiler_text = unsafe { optional_string(self.spoiler_text, self.spoiler_text_len, "spoiler_text") }?;
         Ok(CoreFacts {
             media: match self.media {
                 GSX_MEDIA_NONE => None,
@@ -180,12 +197,26 @@ impl Facts {
                 other => return Err(format!("media kind {other} is not GSX_MEDIA_*")),
             },
             media_count: self.media_count,
+            placement: match self.placement {
+                GSX_PLACEMENT_NONE => None,
+                GSX_PLACEMENT_POST => Some(Placement::Post),
+                GSX_PLACEMENT_REEL => Some(Placement::Reel),
+                GSX_PLACEMENT_STORY => Some(Placement::Story),
+                other => return Err(format!("placement {other} is not GSX_PLACEMENT_*")),
+            },
             title,
             target_url,
             max_characters: limit(self.max_characters, "max_characters")?,
             characters_reserved_per_url: limit(self.characters_reserved_per_url, "characters_reserved_per_url")?,
             caption_limit: limit(self.caption_limit, "caption_limit")?,
             description_limit: limit(self.description_limit, "description_limit")?,
+            hashtag_limit: limit(self.hashtag_limit, "hashtag_limit")?,
+            spoiler_text,
+            overflow: match self.overflow {
+                GSX_OVERFLOW_TRUNCATE => Overflow::Truncate,
+                GSX_OVERFLOW_THREAD => Overflow::Thread,
+                other => return Err(format!("overflow {other} is not GSX_OVERFLOW_*")),
+            },
             entities_allowed: self.entities_allowed,
             items,
         })
@@ -225,7 +256,8 @@ pub unsafe extern "C" fn gsx_serialize(
 /// # Safety
 /// As for `gsx_parse`; `target` points to `target_len` bytes; `facts` is `NULL` (no facts) or
 /// points to a `gsx_facts` whose `title` is `NULL` or points to `title_len` bytes and whose `items`
-/// point to `items_len` media facts, each `id` and `alt` as `id` and `cover` of `gsx_parse` media.
+/// is `NULL` with `items_len` 0 (no items fact) or points to `items_len` media facts, each `id` and
+/// `alt` as `id` and `cover` of `gsx_parse` media.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gsx_project(
     text: *const u8,
@@ -248,7 +280,7 @@ pub unsafe extern "C" fn gsx_project(
                 return Ok(wire::project(text, &media, target, &CoreFacts::default()));
             };
             let items = facts.items()?;
-            Ok(wire::project(text, &media, target, &facts.core(&items)?))
+            Ok(wire::project(text, &media, target, &facts.core(items.as_deref())?))
         })
     }
 }
@@ -425,10 +457,11 @@ mod tests {
             project(text.as_bytes(), "x-plain", None).unwrap(),
             wire::project(text.as_bytes(), &[], x, &CoreFacts::default())
         );
-        let title = "Title";
+        let (title, spoiler) = ("Title", "Spoiler");
         let facts = Facts {
             media: GSX_MEDIA_VIDEO,
             media_count: 1,
+            placement: GSX_PLACEMENT_STORY,
             title: title.as_ptr(),
             title_len: title.len(),
             target_url: ptr::null(),
@@ -440,12 +473,20 @@ mod tests {
             entities_allowed: true,
             items: ptr::null(),
             items_len: 0,
+            hashtag_limit: 3,
+            spoiler_text: spoiler.as_ptr(),
+            spoiler_text_len: spoiler.len(),
+            overflow: GSX_OVERFLOW_THREAD,
         };
         let core = CoreFacts {
             media: Some(MediaKind::Video),
             media_count: 1,
+            placement: Some(Placement::Story),
             title: Some(title),
             max_characters: Some(100),
+            hashtag_limit: Some(3),
+            spoiler_text: Some(spoiler),
+            overflow: Overflow::Thread,
             entities_allowed: true,
             ..CoreFacts::default()
         };
@@ -457,6 +498,10 @@ mod tests {
         assert_eq!(project(b"", "nope", None).unwrap_err(), r#"unknown target "nope""#);
         let bad = Facts { media: 5, ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "media kind 5 is not GSX_MEDIA_*");
+        let bad = Facts { placement: 4, ..facts };
+        assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "placement 4 is not GSX_PLACEMENT_*");
+        let bad = Facts { overflow: 2, ..facts };
+        assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "overflow 2 is not GSX_OVERFLOW_*");
         let bad = Facts { caption_limit: 1 << 32, ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "caption_limit 4294967296 is over 2^32 - 1");
 
@@ -469,12 +514,12 @@ mod tests {
             alt: alt.as_ptr(),
             alt_len: alt.len(),
             spoiler: true,
-            inline: false,
+            inline: true,
         };
         let items = [item];
         let facts = Facts { items: items.as_ptr(), items_len: 1, ..facts };
-        let core_items = [CoreMediaFact { id, format: Format::Gif, alt: Some(alt), spoiler: true, inline: false }];
-        let core = CoreFacts { items: &core_items, ..core };
+        let core_items = [CoreMediaFact { id, format: Format::Gif, alt: Some(alt), spoiler: true, inline: true }];
+        let core = CoreFacts { items: Some(&core_items), ..core };
         let discord = targets::target("discord-blocks").unwrap();
         let media = [CoreMedia { id, cover: None }];
         let output = project_with(text.as_bytes(), &[id], "discord-blocks", Some(&facts)).unwrap();
@@ -485,6 +530,13 @@ mod tests {
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "item format 4 is not GSX_FORMAT_*");
         let bad = Facts { items: ptr::null(), ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "items is NULL");
+        let none: [MediaFact; 0] = [];
+        let unlisted = Facts { items: ptr::null(), items_len: 0, ..facts };
+        let output = project_with(text.as_bytes(), &[id], "x-plain", Some(&unlisted)).unwrap();
+        assert!(output.contains("media_attached") && !output.contains("media_missing"), "{output}");
+        let empty = Facts { items: none.as_ptr(), items_len: 0, ..facts };
+        let output = project_with(text.as_bytes(), &[id], "x-plain", Some(&empty)).unwrap();
+        assert!(output.contains("media_missing") && !output.contains("media_attached"), "{output}");
         let mut error = ptr::null_mut();
         // SAFETY: a local slot.
         let output = unsafe { gsx_targets(&raw mut error) };

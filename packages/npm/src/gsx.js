@@ -76,7 +76,9 @@ export const load = (() => {
     return [ids, covers];
   }
 
-  const KINDS = { image: 1, video: 2, gif: 3, audio: 4 };
+  const KINDS = { __proto__: null, image: 1, video: 2, gif: 3, audio: 4 };
+  const PLACEMENTS = { __proto__: null, post: 1, reel: 2, story: 3 };
+  const OVERFLOWS = { __proto__: null, truncate: 0, thread: 1 };
   const FORMATS = { image: 0, gif: 1, video: 2, audio: 3 };
 
   function mediaFacts(items) {
@@ -131,9 +133,23 @@ export const load = (() => {
     return result[key];
   }
 
-  function bind(wasm, memory) {
+  function bind(instance, instantiate) {
     const encoder = new TextEncoder();
+    let { wasm, memory } = instance;
     let bytes = new Uint8Array(0);
+
+    function call(run) {
+      try {
+        return run();
+      } catch (error) {
+        if (error instanceof WebAssembly.RuntimeError) {
+          ({ wasm, memory } = instantiate());
+          bytes = new Uint8Array(0);
+        }
+
+        throw error;
+      }
+    }
 
     function pass(text) {
       const capacity = text.length * 3;
@@ -145,17 +161,15 @@ export const load = (() => {
     function parseJSON(text, media = []) {
       const entries = split(media);
       const at = invalid(text);
-      if (at) return wasm.invalidText(...at);
 
-      return wasm.parse(pass(text), ...entries);
+      return call(() => (at ? wasm.invalidText(...at) : wasm.parse(pass(text), ...entries)));
     }
 
     function serializeJSON(text, media = []) {
       const entries = split(media);
       const at = invalid(text);
-      if (at) return wasm.invalidText(...at);
 
-      return wasm.serialize(pass(text), ...entries);
+      return call(() => (at ? wasm.invalidText(...at) : wasm.serialize(pass(text), ...entries)));
     }
 
     function projectJSON(text, target, facts = {}, media = []) {
@@ -163,11 +177,23 @@ export const load = (() => {
         throw new TypeError('target must be a string');
       }
 
-      const { title = null, targetUrl = null, entitiesAllowed = false, items = [] } = facts;
+      const { title = null, targetUrl = null, spoilerText = null, entitiesAllowed = false, items = null } = facts;
       const kind = facts.media == null ? 0 : KINDS[facts.media];
 
       if (kind === undefined) {
         throw new TypeError("facts.media must be 'image', 'video', 'gif', 'audio', null or undefined");
+      }
+
+      const placement = facts.placement == null ? 0 : PLACEMENTS[facts.placement];
+
+      if (placement === undefined) {
+        throw new TypeError("facts.placement must be 'post', 'reel', 'story', null or undefined");
+      }
+
+      const overflow = facts.overflow == null ? 0 : OVERFLOWS[facts.overflow];
+
+      if (overflow === undefined) {
+        throw new TypeError("facts.overflow must be 'truncate', 'thread', null or undefined");
       }
 
       if (title !== null && (typeof title !== 'string' || !title.isWellFormed())) {
@@ -178,29 +204,35 @@ export const load = (() => {
         throw new TypeError('facts.targetUrl must be a well-formed string or null');
       }
 
+      if (spoilerText !== null && (typeof spoilerText !== 'string' || !spoilerText.isWellFormed())) {
+        throw new TypeError('facts.spoilerText must be a well-formed string or null');
+      }
+
       if (typeof entitiesAllowed !== 'boolean') {
         throw new TypeError('facts.entitiesAllowed must be a boolean');
       }
 
       const entries = split(media);
-      const described = mediaFacts(items);
-      const at = invalid(text);
-      if (at) return wasm.invalidText(...at);
-
-      return wasm.project(
-        pass(text),
-        ...entries,
-        target,
-        kind,
+      const described = mediaFacts(items ?? []);
+      const limits = [
         count(facts.mediaCount, 'facts.mediaCount') ?? 0,
+        placement,
         title ?? undefined,
         targetUrl ?? undefined,
         count(facts.maxCharacters, 'facts.maxCharacters'),
         count(facts.charactersReservedPerUrl, 'facts.charactersReservedPerUrl'),
         count(facts.captionLimit, 'facts.captionLimit'),
         count(facts.descriptionLimit, 'facts.descriptionLimit'),
-        entitiesAllowed,
-        ...described
+        count(facts.hashtagLimit, 'facts.hashtagLimit'),
+        spoilerText ?? undefined,
+        overflow,
+      ];
+      const at = invalid(text);
+
+      return call(() =>
+        at
+          ? wasm.invalidText(...at)
+          : wasm.project(pass(text), ...entries, target, kind, ...limits, entitiesAllowed, items !== null, ...described)
       );
     }
 
@@ -213,7 +245,7 @@ export const load = (() => {
       serializeJSON,
       project: (text, target, facts, media) => unwrap(projectJSON(text, target, facts, media), 'projection'),
       projectJSON,
-      targets: () => (listed ??= Object.freeze(JSON.parse(wasm.targets()).targets.map(Object.freeze))),
+      targets: () => (listed ??= Object.freeze(JSON.parse(call(() => wasm.targets())).targets.map(Object.freeze))),
     };
   }
 
@@ -240,26 +272,30 @@ export const load = (() => {
 
   return async function load(source = new URL('./gsx.wasm', import.meta.url)) {
     const module = await compile(source);
-    const wasm = glue();
 
     if (!WebAssembly.Module.exports(module).some(({ name }) => name === 'version')) {
       throw new VersionError(undefined);
     }
 
-    let exports;
+    function instantiate() {
+      const wasm = glue();
+      return { wasm, memory: wasm.initSync({ module }).memory };
+    }
+
+    let instance;
 
     try {
-      exports = wasm.initSync({ module });
+      instance = instantiate();
     } catch (error) {
       throw error instanceof WebAssembly.LinkError ? new VersionError(undefined) : error;
     }
 
-    const found = wasm.version();
+    const found = instance.wasm.version();
 
     if (found !== VERSION) {
       throw new VersionError(found);
     }
 
-    return Object.freeze({ ...bind(wasm, exports.memory), VERSION, ParseError, VersionError });
+    return Object.freeze({ ...bind(instance, instantiate), VERSION, ParseError, VersionError });
   };
 })();

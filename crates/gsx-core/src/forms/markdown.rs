@@ -1,9 +1,13 @@
-use super::{media, wrapper};
+use super::{media, underlined, wrapper};
 use crate::document::{Align, Kind, Node, Provenance};
 use crate::project::links::accepted;
-use crate::project::{CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, Renderer, When, href};
+use crate::project::{
+    CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, RULE, Renderer, Style, When, href,
+};
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
+
+const QUOTE: &str = "> ";
 
 fn form(context: &Context) -> &'static MarkdownForm {
     context.target.form.markdown().expect("a markdown renderer runs on a markdown form")
@@ -16,11 +20,11 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
 fn blocks_at(context: &mut Context, nodes: &[Node], depth: u32) {
     let mut first = true;
     for node in nodes {
-        if context.done() {
-            break;
-        }
         if media(node) {
-            context.report(Feature::Media, node.range);
+            context.report_media(node);
+            continue;
+        }
+        if context.done() {
             continue;
         }
         if !first {
@@ -55,9 +59,7 @@ pub(crate) fn block(context: &mut Context, node: &Node, depth: u32) {
                 context.writer().push("---");
             } else {
                 context.report(Feature::ThematicBreak, node.range);
-                let mut rule = String::new();
-                escape(&mut rule, "---", form.escaped);
-                context.writer().push(&rule);
+                context.writer().push(RULE);
             }
         }
         Kind::Code { lang, meta, value } => {
@@ -80,7 +82,7 @@ pub(crate) fn block(context: &mut Context, node: &Node, depth: u32) {
                 blocks_at(context, &node.children, depth + 1);
             } else {
                 context.writer().source(node.range);
-                context.writer().open_quote();
+                context.writer().open_quote(QUOTE);
                 blocks_at(context, &node.children, depth + 1);
                 context.writer().close();
             }
@@ -189,7 +191,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
             }
             Kind::InlineCode { value } => {
                 let shown = code(form, context.rendered(node, value), false);
-                let fence = "`".repeat(longest_run(&shown).max(1) + 1);
+                let fence = "`".repeat(longest_run(&shown) + 1);
                 let padding = if padded(&shown) { " " } else { "" };
                 context.writer().source(node.range);
                 context.writer().push(&format!("{fence}{padding}"));
@@ -201,14 +203,40 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                 if title.is_some() {
                     context.report(Feature::LinkTitle, node.range);
                 }
+                let href = href(url);
+                if !form.url_labels {
+                    let mut label = String::new();
+                    plain(&node.children, &mut label);
+                    if let Some(label) = accepted(&label) {
+                        let bare = !context.contains_cut(node) && label == href;
+                        context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
+                        if !bare {
+                            inline_at(context, &node.children, cell);
+                        }
+                        context.writer().source(node.range);
+                        let shown = raw(href, cell);
+                        context.writer().push(&if bare { shown } else { format!(" ({shown})") });
+                        continue;
+                    }
+                }
+                let underline = form
+                    .delimiter(Feature::Underline)
+                    .filter(|_| !context.inside(Style::Underline) && !underlined(&node.children))
+                    .unwrap_or_default();
                 context.writer().source(node.range);
-                context.writer().push("[");
+                context.writer().push(&format!("{underline}["));
                 inline_at(context, &node.children, cell);
                 context.writer().source(node.range);
-                context.writer().push(&format!("]({})", raw(destination(&href(url)), cell)));
+                context.writer().push(&format!("]({}){underline}", raw(destination(&href), cell)));
             }
             Kind::Datetime { unix, .. } => datetime(context, node, *unix, cell),
             kind => match wrapper(kind) {
+                Some(Feature::Underline) if let Some(delimiter) = form.delimiter(Feature::Underline) => {
+                    context.writer().source(node.range);
+                    context.writer().push(delimiter);
+                    context.within(Style::Underline, |context| inline_at(context, &node.children, cell));
+                    context.writer().push(delimiter);
+                }
                 Some(feature) if let Some(delimiter) = form.delimiter(feature) => {
                     context.writer().source(node.range);
                     context.writer().push(delimiter);

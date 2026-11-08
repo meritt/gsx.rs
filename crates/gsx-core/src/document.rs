@@ -267,6 +267,10 @@ impl Document {
 
 pub fn parse(input: &str, media: &[Media]) -> Result<Document, Error> {
     let error = |code, range, details| Error { code, range, details };
+    if let Some((start, end)) = source::oversized(input) {
+        let limit = Details::Limit(source::Limit::DocumentUnits);
+        return Err(error(Code::MarkdownTooComplex, Some(Range { start, end }), limit));
+    }
     let normalized = source::normalize(input).map_err(|invalid| {
         let range = Range { start: invalid.start, end: invalid.start + 1 };
         error(Code::MarkdownInvalidText, Some(range), Details::CodePoint(invalid.code_point))

@@ -1,18 +1,18 @@
-use super::{media, wrapper};
+use super::{media, underlined, wrapper};
 use crate::document::{Kind, Node};
 use crate::project::links::{self, bluesky::visible};
-use crate::project::{CELL, Class, Context, Feature, RULE, Renderer, When, href, marker};
+use crate::project::{CELL, Class, Context, DATE_LABEL, Feature, QUOTE, RULE, Renderer, Style, When, href, marker};
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
 
 pub fn blocks(context: &mut Context, nodes: &[Node]) {
     let mut first = true;
     for node in nodes {
-        if context.done() {
-            break;
-        }
         if media(node) {
-            context.report(Feature::Media, node.range);
+            context.report_media(node);
+            continue;
+        }
+        if context.done() {
             continue;
         }
         if !first {
@@ -29,7 +29,9 @@ fn block(context: &mut Context, node: &Node) {
         Kind::Heading { .. } => {
             context.report(Feature::Heading, node.range);
             match context.heading() {
-                Some(style) => context.styled(style, Feature::Heading, node, |context| inline(context, &node.children)),
+                Some(style) => {
+                    context.styled(style, None, Feature::Heading, node, |context| inline(context, &node.children));
+                }
                 None => inline(context, &node.children),
             }
         }
@@ -38,17 +40,40 @@ fn block(context: &mut Context, node: &Node) {
             context.writer().source(node.range);
             context.writer().push(RULE);
         }
-        Kind::Code { value, .. } => {
-            context.report(Feature::CodeBlock, node.range);
-            context.leaf(node, value);
+        Kind::Code { lang, meta, value } => {
+            let Some(style) = context.native(Feature::CodeBlock) else {
+                context.report(Feature::CodeBlock, node.range);
+                return context.leaf(node, value);
+            };
+            if context.inside(Style::Blockquote) {
+                context.report_when(Feature::Blockquote, Some(node.range), Some(When::Code));
+            }
+            if meta.is_some() {
+                context.report_when(Feature::CodeBlock, Some(node.range), Some(When::Info));
+            }
+            context.styled(style, lang.clone(), Feature::CodeBlock, node, |context| {
+                context.writer().verbatim(true);
+                context.leaf(node, value);
+                context.writer().verbatim(false);
+            });
         }
-        Kind::Blockquote => {
-            context.report(Feature::Blockquote, node.range);
-            context.writer().source(node.range);
-            context.writer().open_quote();
-            blocks(context, &node.children);
-            context.writer().close();
-        }
+        Kind::Blockquote => match context.native(Feature::Blockquote) {
+            Some(_) if context.inside(Style::Blockquote) => {
+                context.report_when(Feature::Blockquote, Some(node.range), Some(When::Nested));
+                blocks(context, &node.children);
+            }
+            Some(style) => {
+                context.writer().flush();
+                context.styled(style, None, Feature::Blockquote, node, |context| blocks(context, &node.children));
+            }
+            None => {
+                context.report(Feature::Blockquote, node.range);
+                context.writer().source(node.range);
+                context.writer().open_quote(QUOTE);
+                blocks(context, &node.children);
+                context.writer().close();
+            }
+        },
         Kind::List { ordered, start, .. } => {
             context.report(if *ordered { Feature::OrderedList } else { Feature::BulletList }, node.range);
             if node.children.iter().any(|item| item.children.len() > 1) {
@@ -97,6 +122,13 @@ fn block(context: &mut Context, node: &Node) {
     }
 }
 
+fn contains_entity(nodes: &[Node]) -> bool {
+    nodes.iter().any(|node| {
+        matches!(node.kind, Kind::Link { .. } | Kind::InlineCode { .. } | Kind::Datetime { .. })
+            || contains_entity(&node.children)
+    })
+}
+
 fn label(nodes: &[Node], out: &mut String) {
     for node in nodes {
         match &node.kind {
@@ -116,7 +148,7 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
             Kind::Text { value } => context.leaf(node, value),
             Kind::InlineCode { value } => {
                 if let Some(style) = context.native(Feature::InlineCode) {
-                    context.styled(style, Feature::InlineCode, node, |context| context.leaf(node, value));
+                    context.styled(style, None, Feature::InlineCode, node, |context| context.leaf(node, value));
                 } else {
                     context.report(Feature::InlineCode, node.range);
                     context.leaf(node, value);
@@ -136,11 +168,26 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                     context.within_link(|context| inline(context, &node.children));
                     match context.native(Feature::Link) {
                         Some(style) if visible(context.writer().since(mark)) => {
+                            if let Some(underline) = context.native(Feature::Underline)
+                                && !context.inside(Style::Underline)
+                                && !underlined(&node.children)
+                            {
+                                context.writer().decorate(underline, mark);
+                            }
                             context.writer().style(style, Some(href), mark, Some((Feature::Link, node.range)));
                         }
                         Some(_) => context.report_when(Feature::Link, Some(node.range), Some(When::LabelInvisible)),
                         None => context.report(Feature::Link, node.range),
                     }
+                    continue;
+                }
+                let admitted = context.admit(&href);
+                if !admitted && !bare {
+                    context.report_when(Feature::Link, Some(node.range), Some(When::Count));
+                    if title.is_some() {
+                        context.report(Feature::LinkTitle, node.range);
+                    }
+                    context.within_link(|context| inline(context, &node.children));
                     continue;
                 }
                 context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
@@ -158,13 +205,36 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                 context.writer().link(&href);
                 context.writer().push(")");
             }
-            Kind::Datetime { .. } => {
-                context.report(Feature::Datetime, node.range);
-                inline(context, &node.children);
+            Kind::Datetime { unix, .. } => {
+                let Some(style) = context.native(Feature::Datetime) else {
+                    context.report(Feature::Datetime, node.range);
+                    inline(context, &node.children);
+                    continue;
+                };
+                let mut text = String::new();
+                label(&node.children, &mut text);
+                let when = if context.nested() || contains_entity(&node.children) {
+                    Some(When::Nested)
+                } else if text.encode_utf16().count() > DATE_LABEL {
+                    Some(When::Overflow)
+                } else if !(0..=i64::from(i32::MAX)).contains(unix) {
+                    Some(When::Refused)
+                } else {
+                    None
+                };
+                match when {
+                    Some(when) => {
+                        context.report_when(Feature::Datetime, Some(node.range), Some(when));
+                        inline(context, &node.children);
+                    }
+                    None => context.styled(style, Some(unix.to_string()), Feature::Datetime, node, |context| {
+                        inline(context, &node.children);
+                    }),
+                }
             }
             kind => match wrapper(kind) {
                 Some(feature) if let Some(style) = context.native(feature) => {
-                    context.styled(style, feature, node, |context| inline(context, &node.children));
+                    context.styled(style, None, feature, node, |context| inline(context, &node.children));
                 }
                 Some(feature) => {
                     context.report(feature, node.range);

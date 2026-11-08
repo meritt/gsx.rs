@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "blocks": {
-    "section": "## Раздел 🚀\n\nАбзац с **жирным**, *курсивом*, ~~зачёркнутым~~, ++подчёркнутым++, ==выделением== и ||спойлером||. Ссылка на [документацию](https://example.com/docs \"Заголовок\") и `inline code`. Встреча :time[в пятницу]{datetime=\"2026-11-06T18:00:00Z\"}, а ещё https://example.org/page и #тег.\n\n- Пункт первый\n- Пункт второй с **выделением**\n  1. Вложенный\n  2. Ещё один\n\n- [x] Задача сделана\n- [ ] Задача не сделана\n\n> Цитата с *курсивом*\n> и продолжением.\n\n```js\nconst answer = 42;\n```\n\n| Колонка | Значение |\n| --- | ---: |\n| a | 1 |\n| b | 2 |\n\n---\n\n",
+    "section": "## Раздел 🚀\n\nАбзац с **жирным**, *курсивом*, ~~зачёркнутым~~, ++подчёркнутым++, ==выделением== и ||спойлером||. Ссылка на [документацию](https://example.com/docs \"Заголовок\") и `inline code`. Встреча ::time[в пятницу]{datetime=\"2026-11-06T18:00:00Z\"}, а ещё https://example.org/page и #тег.\n\n- Пункт первый\n- Пункт второй с **выделением**\n  1. Вложенный\n  2. Ещё один\n\n- [x] Задача сделана\n- [ ] Задача не сделана\n\n> Цитата с *курсивом*\n> и продолжением.\n\n```js\nconst answer = 42;\n```\n\n| Колонка | Значение |\n| --- | ---: |\n| a | 1 |\n| b | 2 |\n\n---\n\n",
     "prose": "Корвин смотрит на огни гавани Амбера, пока Рэндом пересказывает новости из Ардена. "
   },
   "cases": [
@@ -10,6 +10,12 @@
     { "id": "long-128k", "group": "long", "source": { "repeat": { "block": "section" }, "until": 131072 } },
     { "id": "prose-128k", "group": "long", "source": { "repeat": { "block": "prose" }, "until": 131072 } },
 
+    { "id": "units", "group": "budget", "source": { "repeat": "a ", "times": 131072 } },
+    {
+      "id": "inline-depth",
+      "group": "budget",
+      "source": { "repeat": { "concat": [{ "repeat": "**", "times": 16 }, "a", { "repeat": "**", "times": 16 }, "\n\n"] }, "times": 1000 }
+    },
     { "id": "lines-text", "group": "budget", "source": { "repeat": "a\n", "times": 16383 } },
     { "id": "lines-blank", "group": "budget", "source": { "repeat": "a\n\n", "times": 8191 } },
     { "id": "lines-heading", "group": "budget", "source": { "repeat": "# a\n", "times": 16383 } },
@@ -29,7 +35,7 @@
     {
       "id": "container-depth",
       "group": "budget",
-      "source": { "repeat": { "concat": [{ "repeat": "> ", "times": 63 }, "a\n"] }, "times": 1000 }
+      "source": { "repeat": { "concat": [{ "repeat": "> ", "times": 31 }, "a\n"] }, "times": 2000 }
     },
     {
       "id": "table-cells",
@@ -60,6 +66,8 @@
     { "id": "reject-lines", "group": "reject", "source": { "repeat": "a\n", "times": 65536 } },
     { "id": "reject-empty-items", "group": "reject", "source": { "repeat": "-\n", "times": 43690 } },
     { "id": "reject-delimiters", "group": "reject", "source": { "repeat": "*a ", "times": 40000 } },
-    { "id": "reject-label-ends", "group": "reject", "source": { "repeat": "a]", "times": 257 } }
+    { "id": "reject-label-ends", "group": "reject", "source": { "repeat": "a]", "times": 257 } },
+    { "id": "reject-units", "group": "reject", "source": { "repeat": "a ", "times": 131073 } },
+    { "id": "reject-inline-depth", "group": "reject", "source": { "concat": [{ "repeat": "**", "times": 17 }, "a", { "repeat": "**", "times": 17 }] } }
   ]
 }

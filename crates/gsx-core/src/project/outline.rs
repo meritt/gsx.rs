@@ -8,6 +8,7 @@ use super::table::Truncation;
 use crate::measure;
 
 const LONGEST_WORD: usize = 32;
+const CHUNK: usize = 512;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Leaf<'a> {
@@ -26,9 +27,21 @@ struct Segment {
     retained: bool,
 }
 
+#[derive(Debug)]
+struct Cursor {
+    first: usize,
+    last: usize,
+    base: usize,
+    leaf: usize,
+    start: usize,
+    next: usize,
+    segmenter: measure::Segmenter,
+}
+
 #[derive(Debug, Default)]
 struct Built {
     flows: usize,
+    cursor: Option<Cursor>,
     segments: Vec<Segment>,
     effective: Vec<u32>,
     letters: Vec<bool>,
@@ -157,33 +170,74 @@ impl<'a> Outline<'a> {
         Outline { leaves, flows, end, built: RefCell::default() }
     }
 
-    fn extend(&self, built: &mut Built) -> bool {
+    fn open(&self, built: &mut Built) -> bool {
         let Some(&(first, last)) = self.flows.get(built.flows) else {
             return false;
         };
         built.flows += 1;
-        let flow = &self.leaves[first..last];
-        let Built { segments, effective, letters, visible, visible_starts, starts, value, boundaries, .. } = built;
+        let Built { cursor, segments, starts, value, boundaries, .. } = built;
         starts.clear();
         value.clear();
         boundaries.clear();
-        for leaf in flow {
+        for leaf in &self.leaves[first..last] {
             starts.push(value.len());
             value.push_str(leaf.text);
         }
         starts.push(value.len());
-        boundaries.reserve(value.len() + 1);
-        let base = segments.len();
-        let mut graphemes = measure::clusters(value)
-            .scan(0, |at, cluster| {
-                let start = *at;
-                *at += cluster.len();
-                Some(start)
-            })
-            .peekable();
-        let mut leaf = 0;
-        while let Some(start) = graphemes.next() {
-            let end = graphemes.peek().copied().unwrap_or(value.len());
+        *cursor = Some(Cursor {
+            first,
+            last,
+            base: segments.len(),
+            leaf: 0,
+            start: 0,
+            next: 0,
+            segmenter: measure::Segmenter::default(),
+        });
+        true
+    }
+
+    fn extend(&self, built: &mut Built) -> bool {
+        if built.cursor.is_none() && !self.open(built) {
+            return false;
+        }
+        let Built {
+            cursor: Some(cursor),
+            segments,
+            effective,
+            letters,
+            visible,
+            visible_starts,
+            starts,
+            value,
+            boundaries,
+            ..
+        } = built
+        else {
+            unreachable!("an open flow has a cursor")
+        };
+        let flow = &self.leaves[cursor.first..cursor.last];
+        let (head, fresh, first_leaf) = (cursor.start, boundaries.len(), cursor.leaf);
+        let mut done = true;
+        for (offset, char) in value[cursor.next..].char_indices() {
+            let at = cursor.next + offset;
+            if cursor.segmenter.starts(char) && at > cursor.start {
+                boundaries.push(cursor.start);
+                cursor.start = at;
+                if at - head >= CHUNK && value[..at].ends_with(char::is_whitespace) {
+                    cursor.next = at + char.len_utf8();
+                    done = false;
+                    break;
+                }
+            }
+        }
+        if done && cursor.start < value.len() {
+            boundaries.push(cursor.start);
+        }
+        let tail = if done { value.len() } else { cursor.start };
+        let mut leaf = first_leaf;
+        for index in fresh..boundaries.len() {
+            let start = boundaries[index];
+            let end = boundaries.get(index + 1).copied().unwrap_or(tail);
             while leaf + 1 < flow.len() && start >= starts[leaf + 1] {
                 leaf += 1;
             }
@@ -192,7 +246,11 @@ impl<'a> Outline<'a> {
                 last_leaf += 1;
             }
             let retained = flow[leaf..=last_leaf].iter().all(|leaf| !leaf.code);
-            segments.push(Segment { leaf: (first + leaf) as u32, offset: (start - starts[leaf]) as u32, retained });
+            segments.push(Segment {
+                leaf: (cursor.first + leaf) as u32,
+                offset: (start - starts[leaf]) as u32,
+                retained,
+            });
             if retained {
                 visible_starts.push(Some(visible.len()));
                 visible.push_str(&value[start..end]);
@@ -203,29 +261,33 @@ impl<'a> Outline<'a> {
                 [byte] => byte.is_ascii_alphanumeric(),
                 _ => value[start..end].chars().any(|char| letter_or_number(u32::from(char))),
             });
-            boundaries.push(start);
         }
-        boundaries.push(value.len());
-        effective.extend((base..segments.len()).map(|index| index as u32));
-        let mut run = 0;
-        while run < flow.len() {
+        cursor.leaf = leaf;
+        let base = cursor.base;
+        effective.extend((base + fresh..segments.len()).map(|index| index as u32));
+        let mut run = first_leaf;
+        while run < flow.len() && starts[run] < tail {
             if flow[run].code {
                 run += 1;
                 continue;
             }
             let mut stop = run + 1;
-            while stop < flow.len() && !flow[stop].code {
+            while stop < flow.len() && !flow[stop].code && starts[stop] < tail {
                 stop += 1;
             }
-            let text = &value[starts[run]..starts[stop]];
+            let offset = starts[run].max(head);
+            let text = &value[offset..starts[stop].min(tail).max(offset)];
             for (from, to) in entities(text) {
-                let beginning = boundaries.partition_point(|&at| at < starts[run] + from);
-                let ending = boundaries.partition_point(|&at| at < starts[run] + to);
+                let beginning = boundaries.partition_point(|&at| at < offset + from);
+                let ending = boundaries.partition_point(|&at| at < offset + to);
                 for keep in beginning + 1..ending {
                     effective[base + keep] = (base + beginning) as u32;
                 }
             }
             run = stop;
+        }
+        if done {
+            built.cursor = None;
         }
         self.settle(built);
         true
@@ -233,7 +295,7 @@ impl<'a> Outline<'a> {
 
     fn settle(&self, built: &mut Built) {
         let from = built.settled;
-        let settled = if built.flows == self.flows.len() {
+        let settled = if built.flows == self.flows.len() && built.cursor.is_none() {
             built.visible.len()
         } else {
             let scanned = built.scanned;

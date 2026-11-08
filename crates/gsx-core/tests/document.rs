@@ -106,7 +106,7 @@ fn literalizes_refused_links_with_a_warning() {
 
 #[test]
 fn binds_math_literals_before_other_inline_constructs() {
-    for text in ["*a $b* c$", "$a *b$ c*", "$a `b$ c`", "[a $b](https://example.com) c$", "$a :time[b$ c]{unix=\"1\"}"]
+    for text in ["*a $b* c$", "$a *b$ c*", "$a `b$ c`", "[a $b](https://example.com) c$", "$a ::time[b$ c]{unix=\"1\"}"]
     {
         let document = parse(text, &[]).unwrap();
         let math: Vec<&str> = document.children()[0]
@@ -142,14 +142,14 @@ fn escapes_one_character() {
 #[test]
 fn keeps_malformed_times_as_literal_text_with_an_error() {
     for (text, code, literal) in [
-        ("a :time[x]{unix=\"x\"} b", Code::DatetimeInvalid, ":time[x]{unix=\"x\"}"),
+        ("a ::time[x]{unix=\"x\"} b", Code::DatetimeInvalid, "::time[x]{unix=\"x\"}"),
         (
-            "a :time[x]{datetime=\"2026-01-01T12:00\"} b",
+            "a ::time[x]{datetime=\"2026-01-01T12:00\"} b",
             Code::DatetimeTimezoneRequired,
-            ":time[x]{datetime=\"2026-01-01T12:00\"}",
+            "::time[x]{datetime=\"2026-01-01T12:00\"}",
         ),
-        ("a :time[ ]{unix=\"1\"} b", Code::DatetimeInvalid, ":time[ ]{unix=\"1\"}"),
-        ("a :time b", Code::MarkdownMalformed, ":time"),
+        ("a ::time[ ]{unix=\"1\"} b", Code::DatetimeInvalid, "::time[ ]{unix=\"1\"}"),
+        ("a ::time b", Code::MarkdownMalformed, "::time"),
     ] {
         let document = parse(text, &[]).unwrap();
         let literals: Vec<&str> = document.children()[0]
@@ -200,8 +200,8 @@ fn reports_offsets_in_the_input() {
 fn enforces_budgets_where_exceeded() {
     let table = |row: &str, rows: usize| format!("| a | b |\n| - | - |\n{}", row.repeat(rows));
     for (text, expected) in [
-        (format!("{} a", ">".repeat(65)), Some((Limit::ContainerDepth, 64, 66))),
-        (format!("{} a", ">".repeat(64)), None),
+        (format!("{} a", ">".repeat(33)), Some((Limit::ContainerDepth, 32, 34))),
+        (format!("{} a", ">".repeat(32)), None),
         ("a\n".repeat(16_384), Some((Limit::DocumentLines, 32_768, 32_768))),
         ("a\n".repeat(16_383), None),
         ("$a=b$ ".repeat(1025), Some((Limit::DocumentMathLiterals, 6144, 6149))),
@@ -218,6 +218,13 @@ fn enforces_budgets_where_exceeded() {
         (table("| a | b |\n", 4095), None),
         (table("| a | b |\n", 4096), Some((Limit::DocumentTableCells, 40_970, 40_979))),
         (table("| a |\n", 4096), Some((Limit::DocumentTableCells, 24_590, 24_595))),
+        (format!("{}a{}", "*".repeat(32), "*".repeat(32)), None),
+        (format!("{}a{}", "*".repeat(34), "*".repeat(34)), Some((Limit::InlineDepth, 32, 37))),
+        (format!("{}a{}", "::x[".repeat(17), "]".repeat(17)), Some((Limit::InlineDepth, 64, 70))),
+        ("a".repeat(262_144), None),
+        ("a".repeat(262_145), Some((Limit::DocumentUnits, 262_144, 262_145))),
+        ("é".repeat(262_144), None),
+        (format!("{}😀", "a".repeat(262_143)), Some((Limit::DocumentUnits, 262_143, 262_145))),
     ] {
         assert_eq!(too_complex(&text), expected, "{}", &text[..text.len().min(40)]);
     }
@@ -311,13 +318,13 @@ fn survives_pathological_input() {
         "a_".repeat(500),
         "[a](".repeat(1000),
         "<".repeat(5000),
-        ":time[".repeat(1000),
+        "::time[".repeat(1000),
         "::media{".repeat(1000),
         "| a ".repeat(1000) + "\n" + &"|-".repeat(1000),
         "> - ".repeat(30) + "a",
-        ":m{e=\"\"".into(),
-        ":m{e=\"\"}".into(),
-        ":time[10:30]{e='' f=\"x\"}".into(),
+        "::m{e=\"\"".into(),
+        "::m{e=\"\"}".into(),
+        "::time[10:30]{e='' f=\"x\"}".into(),
     ] {
         let _ = parse(&text, &[]);
     }
@@ -326,13 +333,13 @@ fn survives_pathological_input() {
 #[test]
 fn parses_labels_across_lines_and_bare_references() {
     for (text, value) in [
-        (":x[|a|\n|-|\na＠b.c]", ":x[|a|\n|-|\na＠b.c]"),
-        (":x[|a|\n|-|\na@b.c]", ":x[|a|\n|-|\na@b.c]"),
-        (":x[\na]", ":x[\na]"),
-        ("*:time[\r\n\u{feff}", "*:time[\n\u{feff}"),
-        ("a:time[-->\n\u{feff}user@example.coma]{x}", "a:time[-->\n\u{feff}user@example.coma]{x}"),
-        (":x[a\na@b.com]", ":x[a\na@b.com]"),
-        (":x[\na\n  b]", ":x[\na\n  b]"),
+        ("::x[|a|\n|-|\na＠b.c]", "::x[|a|\n|-|\na＠b.c]"),
+        ("::x[|a|\n|-|\na@b.c]", "::x[|a|\n|-|\na@b.c]"),
+        ("::x[\na]", "::x[\na]"),
+        ("*::time[\r\n\u{feff}", "*::time[\n\u{feff}"),
+        ("a::time[-->\n\u{feff}user@example.coma]{x}", "a::time[-->\n\u{feff}user@example.coma]{x}"),
+        ("::x[a\na@b.com]", "::x[a\na@b.com]"),
+        ("::x[\na\n  b]", "::x[\na\n  b]"),
         ("&#;\\", "&#;\\"),
         ("$a &#; = &#x; = &#12345678; = &#x110000;$", "$a &#; = &#x; = &#12345678; = \u{fffd}$"),
     ] {

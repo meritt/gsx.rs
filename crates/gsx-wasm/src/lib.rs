@@ -1,5 +1,5 @@
 use gsx_core::document::Media;
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement};
 use gsx_core::{targets, wire};
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
@@ -58,13 +58,18 @@ pub fn project(
     target: &str,
     kind: u8,
     count: u32,
+    placement: u8,
     title: Option<String>,
     target_url: Option<String>,
     max_characters: Option<u32>,
     characters_reserved_per_url: Option<u32>,
     caption_limit: Option<u32>,
     description_limit: Option<u32>,
+    hashtag_limit: Option<u32>,
+    spoiler_text: Option<String>,
+    overflow: u8,
     entities_allowed: bool,
+    listed: bool,
     item_ids: Vec<String>,
     item_formats: Vec<u8>,
     item_alts: Vec<JsValue>,
@@ -98,14 +103,28 @@ pub fn project(
             _ => return Err(JsError::new(&format!("media kind {kind} is not 0, 1, 2, 3 or 4"))),
         },
         media_count: count as usize,
+        placement: match placement {
+            0 => None,
+            1 => Some(Placement::Post),
+            2 => Some(Placement::Reel),
+            3 => Some(Placement::Story),
+            _ => return Err(JsError::new(&format!("placement {placement} is not 0, 1, 2 or 3"))),
+        },
         title: title.as_deref(),
         target_url: target_url.as_deref(),
         max_characters,
         characters_reserved_per_url,
         caption_limit,
         description_limit,
+        hashtag_limit,
+        spoiler_text: spoiler_text.as_deref(),
+        overflow: match overflow {
+            0 => Overflow::Truncate,
+            1 => Overflow::Thread,
+            _ => return Err(JsError::new(&format!("overflow {overflow} is not 0 or 1"))),
+        },
         entities_allowed,
-        items: &items,
+        items: listed.then_some(&items[..]),
     };
     let media = media(&ids, &covers)?;
     text(len, |text| Ok(wire::project(text, &media, target, &facts)))

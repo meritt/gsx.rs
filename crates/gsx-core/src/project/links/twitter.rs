@@ -2,26 +2,13 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::OnceLock;
 
-use super::tables::{ASCII_LABEL, DOMAIN, PATH, PATH_END, PRECEDING, QUERY, QUERY_END, TLDS};
+use super::tables::{ASCII_LABEL, DOMAIN, PATH, PATH_END, PRECEDING, QUERY, QUERY_END, Set, TLDS};
 
 pub(super) const MAX_URL_LENGTH: usize = 4096;
 pub(super) const MAX_TCO_SLUG_LENGTH: usize = 40;
 pub(super) const MAX_LABEL_LENGTH: usize = 63;
 const DEFAULT_PROTOCOL: usize = "https://".len();
 const MAX_INT: u64 = 2_147_483_647;
-
-pub(super) fn member(set: &[(u16, u16)], unit: u16) -> bool {
-    set.binary_search_by(|&(from, to)| {
-        if to < unit {
-            std::cmp::Ordering::Less
-        } else if from > unit {
-            std::cmp::Ordering::Greater
-        } else {
-            std::cmp::Ordering::Equal
-        }
-    })
-    .is_ok()
-}
 
 fn canonical(unit: u16) -> u16 {
     if let Ok(byte) = u8::try_from(unit)
@@ -50,6 +37,15 @@ pub(super) fn is(text: &[u16], index: usize, char: char) -> bool {
 }
 
 pub(super) fn literal(text: &[u16], start: usize, pattern: &str) -> Option<usize> {
+    if pattern.is_ascii() {
+        let end = start + pattern.len();
+        let same = text
+            .get(start..end)?
+            .iter()
+            .zip(pattern.bytes())
+            .all(|(&unit, byte)| u8::try_from(unit).is_ok_and(|unit| unit.eq_ignore_ascii_case(&byte)));
+        return same.then_some(end);
+    }
     let mut index = start;
     for unit in pattern.encode_utf16() {
         if canonical(at(text, index)?) != canonical(unit) {
@@ -60,8 +56,8 @@ pub(super) fn literal(text: &[u16], start: usize, pattern: &str) -> Option<usize
     Some(index)
 }
 
-fn scan(text: &[u16], start: usize, set: &[(u16, u16)]) -> usize {
-    start + text[start..].iter().take_while(|&&unit| member(set, unit)).count()
+fn scan(text: &[u16], start: usize, set: &Set) -> usize {
+    start + text[start..].iter().take_while(|&&unit| set.contains(unit)).count()
 }
 
 fn tlds() -> &'static HashMap<u16, Vec<&'static str>> {
@@ -100,44 +96,45 @@ fn top_level(text: &[u16], start: usize) -> Option<usize> {
 pub(super) struct Chains<'t> {
     pub(super) text: &'t [u16],
     ascii: bool,
-    runs: Vec<usize>,
-    underscores: Vec<usize>,
-    best: Vec<Option<Option<usize>>>,
-    tlds: Vec<Option<Option<usize>>>,
+    runs: Vec<u32>,
+    underscores: Vec<u32>,
+    best: Vec<Option<Option<u32>>>,
+    tlds: Vec<Option<Option<u32>>>,
 }
 
 impl<'t> Chains<'t> {
     pub(super) fn new(text: &'t [u16], ascii: bool) -> Self {
         let length = text.len();
-        let (mut runs, mut underscores) = (vec![length; length + 1], vec![length; length + 1]);
+        let (mut runs, mut underscores) = (vec![length as u32; length + 1], vec![length as u32; length + 1]);
         for index in (0..length).rev() {
             let unit = text[index];
             let inner = if ascii {
-                member(ASCII_LABEL, unit)
+                ASCII_LABEL.contains(unit)
             } else {
-                member(DOMAIN, unit) || unit == u16::from(b'_') || unit == u16::from(b'-')
+                DOMAIN.contains(unit) || unit == u16::from(b'_') || unit == u16::from(b'-')
             };
-            runs[index] = if inner { runs[index + 1] } else { index };
-            underscores[index] = if unit == u16::from(b'_') { index } else { underscores[index + 1] };
+            runs[index] = if inner { runs[index + 1] } else { index as u32 };
+            underscores[index] = if unit == u16::from(b'_') { index as u32 } else { underscores[index + 1] };
         }
         Chains { text, ascii, runs, underscores, best: vec![None; length + 2], tlds: vec![None; length + 2] }
     }
 
     fn label(&self, start: usize) -> Option<Range<usize>> {
-        let end = *self.runs.get(start)?;
+        let end = *self.runs.get(start)? as usize;
         (end > start && is(self.text, end, '.')).then_some(start..end)
     }
 
     fn tld(&mut self, start: usize) -> Option<usize> {
-        *self.tlds[start].get_or_insert_with(|| top_level(self.text, start))
+        let text = self.text;
+        self.tlds[start].get_or_insert_with(|| top_level(text, start).map(|end| end as u32)).map(|end| end as usize)
     }
 
     fn edges(&self, label: &Range<usize>) -> bool {
-        self.ascii || member(DOMAIN, self.text[label.start]) && member(DOMAIN, self.text[label.end - 1])
+        self.ascii || DOMAIN.contains(self.text[label.start]) && DOMAIN.contains(self.text[label.end - 1])
     }
 
     fn named(&mut self, label: &Range<usize>) -> Option<usize> {
-        if self.edges(label) && (self.ascii || self.underscores[label.start] >= label.end) {
+        if self.edges(label) && (self.ascii || self.underscores[label.start] as usize >= label.end) {
             self.tld(label.end + 1)
         } else {
             None
@@ -149,7 +146,7 @@ impl<'t> Chains<'t> {
         let mut index = start;
         let mut after = loop {
             if let Some(known) = self.best[index] {
-                break known;
+                break known.map(|end| end as usize);
             }
             match self.label(index) {
                 Some(label) => {
@@ -163,7 +160,7 @@ impl<'t> Chains<'t> {
             if !(self.edges(&label) && after.is_some()) {
                 after = self.named(&label);
             }
-            self.best[label.start] = Some(after);
+            self.best[label.start] = Some(after.map(|end| end as u32));
         }
         self.label(start).and(after)
     }
@@ -189,18 +186,18 @@ pub(super) fn parens(text: &[u16], start: usize) -> Option<usize> {
     if !is(text, start, '(') {
         return None;
     }
-    let first = scan(text, start + 1, PATH);
+    let first = scan(text, start + 1, &PATH);
     if first > start + 1 && is(text, first, ')') {
         return Some(first + 1);
     }
     if !is(text, first, '(') {
         return None;
     }
-    let inner = scan(text, first + 1, PATH);
+    let inner = scan(text, first + 1, &PATH);
     if inner == first + 1 || !is(text, inner, ')') {
         return None;
     }
-    let last = scan(text, inner + 1, PATH);
+    let last = scan(text, inner + 1, &PATH);
     is(text, last, ')').then_some(last + 1)
 }
 
@@ -208,10 +205,10 @@ fn path(text: &[u16], start: usize) -> usize {
     let (mut index, mut end) = (start, start);
     loop {
         if let Some(unit) = at(text, index)
-            && member(PATH, unit)
+            && PATH.contains(unit)
         {
             index += 1;
-            if member(PATH_END, unit) {
+            if PATH_END.contains(unit) {
                 end = index;
             }
         } else if let Some(close) = parens(text, index) {
@@ -227,8 +224,8 @@ fn path(text: &[u16], start: usize) -> usize {
 }
 
 fn query(text: &[u16], start: usize) -> Option<usize> {
-    let run = scan(text, start, QUERY);
-    (start..run).rev().find(|&index| member(QUERY_END, text[index])).map(|index| index + 1)
+    let run = scan(text, start, &QUERY);
+    (start..run).rev().find(|&index| QUERY_END.contains(text[index])).map(|index| index + 1)
 }
 
 struct Found {
@@ -270,7 +267,7 @@ fn next(chains: &mut Chains, from: usize) -> Option<(Option<u16>, Found)> {
     let text = chains.text;
     for start in from..=text.len() {
         if let Some(unit) = at(text, start)
-            && member(PRECEDING, unit)
+            && PRECEDING.contains(unit)
             && let Some(found) = url(chains, start + 1)
         {
             return Some((Some(unit), found));

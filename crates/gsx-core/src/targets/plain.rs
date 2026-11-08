@@ -2,12 +2,12 @@ use super::limits::{
     Alt, CodePoints, Description, Fact, Hashtags, Image, Limit, MastodonWeighted, Mentions, Only, Post, Text, Title,
     Utf8Bytes, Utf16CodeUnits, Video, XWeighted, given, limit, resolved, unlimited,
 };
-use super::{DEFAULT, Rules, rule};
+use super::{DEFAULT, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Approximated, Blocked, TextualFallback};
 use crate::project::{
-    Condition, Escape, Feature, FieldName, FieldSpec, Form, Media, Normalization, Rule, Search, Source, Target,
-    Truncation, When,
+    Condition, Escape, Feature, FieldName, FieldSpec, Form, Format, Media, Normalization, Rule, Search, Source,
+    Spoilers, Target, Truncation, When,
 };
 
 pub(super) const fn field(name: FieldName, media: Media, source: Source, required: bool) -> FieldSpec {
@@ -16,6 +16,8 @@ pub(super) const fn field(name: FieldName, media: Media, source: Source, require
 
 const TITLE_SOURCE: &[Condition] =
     &[Condition { when: When::TitleSource, class: Approximated, reason: "heading_became_title" }];
+const FIRST_LINE: Condition =
+    Condition { when: When::TitleSource, class: Approximated, reason: "first_line_became_title" };
 
 macro_rules! plain {
     ($heading:expr $(, $extra:expr)* $(,)?) => {
@@ -45,6 +47,7 @@ const fn text(
         normalization: Normalization::None,
         renderer: RENDERER,
         limits,
+        spoilers: Spoilers::None,
     }
 }
 
@@ -52,16 +55,26 @@ pub(super) const BODY: &[FieldSpec] = &[field(FieldName::Text, Media::Any, Sourc
 
 pub static X: Target = Target {
     normalization: Normalization::Nfc,
-    ..text(Escape::None, "x-plain", plain!(&[]), BODY, &[limit(Text, XWeighted, 280)])
+    spoilers: Spoilers::Items(&[Format::Image, Format::Gif, Format::Video]),
+    ..text(
+        Escape::None,
+        "x-plain",
+        rules!(Rules { text: THREADED_TEXT, ..DEFAULT }),
+        BODY,
+        &[resolved(Text, XWeighted, Fact::MaxCharacters, 280), limit(Alt, CodePoints, 1000)],
+    )
 };
 
-pub static MASTODON: Target = text(
-    Escape::None,
-    "mastodon-plain",
-    plain!(&[]),
-    BODY,
-    &[resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500), given(Alt, CodePoints, Fact::DescriptionLimit)],
-);
+pub static MASTODON: Target = Target {
+    spoilers: Spoilers::Post,
+    ..text(
+        Escape::None,
+        "mastodon-plain",
+        rules!(Rules { text: THREADED_TEXT, media: SPOILERS_PER_POST, ..DEFAULT }),
+        BODY,
+        &[resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500), given(Alt, CodePoints, Fact::DescriptionLimit)],
+    )
+};
 
 pub static LINKEDIN: Target = text(
     Escape::LinkedIn,
@@ -85,7 +98,7 @@ pub static INSTAGRAM: Target = text(
     BODY,
     &[
         limit(Text, CodePoints, 2200),
-        limit(Text, Hashtags, 30),
+        resolved(Text, Hashtags, Fact::HashtagLimit, 5),
         limit(Text, Mentions, 20),
         limit(Alt, CodePoints, 1000),
     ],
@@ -117,28 +130,33 @@ pub static YOUTUBE: Target = text(
             feature: Feature::Title,
             class: Blocked,
             reason: "title_too_long",
-            conditions: &[Condition { when: When::Empty, class: Blocked, reason: "title_empty" }],
+            conditions: &[Condition { when: When::Empty, class: Blocked, reason: "title_empty" }, FIRST_LINE],
         },
+        rule(Feature::Hashtag, Approximated, "hashtag_limit_exceeded"),
     ),
     &[
-        field(FieldName::Title, Media::Any, Source::Title { fact: true, first_line_removed: false }, true),
+        field(FieldName::Title, Media::Any, Source::Title { fact: true }, true),
         field(FieldName::Description, Media::Any, Source::Body, false),
     ],
-    &[limit(Title, CodePoints, 100), limit(Description, Utf8Bytes, 5000)],
+    &[limit(Title, CodePoints, 100), limit(Description, Utf8Bytes, 5000), limit(Description, Hashtags, 60)],
 );
 
 pub static TIKTOK: Target = text(
     Escape::None,
     "tiktok-plain",
-    plain!(TITLE_SOURCE),
+    plain!(
+        TITLE_SOURCE,
+        Rule { feature: Feature::Title, class: Approximated, reason: "title_truncated", conditions: &[FIRST_LINE] },
+    ),
     &[
-        field(FieldName::Title, Media::Image, Source::Title { fact: false, first_line_removed: true }, false),
+        field(FieldName::Title, Media::Image, Source::Title { fact: false }, false),
         field(FieldName::Text, Media::Any, Source::Body, false),
     ],
     &[
         limit(Text, Utf16CodeUnits, 2200).when(Only(Video)),
         limit(Text, Utf16CodeUnits, 4000).on(&[Post]).when(Only(Image)),
         limit(Title, Utf16CodeUnits, 90).on(&[Post]).when(Only(Image)),
+        unlimited(Text, Mentions),
     ],
 );
 

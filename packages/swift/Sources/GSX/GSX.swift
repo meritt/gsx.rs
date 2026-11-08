@@ -93,6 +93,7 @@ public enum GSX {
         var target = target
         var title = facts.title
         var targetUrl = facts.targetUrl
+        var spoilerText = facts.spoilerText
         let limit = { (value: UInt32?) in value.map(Int64.init) ?? -1 }
         return try withMedia(media) { (entries, count) throws(InternalError) -> String in
             try withItems(facts.items) { (items, itemCount) throws(InternalError) -> String in
@@ -101,25 +102,32 @@ public enum GSX {
                         target.withUTF8 { name in
                             withString(&title) { title, titleCount in
                                 withString(&targetUrl) { targetUrl, targetUrlCount in
-                                    var native = gsx_facts(
-                                        media: facts.media?.native ?? UInt32(GSX_MEDIA_NONE),
-                                        media_count: facts.mediaCount,
-                                        title: title,
-                                        title_len: titleCount,
-                                        target_url: targetUrl,
-                                        target_url_len: targetUrlCount,
-                                        max_characters: limit(facts.maxCharacters),
-                                        characters_reserved_per_url: limit(facts.charactersReservedPerUrl),
-                                        caption_limit: limit(facts.captionLimit),
-                                        description_limit: limit(facts.descriptionLimit),
-                                        entities_allowed: facts.entitiesAllowed,
-                                        items: items,
-                                        items_len: itemCount
-                                    )
-                                    return gsx_project(
-                                        utf8.baseAddress, utf8.count, entries, count,
-                                        name.baseAddress, name.count, &native, &error
-                                    )
+                                    withString(&spoilerText) { spoilerText, spoilerTextCount in
+                                        var native = gsx_facts(
+                                            media: facts.media?.native ?? UInt32(GSX_MEDIA_NONE),
+                                            media_count: facts.mediaCount,
+                                            placement: facts.placement?.native ?? UInt32(GSX_PLACEMENT_NONE),
+                                            title: title,
+                                            title_len: titleCount,
+                                            target_url: targetUrl,
+                                            target_url_len: targetUrlCount,
+                                            max_characters: limit(facts.maxCharacters),
+                                            characters_reserved_per_url: limit(facts.charactersReservedPerUrl),
+                                            caption_limit: limit(facts.captionLimit),
+                                            description_limit: limit(facts.descriptionLimit),
+                                            entities_allowed: facts.entitiesAllowed,
+                                            items: items,
+                                            items_len: itemCount,
+                                            hashtag_limit: limit(facts.hashtagLimit),
+                                            spoiler_text: spoilerText,
+                                            spoiler_text_len: spoilerTextCount,
+                                            overflow: facts.overflow?.native ?? UInt32(GSX_OVERFLOW_TRUNCATE)
+                                        )
+                                        return gsx_project(
+                                            utf8.baseAddress, utf8.count, entries, count,
+                                            name.baseAddress, name.count, &native, &error
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -130,8 +138,15 @@ public enum GSX {
     }
 
     private static func withItems<R>(
-        _ items: [MediaFact], _ body: (UnsafePointer<gsx_media_fact>?, Int) throws(InternalError) -> R
+        _ items: [MediaFact]?, _ body: (UnsafePointer<gsx_media_fact>?, Int) throws(InternalError) -> R
     ) throws(InternalError) -> R {
+        guard let items else { return try body(nil, 0) }
+        guard !items.isEmpty else {
+            let result: Result<R, InternalError> = withUnsafePointer(to: gsx_media_fact()) { empty in
+                Result { () throws(InternalError) in try body(empty, 0) }
+            }
+            return try result.get()
+        }
         var storage: [UInt8] = [0]
         var spans: [(id: Range<Int>, alt: Range<Int>?)] = []
         for item in items {
