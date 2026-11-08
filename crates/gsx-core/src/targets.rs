@@ -20,6 +20,14 @@ const TEXT: Rule = Rule {
         Condition { when: When::Overflow, class: Blocked, reason: "text_too_long" },
     ],
 };
+const THREADED_TEXT: Rule = Rule {
+    conditions: &[
+        TEXT.conditions[0],
+        TEXT.conditions[1],
+        Condition { when: When::Thread, class: Approximated, reason: "text_threaded" },
+    ],
+    ..TEXT
+};
 
 struct Rules {
     heading: Rule,

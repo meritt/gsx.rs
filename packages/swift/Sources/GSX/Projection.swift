@@ -27,6 +27,18 @@ public enum Placement: String, Sendable, Hashable, Decodable {
     }
 }
 
+/// What a body that does not fit becomes: cut to the limit, or a thread of posts where the target publishes threads.
+public enum Overflow: String, Sendable, Hashable, Decodable {
+    case truncate, thread
+
+    var native: UInt32 {
+        switch self {
+        case .truncate: UInt32(GSX_OVERFLOW_TRUNCATE)
+        case .thread: UInt32(GSX_OVERFLOW_THREAD)
+        }
+    }
+}
+
 /// An attached media item, matched to media references by `id`.
 public struct MediaFact: Sendable, Hashable, Decodable {
     public enum Format: String, Sendable, Hashable, Decodable {
@@ -71,6 +83,7 @@ public struct Facts: Sendable, Hashable {
     public var hashtagLimit: UInt32?
     /// Mastodon content warning: not rendered, but counted with the text against the status limit.
     public var spoilerText: String?
+    public var overflow: Overflow?
     public var entitiesAllowed: Bool
     /// The media the caller publishes. A referenced id missing from a given list was dropped; without the list, attaching targets treat every id as attached.
     public var items: [MediaFact]?
@@ -87,6 +100,7 @@ public struct Facts: Sendable, Hashable {
         descriptionLimit: UInt32? = nil,
         hashtagLimit: UInt32? = nil,
         spoilerText: String? = nil,
+        overflow: Overflow? = nil,
         entitiesAllowed: Bool = false,
         items: [MediaFact]? = nil
     ) {
@@ -101,6 +115,7 @@ public struct Facts: Sendable, Hashable {
         self.descriptionLimit = descriptionLimit
         self.hashtagLimit = hashtagLimit
         self.spoilerText = spoilerText
+        self.overflow = overflow
         self.entitiesAllowed = entitiesAllowed
         self.items = items
     }
@@ -115,6 +130,15 @@ public struct Projection: Sendable, Hashable, Decodable {
     public let blocks: [Block]?
     /// Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items.
     public let items: [Attachment]?
+    /// With `overflow: .thread`, when the body did not fit: every post of the thread in order; the top level repeats the first.
+    public let parts: [Part]?
+}
+
+public struct Part: Sendable, Hashable, Decodable {
+    public let fields: [Field]
+    public let measurements: [Measurement]
+    public let media: [String]
+    public let items: [Attachment]
 }
 
 public struct Attachment: Sendable, Hashable, Decodable {
@@ -263,6 +287,10 @@ public struct Target: Sendable, Hashable, Decodable {
     public let offsets: Offsets?
     public let digest: String
     public let manifest: String
+    /// Every code a blocked change of this target can carry.
+    public let codes: [String]
+    /// Whether `overflow: .thread` applies.
+    public let threads: Bool
 }
 
 struct ProjectionWire: Decodable {

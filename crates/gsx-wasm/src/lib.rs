@@ -1,5 +1,5 @@
 use gsx_core::document::Media;
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Placement};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement};
 use gsx_core::{targets, wire};
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
@@ -67,6 +67,7 @@ pub fn project(
     description_limit: Option<u32>,
     hashtag_limit: Option<u32>,
     spoiler_text: Option<String>,
+    overflow: u8,
     entities_allowed: bool,
     listed: bool,
     item_ids: Vec<String>,
@@ -117,6 +118,11 @@ pub fn project(
         description_limit,
         hashtag_limit,
         spoiler_text: spoiler_text.as_deref(),
+        overflow: match overflow {
+            0 => Overflow::Truncate,
+            1 => Overflow::Thread,
+            _ => return Err(JsError::new(&format!("overflow {overflow} is not 0 or 1"))),
+        },
         entities_allowed,
         items: listed.then_some(&items[..]),
     };

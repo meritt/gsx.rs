@@ -23,6 +23,10 @@
 
 #define GSX_PLACEMENT_STORY 3
 
+#define GSX_OVERFLOW_TRUNCATE 0
+
+#define GSX_OVERFLOW_THREAD 1
+
 #define GSX_FORMAT_IMAGE 0
 
 #define GSX_FORMAT_GIF 1
@@ -70,6 +74,7 @@ typedef struct gsx_facts {
   int64_t hashtag_limit;
   const uint8_t *spoiler_text;
   size_t spoiler_text_len;
+  uint32_t overflow;
 } gsx_facts;
 
 #ifdef __cplusplus

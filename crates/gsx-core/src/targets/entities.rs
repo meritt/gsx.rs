@@ -2,7 +2,7 @@ use super::limits::{
     Alt, CodePoints, Fact, Graphemes, Limit, Links, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
 };
 use super::plain::BODY;
-use super::{DEFAULT, LINK, Rules, rule};
+use super::{DEFAULT, LINK, Rules, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
@@ -45,6 +45,7 @@ pub static BLUESKY: Target = entities(
     rules!(Rules {
         link: rule(Feature::Link, Omitted, "link_label_invisible"),
         link_title: rule(Feature::LinkTitle, Approximated, "link_title_unsupported"),
+        text: THREADED_TEXT,
         ..DEFAULT
     }),
     &BLUESKY_FORM,
@@ -81,6 +82,7 @@ pub static THREADS: Target = entities(
         Rules {
             spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"),
             link: Rule { conditions: &THREADS_LINK, ..LINK },
+            text: THREADED_TEXT,
             ..DEFAULT
         },
         Rule {

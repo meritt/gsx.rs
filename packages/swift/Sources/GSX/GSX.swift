@@ -120,7 +120,8 @@ public enum GSX {
                                             items_len: itemCount,
                                             hashtag_limit: limit(facts.hashtagLimit),
                                             spoiler_text: spoilerText,
-                                            spoiler_text_len: spoilerTextCount
+                                            spoiler_text_len: spoilerTextCount,
+                                            overflow: facts.overflow?.native ?? UInt32(GSX_OVERFLOW_TRUNCATE)
                                         )
                                         return gsx_project(
                                             utf8.baseAddress, utf8.count, entries, count,

@@ -129,6 +129,8 @@ export interface Facts {
   hashtagLimit?: number | null;
   /** Mastodon content warning: not rendered, but counted with the text against the status limit. */
   spoilerText?: string | null;
+  /** What a body that does not fit becomes: cut to the limit, or a thread of posts where the target publishes threads. */
+  overflow?: 'truncate' | 'thread' | null;
   entitiesAllowed?: boolean;
   /** The media the caller publishes. A referenced id missing from a given list was dropped; without the list, attaching targets treat every id as attached. */
   items?: Iterable<MediaFact> | null;
@@ -251,6 +253,15 @@ export interface Projection {
   blocks?: Block[];
   /** Outside the `blocks/1` form, one per media fact item with its fitted alt; absent without items. */
   items?: Attachment[];
+  /** With `overflow: 'thread'`, when the body did not fit: every post of the thread in order; the top level repeats the first. */
+  parts?: Part[];
+}
+
+export interface Part {
+  fields: Field[];
+  measurements: Measurement[];
+  media: string[];
+  items: Attachment[];
 }
 
 export interface Attachment {
@@ -268,6 +279,10 @@ export interface Target {
   offsets: 'utf8' | 'utf16' | null;
   digest: string;
   manifest: string;
+  /** Every code a blocked change of this target can carry. */
+  codes: string[];
+  /** Whether `overflow: 'thread'` applies. */
+  threads: boolean;
 }
 
 export declare class ParseError extends Error {

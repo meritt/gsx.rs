@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use gsx_core::document::{Media, Range, parse};
 use gsx_core::project::{
-    Class, Facts, Format, MediaFact, MediaKind, Offsets, Options, Placement, Projection, Target, project_with,
+    Class, Facts, Format, MediaFact, MediaKind, Offsets, Options, Overflow, Placement, Projection, Target, project_with,
 };
 use gsx_core::targets::TARGETS;
 use gsx_core::wire;
@@ -119,6 +119,7 @@ struct Setup {
     description_limit: Option<u32>,
     hashtag_limit: Option<u32>,
     spoiler_text: Option<String>,
+    thread: bool,
     entities_allowed: bool,
     maximum: Option<usize>,
 }
@@ -165,6 +166,7 @@ fn setup() -> impl Strategy<Value = Setup> {
             prop::option::of(0..160usize),
             prop::option::of(prop::sample::select(&PLACEMENTS[..])),
             any::<bool>(),
+            any::<bool>(),
         ),
     )
         .prop_map(
@@ -173,7 +175,7 @@ fn setup() -> impl Strategy<Value = Setup> {
                 items,
                 (title, target_url, spoiler_text),
                 (max_characters, characters_reserved_per_url, caption_limit, description_limit, hashtag_limit),
-                (entities_allowed, maximum, placement, listed),
+                (entities_allowed, maximum, placement, listed, thread),
             )| {
                 Setup {
                     media,
@@ -190,6 +192,7 @@ fn setup() -> impl Strategy<Value = Setup> {
                     description_limit,
                     hashtag_limit,
                     spoiler_text,
+                    thread,
                     entities_allowed,
                     maximum,
                 }
@@ -231,6 +234,19 @@ fn check(input: &str, target: &Target, projection: &Projection) -> Result<(), Te
             measurement.value,
             measurement.unit
         );
+    }
+    for part in &projection.parts {
+        for measurement in &part.measurements {
+            let Some(maximum) = measurement.maximum else { continue };
+            let blocked = projection.changes.iter().any(|change| change.class == Class::Blocked);
+            prop_assert!(
+                measurement.value <= maximum || measurement.unit.counts_markers() || blocked,
+                "{name} part measures {} > {maximum} {:?}",
+                measurement.value,
+                measurement.unit
+            );
+        }
+        prop_assert!(part.fields.iter().all(|field| !field.text.is_empty()), "{name} has an empty part");
     }
     for field in &projection.fields {
         let utf16 = boundaries(&field.text);
@@ -291,6 +307,7 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
         description_limit: setup.description_limit,
         hashtag_limit: setup.hashtag_limit,
         spoiler_text: setup.spoiler_text.as_deref(),
+        overflow: if setup.thread { Overflow::Thread } else { Overflow::Truncate },
         entities_allowed: setup.entities_allowed,
         items: setup.listed.then_some(&items[..]),
     };

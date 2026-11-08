@@ -78,6 +78,7 @@ export const load = (() => {
 
   const KINDS = { __proto__: null, image: 1, video: 2, gif: 3, audio: 4 };
   const PLACEMENTS = { __proto__: null, post: 1, reel: 2, story: 3 };
+  const OVERFLOWS = { __proto__: null, truncate: 0, thread: 1 };
   const FORMATS = { image: 0, gif: 1, video: 2, audio: 3 };
 
   function mediaFacts(items) {
@@ -189,6 +190,12 @@ export const load = (() => {
         throw new TypeError("facts.placement must be 'post', 'reel', 'story', null or undefined");
       }
 
+      const overflow = facts.overflow == null ? 0 : OVERFLOWS[facts.overflow];
+
+      if (overflow === undefined) {
+        throw new TypeError("facts.overflow must be 'truncate', 'thread', null or undefined");
+      }
+
       if (title !== null && (typeof title !== 'string' || !title.isWellFormed())) {
         throw new TypeError('facts.title must be a well-formed string or null');
       }
@@ -218,6 +225,7 @@ export const load = (() => {
         count(facts.descriptionLimit, 'facts.descriptionLimit'),
         count(facts.hashtagLimit, 'facts.hashtagLimit'),
         spoilerText ?? undefined,
+        overflow,
       ];
       const at = invalid(text);
 

@@ -5,7 +5,7 @@ use crate::document::{
     Range, Severity,
 };
 use crate::project::{
-    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Projection, Slot, Target,
+    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Part, Projection, Slot, Target,
     Truncated,
 };
 use crate::targets::TARGETS;
@@ -39,7 +39,8 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
         Ok(document) => document,
         Err(out) => return out,
     };
-    let Projection { fields, measurements, changes, media, blocks, items } = project::project(&document, target, facts);
+    let Projection { fields, measurements, changes, media, blocks, items, parts } =
+        project::project(&document, target, facts);
     let mut out = Out(String::with_capacity(256));
     out.raw("{\"projection\":{\"fields\":");
     out.list(&fields, Out::field);
@@ -55,12 +56,20 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
     }
     if !items.is_empty() {
         out.raw(",\"items\":");
-        out.list(&items, |out, item| {
-            let Attachment { reference, alt } = item;
-            out.raw("{\"reference\":");
-            out.string(reference);
-            out.key("alt");
-            out.optional(alt.as_deref());
+        out.list(&items, Out::attachment);
+    }
+    if !parts.is_empty() {
+        out.raw(",\"parts\":");
+        out.list(&parts, |out, part| {
+            let Part { fields, measurements, media, items } = part;
+            out.raw("{\"fields\":");
+            out.list(fields, Out::field);
+            out.raw(",\"measurements\":");
+            out.list(measurements, Out::measurement);
+            out.raw(",\"media\":");
+            out.list(media, |out, id| out.string(id));
+            out.raw(",\"items\":");
+            out.list(items, Out::attachment);
             out.0.push('}');
         });
     }
@@ -86,6 +95,10 @@ pub fn targets() -> String {
         out.string(&target.digest());
         out.key("manifest");
         out.string(&target.manifest());
+        out.key("codes");
+        out.list(&target.codes(), |out, code| out.string(code));
+        out.key("threads");
+        out.raw(if target.threads() { "true" } else { "false" });
         out.0.push('}');
     });
     out.0.push('}');
@@ -387,6 +400,15 @@ impl Out {
                 self.optional(layout.map(Layout::as_str));
             }
         }
+        self.0.push('}');
+    }
+
+    fn attachment(&mut self, attachment: &Attachment) {
+        let Attachment { reference, alt } = attachment;
+        self.raw("{\"reference\":");
+        self.string(reference);
+        self.key("alt");
+        self.optional(alt.as_deref());
         self.0.push('}');
     }
 

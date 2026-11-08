@@ -3,7 +3,7 @@ mod support;
 use std::collections::HashMap;
 
 use gsx_core::document::{Media, parse};
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Placement};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement};
 use gsx_core::targets::target;
 use gsx_core::wire;
 use support::{Json, LONE_SURROGATE, difference, records};
@@ -59,6 +59,11 @@ fn facts<'a>(json: &'a Json, items: &'a [MediaFact<'a>]) -> Facts<'a> {
         description_limit: limit("descriptionLimit"),
         hashtag_limit: limit("hashtagLimit"),
         spoiler_text: json.get("spoilerText").str(),
+        overflow: match json.get("overflow").str() {
+            None | Some("truncate") => Overflow::Truncate,
+            Some("thread") => Overflow::Thread,
+            Some(other) => panic!("no overflow {other}"),
+        },
         max_characters: limit("maxCharacters"),
         characters_reserved_per_url: limit("charactersReservedPerUrl"),
         title: json.get("title").str(),
@@ -86,6 +91,7 @@ const KNOWN_FACTS: &[&str] = &[
     "descriptionLimit",
     "hashtagLimit",
     "spoilerText",
+    "overflow",
     "maxCharacters",
     "charactersReservedPerUrl",
     "title",

@@ -20,6 +20,7 @@ __all__ = [
     "Item",
     "Marker",
     "Measurement",
+    "Part",
     "Media",
     "MediaFact",
     "Node",
@@ -278,6 +279,8 @@ class Facts:
     """Instagram hashtags allowed in a caption; 5 without it."""
     spoiler_text: Optional[str] = None
     """Mastodon content warning: not rendered, but counted with the text against the status limit."""
+    overflow: Optional[str] = None
+    """What a body that does not fit becomes: "truncate" (the default) or "thread" where the target publishes threads."""
 
 
 @dataclass(frozen=True)
@@ -361,6 +364,16 @@ class Projection:
     """Present for targets of the blocks/1 form only."""
     items: Optional[List[Attachment]] = None
     """Outside the blocks/1 form, one per media fact item with its fitted alt; absent without items."""
+    parts: Optional[List["Part"]] = None
+    """With overflow "thread", when the body did not fit: every post of the thread in order; the top level repeats the first."""
+
+
+@dataclass(frozen=True)
+class Part:
+    fields: List[Field]
+    measurements: List[Measurement]
+    media: List[str]
+    items: List[Attachment]
 
 
 @dataclass(frozen=True)
@@ -370,6 +383,10 @@ class Target:
     offsets: Optional[str]
     digest: str
     manifest: str
+    codes: List[str]
+    """Every code a blocked change of this target can carry."""
+    threads: bool
+    """Whether overflow "thread" applies."""
 
 
 class _MediaFact(ctypes.Structure):
@@ -403,6 +420,7 @@ class _Facts(ctypes.Structure):
         ("hashtag_limit", ctypes.c_int64),
         ("spoiler_text", ctypes.c_char_p),
         ("spoiler_text_len", ctypes.c_size_t),
+        ("overflow", ctypes.c_uint32),
     ]
 
 
@@ -422,6 +440,7 @@ _lib.gsx_targets.restype = ctypes.c_void_p
 
 _KINDS = {None: 0, "image": 1, "video": 2, "gif": 3, "audio": 4}
 _PLACEMENTS = {None: 0, "post": 1, "reel": 2, "story": 3}
+_OVERFLOWS = {None: 0, "truncate": 0, "thread": 1}
 _FORMATS = {"image": 0, "gif": 1, "video": 2, "audio": 3}
 
 
@@ -438,6 +457,8 @@ def _facts(facts: Facts) -> _Facts:
         raise ValueError("facts.media must be 'image', 'video', 'gif', 'audio' or None")
     if facts.placement not in _PLACEMENTS:
         raise ValueError("facts.placement must be 'post', 'reel', 'story' or None")
+    if facts.overflow not in _OVERFLOWS:
+        raise ValueError("facts.overflow must be 'truncate', 'thread' or None")
     count = facts.media_count
     if not isinstance(count, int) or isinstance(count, bool) or not 0 <= count < 1 << 8 * ctypes.sizeof(ctypes.c_size_t):
         raise ValueError("facts.media_count must be a non-negative int that fits size_t")
@@ -472,6 +493,7 @@ def _facts(facts: Facts) -> _Facts:
         _limit(facts.hashtag_limit, "facts.hashtag_limit"),
         spoiler_text,
         0 if spoiler_text is None else len(spoiler_text),
+        _OVERFLOWS[facts.overflow],
     )
 
 
@@ -495,19 +517,8 @@ def _range(value: Optional[list]) -> Optional[Range]:
 def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Media] = ()) -> Projection:
     projection = _unwrap(project_json(text, target, facts, media), "projection")
     return Projection(
-        fields=[
-            Field(
-                item["name"],
-                item["text"],
-                [Range(*link) for link in item["links"]],
-                [Entity(entity["style"], Range(*entity["range"]), entity["value"]) for entity in item["entities"]],
-            )
-            for item in projection["fields"]
-        ],
-        measurements=[
-            Measurement(item["field"], item["unit"], item["value"], item["maximum"], item.get("block"), item.get("item"))
-            for item in projection["measurements"]
-        ],
+        fields=_fields(projection["fields"]),
+        measurements=_measurements(projection["measurements"]),
         changes=[
             Change(
                 item["class"],
@@ -525,6 +536,35 @@ def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Medi
         media=projection["media"],
         blocks=None if "blocks" not in projection else [_block(block) for block in projection["blocks"]],
         items=None if "items" not in projection else [Attachment(**item) for item in projection["items"]],
+        parts=None if "parts" not in projection else [_part(part) for part in projection["parts"]],
+    )
+
+
+def _fields(fields: list) -> List[Field]:
+    return [
+        Field(
+            item["name"],
+            item["text"],
+            [Range(*link) for link in item["links"]],
+            [Entity(entity["style"], Range(*entity["range"]), entity["value"]) for entity in item["entities"]],
+        )
+        for item in fields
+    ]
+
+
+def _measurements(measurements: list) -> List[Measurement]:
+    return [
+        Measurement(item["field"], item["unit"], item["value"], item["maximum"], item.get("block"), item.get("item"))
+        for item in measurements
+    ]
+
+
+def _part(part: dict) -> Part:
+    return Part(
+        _fields(part["fields"]),
+        _measurements(part["measurements"]),
+        part["media"],
+        [Attachment(**item) for item in part["items"]],
     )
 
 

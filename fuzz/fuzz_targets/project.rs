@@ -2,7 +2,7 @@
 
 use arbitrary::Arbitrary;
 use gsx_core::document::{Media, parse};
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Options, Placement, Search, project_with};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Options, Overflow, Placement, Search, project_with};
 use gsx_core::targets::TARGETS;
 use gsx_core::wire;
 use libfuzzer_sys::fuzz_target;
@@ -45,6 +45,7 @@ struct Input<'a> {
     description_limit: Option<u16>,
     hashtag_limit: Option<u8>,
     spoiler_text: Option<&'a str>,
+    thread: bool,
     entities_allowed: bool,
     maximum: Option<u8>,
     text: &'a str,
@@ -87,6 +88,7 @@ fuzz_target!(|input: Input| {
         description_limit: input.description_limit.map(u32::from),
         hashtag_limit: input.hashtag_limit.map(u32::from),
         spoiler_text: input.spoiler_text,
+        overflow: if input.thread { Overflow::Thread } else { Overflow::Truncate },
         entities_allowed: input.entities_allowed,
         items: input.listed.then_some(&items[..]),
     };

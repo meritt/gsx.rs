@@ -19,6 +19,7 @@ struct Case: Decodable {
         let descriptionLimit: UInt32?
         let hashtagLimit: UInt32?
         let spoilerText: String?
+        let overflow: Overflow?
         let entitiesAllowed: Bool?
         let items: [MediaFact]?
     }
@@ -61,6 +62,7 @@ for file in arguments.dropFirst() {
             descriptionLimit: given?.descriptionLimit,
             hashtagLimit: given?.hashtagLimit,
             spoilerText: given?.spoilerText,
+            overflow: given?.overflow,
             entitiesAllowed: given?.entitiesAllowed ?? false,
             items: given?.items
         )

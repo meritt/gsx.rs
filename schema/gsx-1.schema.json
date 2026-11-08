@@ -69,9 +69,36 @@
             "required": ["reference", "alt"],
             "additionalProperties": false
           }
+        },
+        "parts": {
+          "description": "Present when the overflow fact is thread and the body did not fit: every post of the thread in order, the first repeated at the top level.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/part" }
         }
       },
       "required": ["fields", "measurements", "changes", "media"],
+      "additionalProperties": false
+    },
+    "part": {
+      "type": "object",
+      "properties": {
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
+        "measurements": { "type": "array", "items": { "$ref": "#/$defs/measurement" } },
+        "media": { "type": "array", "items": { "type": "string" } },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reference": { "type": "string" },
+              "alt": { "$ref": "#/$defs/nullableString" }
+            },
+            "required": ["reference", "alt"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["fields", "measurements", "media", "items"],
       "additionalProperties": false
     },
     "block": {
@@ -239,9 +266,15 @@
         "form": { "enum": ["plain/1", "entities/1", "html/1", "markdown/1", "blocks/1"] },
         "offsets": { "enum": ["utf8", "utf16", null] },
         "digest": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
-        "manifest": { "type": "string" }
+        "manifest": { "type": "string" },
+        "codes": {
+          "description": "Every code a blocked change of this target can carry, in table order.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z0-9_]+$" }
+        },
+        "threads": { "description": "Whether the overflow fact thread applies.", "type": "boolean" }
       },
-      "required": ["name", "form", "offsets", "digest", "manifest"],
+      "required": ["name", "form", "offsets", "digest", "manifest", "codes", "threads"],
       "additionalProperties": false
     },
     "document": {

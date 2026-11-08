@@ -2,7 +2,7 @@ use super::limits::{
     Alt, CodePoints, Description, Fact, Hashtags, Image, Limit, MastodonWeighted, Mentions, Only, Post, Text, Title,
     Utf8Bytes, Utf16CodeUnits, Video, XWeighted, given, limit, resolved, unlimited,
 };
-use super::{DEFAULT, Rules, rule};
+use super::{DEFAULT, Rules, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Approximated, Blocked, TextualFallback};
 use crate::project::{
@@ -55,7 +55,7 @@ pub static X: Target = Target {
     ..text(
         Escape::None,
         "x-plain",
-        plain!(&[]),
+        rules!(Rules { text: THREADED_TEXT, ..DEFAULT }),
         BODY,
         &[resolved(Text, XWeighted, Fact::MaxCharacters, 280), limit(Alt, CodePoints, 1000)],
     )
@@ -64,7 +64,7 @@ pub static X: Target = Target {
 pub static MASTODON: Target = text(
     Escape::None,
     "mastodon-plain",
-    plain!(&[]),
+    rules!(Rules { text: THREADED_TEXT, ..DEFAULT }),
     BODY,
     &[resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500), given(Alt, CodePoints, Fact::DescriptionLimit)],
 );

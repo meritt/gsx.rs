@@ -6,7 +6,7 @@ use std::ptr;
 use std::sync::LazyLock;
 
 use gsx_core::document::Media as CoreMedia;
-use gsx_core::project::{Facts as CoreFacts, Format, MediaFact as CoreMediaFact, MediaKind, Placement};
+use gsx_core::project::{Facts as CoreFacts, Format, MediaFact as CoreMediaFact, MediaKind, Overflow, Placement};
 use gsx_core::{targets, wire};
 
 pub use gsx_core::VERSION;
@@ -102,6 +102,8 @@ pub const GSX_PLACEMENT_NONE: u32 = 0;
 pub const GSX_PLACEMENT_POST: u32 = 1;
 pub const GSX_PLACEMENT_REEL: u32 = 2;
 pub const GSX_PLACEMENT_STORY: u32 = 3;
+pub const GSX_OVERFLOW_TRUNCATE: u32 = 0;
+pub const GSX_OVERFLOW_THREAD: u32 = 1;
 
 pub const GSX_FORMAT_IMAGE: u32 = 0;
 pub const GSX_FORMAT_GIF: u32 = 1;
@@ -140,6 +142,7 @@ pub struct Facts {
     pub hashtag_limit: i64,
     pub spoiler_text: *const u8,
     pub spoiler_text_len: usize,
+    pub overflow: u32,
 }
 
 impl Facts {
@@ -209,6 +212,11 @@ impl Facts {
             description_limit: limit(self.description_limit, "description_limit")?,
             hashtag_limit: limit(self.hashtag_limit, "hashtag_limit")?,
             spoiler_text,
+            overflow: match self.overflow {
+                GSX_OVERFLOW_TRUNCATE => Overflow::Truncate,
+                GSX_OVERFLOW_THREAD => Overflow::Thread,
+                other => return Err(format!("overflow {other} is not GSX_OVERFLOW_*")),
+            },
             entities_allowed: self.entities_allowed,
             items,
         })
@@ -468,6 +476,7 @@ mod tests {
             hashtag_limit: 3,
             spoiler_text: spoiler.as_ptr(),
             spoiler_text_len: spoiler.len(),
+            overflow: GSX_OVERFLOW_THREAD,
         };
         let core = CoreFacts {
             media: Some(MediaKind::Video),
@@ -477,6 +486,7 @@ mod tests {
             max_characters: Some(100),
             hashtag_limit: Some(3),
             spoiler_text: Some(spoiler),
+            overflow: Overflow::Thread,
             entities_allowed: true,
             ..CoreFacts::default()
         };
@@ -490,6 +500,8 @@ mod tests {
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "media kind 5 is not GSX_MEDIA_*");
         let bad = Facts { placement: 4, ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "placement 4 is not GSX_PLACEMENT_*");
+        let bad = Facts { overflow: 2, ..facts };
+        assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "overflow 2 is not GSX_OVERFLOW_*");
         let bad = Facts { caption_limit: 1 << 32, ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "caption_limit 4294967296 is over 2^32 - 1");
 

@@ -13,8 +13,16 @@ pub struct Facts<'a> {
     pub description_limit: Option<u32>,
     pub hashtag_limit: Option<u32>,
     pub spoiler_text: Option<&'a str>,
+    pub overflow: Overflow,
     pub entities_allowed: bool,
     pub items: Option<&'a [MediaFact<'a>]>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Overflow {
+    #[default]
+    Truncate,
+    Thread,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

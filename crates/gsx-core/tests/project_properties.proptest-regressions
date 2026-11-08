@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f45973e68d4af74ff63901200a61ce049e037046d0da9aeff492e2f7ef50e2ea # shrinks to input = "", setup = Setup { media: 0, kind: None, media_count: 0, placement: None, listed: false, items: [], title: None, target_url: None, max_characters: None, characters_reserved_per_url: None, caption_limit: None, description_limit: None, hashtag_limit: None, spoiler_text: Some("a🚀 aa🚀a aaa 🚀aaa🚀aa 🚀  🚀a a🚀a🚀"), thread: true, entities_allowed: false, maximum: Some(0) }

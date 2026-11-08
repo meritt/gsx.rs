@@ -8,6 +8,7 @@ mod media;
 pub mod nfc;
 mod outline;
 mod table;
+mod thread;
 
 use std::collections::HashMap;
 use std::ops::Range as Span;
@@ -18,7 +19,7 @@ use crate::measure::{self, Fact};
 pub use crate::measure::{MediaKind, Placement, Unit};
 pub use change::{Change, Class, Feature, FieldName, Slot, Truncated};
 pub use entities::Entity;
-pub use facts::{Facts, Format, MediaFact};
+pub use facts::{Facts, Format, MediaFact, Overflow};
 pub use fit::WINDOW;
 pub(crate) use layout::blank;
 pub use layout::{CELL, ELLIPSIS, RULE, Writer, marker, single_line};
@@ -59,6 +60,15 @@ pub struct Projection {
     pub changes: Vec<Change>,
     pub media: Vec<String>,
     pub blocks: Vec<Block>,
+    pub items: Vec<Attachment>,
+    pub parts: Vec<Part>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Part {
+    pub fields: Vec<Field>,
+    pub measurements: Vec<Measurement>,
+    pub media: Vec<String>,
     pub items: Vec<Attachment>,
 }
 
@@ -159,6 +169,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn report_media(&mut self, node: &Node) {
+        self.anchor(Some(node));
         let ids = node.media_ids().unwrap_or_default();
         let listed = |id: &String| self.items.is_none() || self.positions.contains_key(id.as_str());
         let (some_listed, some_missing) = (ids.iter().any(listed), !ids.iter().all(listed));
@@ -337,22 +348,22 @@ fn render(
         }
         None => vec![],
     };
+    let mut anchors = context.anchors;
     let (text, links, prefixes) = match target.normalization {
         Normalization::None => (written.text, written.links, written.prefixes),
         Normalization::Nfc => {
+            let (mut from, mut to) = (0, 0);
+            for anchor in &mut anchors {
+                to += nfc::nfc(&written.text[from..anchor.at]).len();
+                from = anchor.at;
+                anchor.at = to;
+            }
             let (text, links) = normalized(&written.text, &written.links);
             (text, links, vec![])
         }
     };
-    let mut rendered = Rendered {
-        text,
-        links,
-        styled,
-        changes: context.changes,
-        anchors: context.anchors,
-        alts: context.alts,
-        prefixes,
-    };
+    let mut rendered =
+        Rendered { text, links, styled, changes: context.changes, anchors, alts: context.alts, prefixes };
     cap_markers(target, &resolved(facts), field, &mut rendered);
     rendered
 }
@@ -407,6 +418,13 @@ fn normalized(text: &str, links: &[Span<usize>]) -> (String, Vec<Span<usize>>) {
 }
 
 type Probe = (Rendered, Vec<usize>);
+
+fn within(limits: &[Bound], values: &[usize]) -> bool {
+    limits
+        .iter()
+        .zip(values)
+        .all(|(limit, value)| limit.unit.counts_markers() || limit.maximum.is_none_or(|maximum| *value <= maximum))
+}
 
 struct Fitted {
     rendered: Rendered,
@@ -493,7 +511,7 @@ impl Request<'_, '_> {
     fn fits(&self, rendered: &Rendered) -> bool {
         let limits = self.limits();
         let values = self.values(&limits, rendered);
-        limits.iter().zip(values).all(|(limit, value)| limit.maximum.is_none_or(|maximum| value <= maximum))
+        within(&limits, &values)
     }
 
     fn values(&self, limits: &[Bound], rendered: &Rendered) -> Vec<usize> {
@@ -524,11 +542,7 @@ impl Request<'_, '_> {
         let full = draw(None);
         let limits = self.limits();
         let values = self.values(&limits, &full);
-        let fits = |values: &[usize]| {
-            limits.iter().zip(values).all(|(limit, value)| {
-                limit.unit.counts_markers() || limit.maximum.is_none_or(|maximum| *value <= maximum)
-            })
-        };
+        let fits = |values: &[usize]| within(&limits, values);
         let measurements = self.measurements(&limits, &values);
         if fits(&values) {
             return Fitted { rendered: full, measurements };
@@ -722,6 +736,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     let mut blocks = vec![];
     let mut alts = vec![];
     let mut derived = false;
+    let mut threaded = None;
     for spec in target.fields(facts) {
         let request = Request { target, spec, facts, options };
         let fitted = match (spec.source, explicit, titled) {
@@ -738,11 +753,22 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     }
                     fits
                 });
-                let mut fitted = request.fit(
-                    || Outline::of_nodes(document, body),
-                    !removed,
-                    |cut| appended(target, draw_body(spec.name, cut), suffix),
-                );
+                let full = (facts.overflow == Overflow::Thread && target.threads() && !derived)
+                    .then(|| draw_body(spec.name, None));
+                let split = full.as_ref().and_then(|full| thread::split(&request, full, suffix));
+                let mut fitted = match split {
+                    Some(mut split) => {
+                        let first = split.parts.remove(0);
+                        let anchors = full.map(|full| full.anchors).unwrap_or_default();
+                        threaded = Some((spec.name, split, anchors));
+                        first
+                    }
+                    None => request.fit(
+                        || Outline::of_nodes(document, body),
+                        !removed,
+                        |cut| appended(target, draw_body(spec.name, cut), suffix),
+                    ),
+                };
                 if suffix.is_some() {
                     fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));
                 }
@@ -835,7 +861,72 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     changes.sort_by_key(|change| change.range.map(|range| range.start));
     let mut references = vec![];
     media(children, &mut references);
-    Projection { fields, measurements, changes, media: references, blocks, items }
+    let mut parts = vec![];
+    if let Some(threaded) = threaded {
+        parts = threaded_parts(target, children, threaded, &fields, &measurements, &items);
+        references.clone_from(&parts[0].media);
+        items.clone_from(&parts[0].items);
+    }
+    Projection { fields, measurements, changes, media: references, blocks, items, parts }
+}
+
+fn threaded_parts(
+    target: &'static Target,
+    children: &[Node],
+    (name, split, anchors): (FieldName, thread::Thread, Vec<Anchor>),
+    fields: &[Field],
+    measurements: &[Measurement],
+    items: &[Attachment],
+) -> Vec<Part> {
+    let mut ids: Vec<Vec<String>> = vec![vec![]; split.spans.len()];
+    for anchor in &anchors {
+        let Some(range) = anchor.node else { continue };
+        let Ok(at) = children.binary_search_by_key(&range.start, |node| node.range.start) else { continue };
+        let index = split.spans.iter().rposition(|span| span.start <= anchor.at).unwrap_or(0);
+        for id in children[at].media_ids().unwrap_or_default() {
+            if !ids[index].contains(id) {
+                ids[index].push(id.clone());
+            }
+        }
+    }
+    let placed: Vec<String> = ids.iter().flatten().map(|id| format!("media:{id}")).collect();
+    let mut parts = vec![];
+    let first = fields.iter().find(|field| field.name == name).cloned();
+    let mut rest = split.parts.into_iter();
+    for (index, media) in ids.into_iter().enumerate() {
+        let (field, measured) = if index == 0 {
+            let measured = measurements
+                .iter()
+                .filter(|measurement| {
+                    measurement.field == name && measurement.item.is_none() && measurement.block.is_none()
+                })
+                .copied()
+                .collect();
+            (first.clone(), measured)
+        } else {
+            let Some(Fitted { rendered, measurements }) = rest.next() else { break };
+            let field = Field {
+                name,
+                links: utf16_ranges(&rendered.text, &rendered.links),
+                entities: target
+                    .form
+                    .entities()
+                    .map_or_else(Vec::new, |form| entities::offsets(form, &rendered.text, &rendered.styled)),
+                text: rendered.text,
+            };
+            (Some(field), measurements)
+        };
+        let attached = items
+            .iter()
+            .filter(|item| {
+                media.iter().any(|id| item.reference == format!("media:{id}"))
+                    || (index == 0 && !placed.contains(&item.reference))
+            })
+            .cloned()
+            .collect();
+        parts.push(Part { fields: field.into_iter().collect(), measurements: measured, media, items: attached });
+    }
+    parts
 }
 
 fn explicit_title(request: &Request, title: &str) -> Fitted {

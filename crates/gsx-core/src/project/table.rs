@@ -29,6 +29,7 @@ pub enum When {
     Spoiler,
     Truncated,
     Refused,
+    Thread,
 }
 
 impl When {
@@ -53,6 +54,7 @@ impl When {
             When::Spoiler => "spoiler",
             When::Truncated => "truncated",
             When::Refused => "refused",
+            When::Thread => "thread",
         }
     }
 }
@@ -410,6 +412,27 @@ impl Target {
 
     pub fn handles(&self, feature: Feature) -> bool {
         self.rules.iter().any(|rule| rule.feature == feature)
+    }
+
+    pub fn codes(&self) -> Vec<String> {
+        let mut codes: Vec<String> = vec![];
+        let blocked = self.rules.iter().flat_map(|rule| {
+            std::iter::once((rule.class, rule.reason))
+                .chain(rule.conditions.iter().map(|condition| (condition.class, condition.reason)))
+        });
+        for (_, reason) in blocked.filter(|(class, _)| *class == Class::Blocked) {
+            let code = reason.to_ascii_uppercase();
+            if !codes.contains(&code) {
+                codes.push(code);
+            }
+        }
+        codes
+    }
+
+    pub fn threads(&self) -> bool {
+        self.rules.iter().any(|rule| {
+            rule.feature == Feature::Text && rule.conditions.iter().any(|condition| condition.when == When::Thread)
+        })
     }
 
     pub fn class(&self, feature: Feature) -> Class {

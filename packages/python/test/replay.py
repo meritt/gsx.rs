@@ -16,6 +16,7 @@ FACTS = {
     "descriptionLimit": "description_limit",
     "hashtagLimit": "hashtag_limit",
     "spoilerText": "spoiler_text",
+    "overflow": "overflow",
     "entitiesAllowed": "entities_allowed",
 }
 

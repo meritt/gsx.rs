@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use gsx_core::document::Media;
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Placement, Target};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target};
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire;
 
@@ -186,6 +186,11 @@ fn outcome(
         description_limit: limit("descriptionLimit"),
         hashtag_limit: limit("hashtagLimit"),
         spoiler_text: spoiler_text.as_deref(),
+        overflow: match facts.get("overflow").string().as_deref() {
+            None | Some("truncate") => Overflow::Truncate,
+            Some("thread") => Overflow::Thread,
+            Some(other) => return Err(format!("{place}: no overflow {other}")),
+        },
         entities_allowed: matches!(facts.get("entitiesAllowed"), Json::Bool(true)),
         items: matches!(facts.get("items"), Json::Array(_)).then_some(&items[..]),
     };
@@ -202,7 +207,7 @@ fn outcome(
 
 const FACTS: [&str; 2] = [
     "{}",
-    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"hashtagLimit":3,"spoilerText":"CW","entitiesAllowed":true}"#,
+    r#"{"media":"image","mediaCount":1,"title":"Title","targetUrl":"https://example.com/t","maxCharacters":500,"charactersReservedPerUrl":23,"captionLimit":1024,"descriptionLimit":4,"hashtagLimit":3,"spoilerText":"CW","overflow":"thread","entitiesAllowed":true}"#,
 ];
 const PLACEMENTS: [&str; 3] = ["post", "reel", "story"];
 

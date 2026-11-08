@@ -5,7 +5,7 @@ mod loader;
 use std::hint::black_box;
 
 use gsx_core::document::{Document, Media, parse};
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Placement, Target, project};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target, project};
 use gsx_core::targets::{TARGETS, target};
 use gungraun::{library_benchmark, library_benchmark_group, main};
 use loader::Bench;
@@ -97,6 +97,7 @@ fn targets(publication: Publication) {
         description_limit: Some(1500),
         hashtag_limit: Some(30),
         spoiler_text: Some("Spoilers"),
+        overflow: Overflow::Thread,
         entities_allowed: true,
         items: Some(&items),
     };
