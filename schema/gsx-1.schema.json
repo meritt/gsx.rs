@@ -60,15 +60,7 @@
         "items": {
           "description": "Outside the blocks/1 form, one per media fact item with its fitted alt; absent without items.",
           "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "reference": { "type": "string" },
-              "alt": { "$ref": "#/$defs/nullableString" }
-            },
-            "required": ["reference", "alt"],
-            "additionalProperties": false
-          }
+          "items": { "$ref": "#/$defs/attachment" }
         },
         "parts": {
           "description": "Present when the overflow fact is thread and the body did not fit: every post of the thread in order, the first repeated at the top level.",
@@ -85,20 +77,19 @@
         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
         "measurements": { "type": "array", "items": { "$ref": "#/$defs/measurement" } },
         "media": { "type": "array", "items": { "type": "string" } },
-        "items": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "reference": { "type": "string" },
-              "alt": { "$ref": "#/$defs/nullableString" }
-            },
-            "required": ["reference", "alt"],
-            "additionalProperties": false
-          }
-        }
+        "items": { "type": "array", "items": { "$ref": "#/$defs/attachment" } }
       },
       "required": ["fields", "measurements", "media", "items"],
+      "additionalProperties": false
+    },
+    "attachment": {
+      "type": "object",
+      "properties": {
+        "reference": { "type": "string" },
+        "alt": { "$ref": "#/$defs/nullableString" },
+        "spoiler": { "description": "Whether the platform publishes the item hidden.", "type": "boolean" }
+      },
+      "required": ["reference", "alt", "spoiler"],
       "additionalProperties": false
     },
     "block": {

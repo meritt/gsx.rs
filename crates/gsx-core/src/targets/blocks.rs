@@ -6,7 +6,7 @@ use crate::document::Layout;
 use crate::forms::blocks::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback};
 use crate::project::{
-    BlocksForm, Ceiling, Condition, Feature, Form, Format, Normalization, Rule, Search, Target, When,
+    BlocksForm, Ceiling, Condition, Feature, Form, Format, Normalization, Rule, Search, Spoilers, Target, When,
 };
 
 const fn blocks(
@@ -24,6 +24,7 @@ const fn blocks(
         normalization: Normalization::None,
         renderer: RENDERER,
         limits,
+        spoilers: Spoilers::None,
     }
 }
 

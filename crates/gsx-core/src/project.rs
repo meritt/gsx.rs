@@ -27,8 +27,8 @@ pub use links::href;
 pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
     BlocksForm, Ceiling, Condition, DATE_LABEL, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm,
-    LineStart, MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Structure, Style, Target,
-    Truncation, When,
+    LineStart, MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Spoilers, Structure, Style,
+    Target, Truncation, When,
 };
 
 use layout::Styled;

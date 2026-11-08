@@ -31,6 +31,7 @@ pub enum When {
     Refused,
     Thread,
     Code,
+    Post,
 }
 
 impl When {
@@ -57,6 +58,7 @@ impl When {
             When::Refused => "refused",
             When::Thread => "thread",
             When::Code => "code",
+            When::Post => "post",
         }
     }
 }
@@ -400,6 +402,14 @@ pub struct Target {
     pub normalization: Normalization,
     pub renderer: Renderer,
     pub limits: &'static [measure::Limit],
+    pub spoilers: Spoilers,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Spoilers {
+    None,
+    Items(&'static [Format]),
+    Post,
 }
 
 impl Target {
@@ -482,6 +492,9 @@ impl Target {
         );
         if self.normalization == Normalization::Nfc {
             let _ = writeln!(out, "normalization nfc {}", super::nfc::UNICODE_VERSION);
+        }
+        if self.spoilers != Spoilers::None {
+            let _ = writeln!(out, "spoilers {:?}", self.spoilers);
         }
         for rule in self.rules {
             let _ = writeln!(out, "feature {} {} {}", rule.feature.name(), rule.class.name(), rule.reason);

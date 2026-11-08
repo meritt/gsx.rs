@@ -2,12 +2,12 @@ use super::limits::{
     Alt, CodePoints, Description, Fact, Hashtags, Image, Limit, MastodonWeighted, Mentions, Only, Post, Text, Title,
     Utf8Bytes, Utf16CodeUnits, Video, XWeighted, given, limit, resolved, unlimited,
 };
-use super::{DEFAULT, Rules, THREADED_TEXT, rule};
+use super::{DEFAULT, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Approximated, Blocked, TextualFallback};
 use crate::project::{
-    Condition, Escape, Feature, FieldName, FieldSpec, Form, Media, Normalization, Rule, Search, Source, Target,
-    Truncation, When,
+    Condition, Escape, Feature, FieldName, FieldSpec, Form, Format, Media, Normalization, Rule, Search, Source,
+    Spoilers, Target, Truncation, When,
 };
 
 pub(super) const fn field(name: FieldName, media: Media, source: Source, required: bool) -> FieldSpec {
@@ -45,6 +45,7 @@ const fn text(
         normalization: Normalization::None,
         renderer: RENDERER,
         limits,
+        spoilers: Spoilers::None,
     }
 }
 
@@ -52,6 +53,7 @@ pub(super) const BODY: &[FieldSpec] = &[field(FieldName::Text, Media::Any, Sourc
 
 pub static X: Target = Target {
     normalization: Normalization::Nfc,
+    spoilers: Spoilers::Items(&[Format::Image, Format::Gif, Format::Video]),
     ..text(
         Escape::None,
         "x-plain",
@@ -61,13 +63,16 @@ pub static X: Target = Target {
     )
 };
 
-pub static MASTODON: Target = text(
-    Escape::None,
-    "mastodon-plain",
-    rules!(Rules { text: THREADED_TEXT, ..DEFAULT }),
-    BODY,
-    &[resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500), given(Alt, CodePoints, Fact::DescriptionLimit)],
-);
+pub static MASTODON: Target = Target {
+    spoilers: Spoilers::Post,
+    ..text(
+        Escape::None,
+        "mastodon-plain",
+        rules!(Rules { text: THREADED_TEXT, media: SPOILERS_PER_POST, ..DEFAULT }),
+        BODY,
+        &[resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500), given(Alt, CodePoints, Fact::DescriptionLimit)],
+    )
+};
 
 pub static LINKEDIN: Target = text(
     Escape::LinkedIn,

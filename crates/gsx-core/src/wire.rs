@@ -405,11 +405,13 @@ impl Out {
     }
 
     fn attachment(&mut self, attachment: &Attachment) {
-        let Attachment { reference, alt } = attachment;
+        let Attachment { reference, alt, spoiler } = attachment;
         self.raw("{\"reference\":");
         self.string(reference);
         self.key("alt");
         self.optional(alt.as_deref());
+        self.key("spoiler");
+        self.bool(*spoiler);
         self.0.push('}');
     }
 

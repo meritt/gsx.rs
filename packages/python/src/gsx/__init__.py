@@ -313,8 +313,11 @@ class Measurement:
 
 @dataclass(frozen=True)
 class Attachment:
+    """A media item as published: alt fitted, and hidden when the platform carries its spoiler."""
+
     reference: str
     alt: Optional[str]
+    spoiler: bool
 
 
 @dataclass(frozen=True)

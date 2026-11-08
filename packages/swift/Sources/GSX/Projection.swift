@@ -144,6 +144,8 @@ public struct Part: Sendable, Hashable, Decodable {
 public struct Attachment: Sendable, Hashable, Decodable {
     public let reference: String
     public let alt: String?
+    /// Whether the platform publishes the item hidden: per item, or for the whole post on Mastodon and Threads.
+    public let spoiler: Bool
 }
 
 public struct Item: Sendable, Hashable, Decodable {

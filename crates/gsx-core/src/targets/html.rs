@@ -4,7 +4,8 @@ use super::{TEXT, rule};
 use crate::forms::html::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
-    Condition, Feature, Form, HtmlBlocks, HtmlForm, Normalization, Rule, Search, Structure, Target, When,
+    Condition, Feature, Form, Format, HtmlBlocks, HtmlForm, Normalization, Rule, Search, Spoilers, Structure, Target,
+    When,
 };
 
 const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlForm, limits: &'static [Limit]) -> Target {
@@ -17,6 +18,7 @@ const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlFor
         normalization: Normalization::None,
         renderer: RENDERER,
         limits,
+        spoilers: Spoilers::None,
     }
 }
 
@@ -26,8 +28,12 @@ const MEDIA: Rule = Rule {
     feature: Feature::Media,
     class: Approximated,
     reason: "media_attached",
-    conditions: &[Condition { when: When::Missing, class: Omitted, reason: "media_missing" }],
+    conditions: &[
+        Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
+        Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" },
+    ],
 };
+const HIDDEN: Spoilers = Spoilers::Items(&[Format::Image, Format::Gif, Format::Video]);
 const LINK_TITLE: Rule = rule(Feature::LinkTitle, Omitted, "link_title_omitted");
 const INVISIBLE: Condition = Condition { when: When::LabelInvisible, class: Omitted, reason: "link_label_invisible" };
 const TEXTUAL: [Rule; 6] = [
@@ -79,42 +85,45 @@ const fn entity(feature: Feature, conditions: &'static [Condition]) -> Rule {
     Rule { feature, class: Unwrapped, reason: "entity_cannot_contain_code", conditions }
 }
 
-pub static TELEGRAM: Target = html(
-    "telegram-html",
-    &[
-        HEADING,
-        TEXTUAL[0],
-        Rule {
-            feature: Feature::Blockquote,
-            class: Unwrapped,
-            reason: "code_block_cannot_be_quoted",
-            conditions: &[Condition { when: When::Nested, class: Unwrapped, reason: "blockquote_cannot_nest" }],
-        },
-        TEXTUAL[1],
-        TEXTUAL[2],
-        TEXTUAL[3],
-        CODE_INFO,
-        TEXTUAL[4],
-        TEXTUAL[5],
-        MEDIA,
-        entity(Feature::Emphasis, &[]),
-        entity(Feature::Strong, &[]),
-        entity(Feature::Strikethrough, &[]),
-        entity(Feature::Underline, &[]),
-        rule(Feature::Highlight, Unwrapped, "highlight_unwrapped"),
-        entity(Feature::Spoiler, &[]),
-        entity(Feature::Link, &[NESTED, INVISIBLE]),
-        LINK_TITLE,
-        entity(Feature::Datetime, &[NESTED]),
-        TEXT,
-    ],
-    &TELEGRAM_FORM,
-    &[
-        limit(Text, CodePoints, 4096).on(&[Post]).when(Without).visible(),
-        limit(Text, CodePoints, 1024).on(&[Post, Reel]).when(With).visible(),
-        limit(Text, CodePoints, 2048).on(&[Story]).visible(),
-    ],
-);
+pub static TELEGRAM: Target = Target {
+    spoilers: HIDDEN,
+    ..html(
+        "telegram-html",
+        &[
+            HEADING,
+            TEXTUAL[0],
+            Rule {
+                feature: Feature::Blockquote,
+                class: Unwrapped,
+                reason: "code_block_cannot_be_quoted",
+                conditions: &[Condition { when: When::Nested, class: Unwrapped, reason: "blockquote_cannot_nest" }],
+            },
+            TEXTUAL[1],
+            TEXTUAL[2],
+            TEXTUAL[3],
+            CODE_INFO,
+            TEXTUAL[4],
+            TEXTUAL[5],
+            MEDIA,
+            entity(Feature::Emphasis, &[]),
+            entity(Feature::Strong, &[]),
+            entity(Feature::Strikethrough, &[]),
+            entity(Feature::Underline, &[]),
+            rule(Feature::Highlight, Unwrapped, "highlight_unwrapped"),
+            entity(Feature::Spoiler, &[]),
+            entity(Feature::Link, &[NESTED, INVISIBLE]),
+            LINK_TITLE,
+            entity(Feature::Datetime, &[NESTED]),
+            TEXT,
+        ],
+        &TELEGRAM_FORM,
+        &[
+            limit(Text, CodePoints, 4096).on(&[Post]).when(Without).visible(),
+            limit(Text, CodePoints, 1024).on(&[Post, Reel]).when(With).visible(),
+            limit(Text, CodePoints, 2048).on(&[Story]).visible(),
+        ],
+    )
+};
 
 static RICH_FORM: HtmlForm = HtmlForm {
     blocks: HtmlBlocks::Rich,
@@ -140,33 +149,36 @@ static RICH_FORM: HtmlForm = HtmlForm {
     trim: false,
 };
 
-pub static TELEGRAM_RICH: Target = html(
-    "telegram-html-rich",
-    &[
-        HEADING,
-        CODE_INFO,
-        rule(Feature::Table, Blocked, "table_columns_exceeded"),
-        Rule {
-            feature: Feature::Media,
-            class: Approximated,
-            reason: "media_attached",
-            conditions: &[
-                Condition { when: When::Group, class: Approximated, reason: "media_group_split" },
-                Condition { when: When::Cut, class: Approximated, reason: "media_after_cut" },
-                Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
-                Condition { when: When::Empty, class: Omitted, reason: "media_alt_omitted" },
-                Condition { when: When::Count, class: Omitted, reason: "media_count_exceeded" },
-                Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
-                Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" },
-            ],
-        },
-        rule(Feature::Link, Omitted, "link_label_invisible"),
-        LINK_TITLE,
-        RICH_TEXT,
-    ],
-    &RICH_FORM,
-    &[limit(Text, CodePoints, 32768).on(&[Post]).visible()],
-);
+pub static TELEGRAM_RICH: Target = Target {
+    spoilers: HIDDEN,
+    ..html(
+        "telegram-html-rich",
+        &[
+            HEADING,
+            CODE_INFO,
+            rule(Feature::Table, Blocked, "table_columns_exceeded"),
+            Rule {
+                feature: Feature::Media,
+                class: Approximated,
+                reason: "media_attached",
+                conditions: &[
+                    Condition { when: When::Group, class: Approximated, reason: "media_group_split" },
+                    Condition { when: When::Cut, class: Approximated, reason: "media_after_cut" },
+                    Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
+                    Condition { when: When::Empty, class: Omitted, reason: "media_alt_omitted" },
+                    Condition { when: When::Count, class: Omitted, reason: "media_count_exceeded" },
+                    Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
+                    Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" },
+                ],
+            },
+            rule(Feature::Link, Omitted, "link_label_invisible"),
+            LINK_TITLE,
+            RICH_TEXT,
+        ],
+        &RICH_FORM,
+        &[limit(Text, CodePoints, 32768).on(&[Post]).visible()],
+    )
+};
 
 const RICH_TEXT_CONDITIONS: [Condition; 4] = [
     TEXT.conditions[0],

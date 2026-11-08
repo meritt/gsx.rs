@@ -449,18 +449,6 @@ impl Html {
 
     fn single(&mut self, context: &mut Context, index: usize, range: Option<Range>, level: usize) {
         self.count(context, range, level);
-        if self.media[index].spoiler && self.media[index].format == Format::Audio {
-            let (class, reason) = context.target.rule(Feature::Media).outcome(Some(When::Spoiler));
-            context.record(Change {
-                class,
-                feature: Feature::Media,
-                reason,
-                field: FieldName::Text,
-                range,
-                truncated: None,
-                slot: Some(Slot { block: None, item: index as u32 }),
-            });
-        }
         let start = context.writer().mark();
         let markup = self.medium(index);
         context.writer().raw(&markup);

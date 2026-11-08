@@ -278,6 +278,8 @@ export interface Part {
 export interface Attachment {
   reference: string;
   alt: string | null;
+  /** Whether the platform publishes the item hidden: per item, or for the whole post on Mastodon and Threads. */
+  spoiler: boolean;
 }
 
 export type ProjectionWire = { projection: Projection } | { error: WireError };

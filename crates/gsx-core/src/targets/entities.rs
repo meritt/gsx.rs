@@ -2,11 +2,12 @@ use super::limits::{
     Alt, CodePoints, Fact, Graphemes, Limit, Links, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
 };
 use super::plain::BODY;
-use super::{DEFAULT, LINK, Rules, THREADED_TEXT, rule};
+use super::{DEFAULT, LINK, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
-    Condition, Detection, EntityForm, Feature, Form, Normalization, Offsets, Rule, Search, Style, Target, When,
+    Condition, Detection, EntityForm, Feature, Form, Normalization, Offsets, Rule, Search, Spoilers, Style, Target,
+    When,
 };
 
 const fn entities(
@@ -24,6 +25,7 @@ const fn entities(
         normalization: Normalization::None,
         renderer: RENDERER,
         limits,
+        spoilers: Spoilers::None,
     }
 }
 
@@ -71,28 +73,32 @@ const THREADS_LINK: [Condition; 3] = [
     Condition { when: When::Overflow, class: Blocked, reason: "link_limit_exceeded" },
 ];
 
-pub static THREADS: Target = entities(
-    "threads-entities",
-    rules!(
-        Rules {
-            spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"),
-            link: Rule { conditions: &THREADS_LINK, ..LINK },
-            text: THREADED_TEXT,
-            ..DEFAULT
-        },
-        Rule {
-            feature: Feature::TargetUrl,
-            class: TextualFallback,
-            reason: "target_url_as_text",
-            conditions: &[
-                Condition { when: When::Overflow, class: Omitted, reason: "target_url_omitted" },
-                Condition { when: When::Refused, class: Omitted, reason: "target_url_refused" },
-            ],
-        },
-    ),
-    &THREADS_FORM,
-    &[limit(Text, ThreadsWeighted, 500), limit(Text, Links, 5), limit(Alt, CodePoints, 1000)],
-);
+pub static THREADS: Target = Target {
+    spoilers: Spoilers::Post,
+    ..entities(
+        "threads-entities",
+        rules!(
+            Rules {
+                spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"),
+                link: Rule { conditions: &THREADS_LINK, ..LINK },
+                text: THREADED_TEXT,
+                media: SPOILERS_PER_POST,
+                ..DEFAULT
+            },
+            Rule {
+                feature: Feature::TargetUrl,
+                class: TextualFallback,
+                reason: "target_url_as_text",
+                conditions: &[
+                    Condition { when: When::Overflow, class: Omitted, reason: "target_url_omitted" },
+                    Condition { when: When::Refused, class: Omitted, reason: "target_url_refused" },
+                ],
+            },
+        ),
+        &THREADS_FORM,
+        &[limit(Text, ThreadsWeighted, 500), limit(Text, Links, 5), limit(Alt, CodePoints, 1000)],
+    )
+};
 
 static TELEGRAM_FORM: EntityForm = EntityForm {
     offsets: Offsets::Utf16,

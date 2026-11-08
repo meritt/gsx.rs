@@ -66,12 +66,28 @@ const DEFAULT: Rules = Rules {
         feature: Feature::Media,
         class: Approximated,
         reason: "media_attached",
-        conditions: &[
-            Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
-            Condition { when: When::Overflow, class: Omitted, reason: "media_alt_omitted" },
-            Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
-        ],
+        conditions: &[ATTACHED[0], ATTACHED[1], ATTACHED[2], SPOILER_OMITTED],
     },
+};
+
+const ATTACHED: [Condition; 3] = [
+    Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
+    Condition { when: When::Overflow, class: Omitted, reason: "media_alt_omitted" },
+    Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
+];
+
+const SPOILER_OMITTED: Condition = Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" };
+
+const SPOILERS_CARRIED: Rule = Rule { conditions: &ATTACHED, ..DEFAULT.media };
+
+const SPOILERS_PER_POST: Rule = Rule {
+    conditions: &[
+        ATTACHED[0],
+        ATTACHED[1],
+        ATTACHED[2],
+        Condition { when: When::Post, class: Approximated, reason: "media_spoiler_widened" },
+    ],
+    ..DEFAULT.media
 };
 
 macro_rules! rules {

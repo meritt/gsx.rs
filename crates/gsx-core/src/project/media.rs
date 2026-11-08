@@ -5,7 +5,7 @@ use crate::measure::{self, Fact, MediaKind, Placement};
 
 use super::change::{Change, Feature, FieldName, Slot, Truncated};
 use super::facts::{Facts, Format, MediaFact};
-use super::table::{BlocksForm, Target, When};
+use super::table::{BlocksForm, Spoilers, Target, When};
 use super::{Measurement, shortened};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -19,6 +19,7 @@ pub struct Item {
 pub struct Attachment {
     pub reference: String,
     pub alt: Option<String>,
+    pub spoiler: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,15 +111,42 @@ pub(super) fn attach(target: &'static Target, facts: &Facts, children: &[Node]) 
     let resolved = super::resolved(facts);
     let mut attached = Attached { items: vec![], changes: vec![], measurements: vec![] };
     let ranges = references(children);
-    for (index, fact) in facts.items.unwrap_or_default().iter().enumerate() {
+    let items = facts.items.unwrap_or_default();
+    let spoilers = if facts.placement == Some(Placement::Story) { Spoilers::None } else { target.spoilers };
+    let post = spoilers == Spoilers::Post && items.iter().any(|fact| fact.spoiler);
+    for (index, fact) in items.iter().enumerate() {
+        let range = ranges.get(fact.id).map(|&top| children[top].range);
         let alt = authored(fact).and_then(|alt| {
-            let range = ranges.get(fact.id).map(|&top| children[top].range);
             let fitted = fit_alt(target, alt, fact.format, range, &resolved, (None, index));
             attached.measurements.extend(fitted.measurements);
             attached.changes.extend(fitted.change);
             fitted.text
         });
-        attached.items.push(Attachment { reference: format!("media:{}", fact.id), alt });
+        let spoiler = match spoilers {
+            Spoilers::None => false,
+            Spoilers::Items(formats) => fact.spoiler && formats.contains(&fact.format),
+            Spoilers::Post => post,
+        };
+        let when = match (fact.spoiler, spoiler) {
+            (true, false) => Some(When::Spoiler),
+            (false, true) => Some(When::Post),
+            _ => None,
+        };
+        if let Some(when) = when {
+            let (class, reason) = target.rule(Feature::Media).outcome(Some(when));
+            let slot = Some(Slot { block: None, item: index as u32 });
+            let field = FieldName::Text;
+            attached.changes.push(Change {
+                class,
+                feature: Feature::Media,
+                reason,
+                field,
+                range,
+                truncated: None,
+                slot,
+            });
+        }
+        attached.items.push(Attachment { reference: format!("media:{}", fact.id), alt, spoiler });
     }
     attached
 }
