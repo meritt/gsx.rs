@@ -4,7 +4,7 @@ use super::limits::{
 use super::plain::BODY;
 use super::{DEFAULT, LINK, Rules, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
-use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
+use crate::project::Class::{Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
     Condition, Detection, EntityForm, Feature, Form, Normalization, Offsets, Rule, Search, Style, Target, When,
 };
@@ -42,12 +42,7 @@ static BLUESKY_FORM: EntityForm = EntityForm {
 
 pub static BLUESKY: Target = entities(
     "bluesky-entities",
-    rules!(Rules {
-        link: rule(Feature::Link, Omitted, "link_label_invisible"),
-        link_title: rule(Feature::LinkTitle, Approximated, "link_title_unsupported"),
-        text: THREADED_TEXT,
-        ..DEFAULT
-    }),
+    rules!(Rules { link: rule(Feature::Link, Omitted, "link_label_invisible"), text: THREADED_TEXT, ..DEFAULT }),
     &BLUESKY_FORM,
     &[
         limit(Text, Graphemes, 300),
@@ -169,7 +164,6 @@ pub static TELEGRAM: Target = entities(
                 CAPPED
             ],
         },
-        link_title: rule(Feature::LinkTitle, Approximated, "link_title_unsupported"),
         datetime: Rule {
             feature: Feature::Datetime,
             class: Unwrapped,

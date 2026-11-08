@@ -28,7 +28,7 @@ const MEDIA: Rule = Rule {
     reason: "media_attached",
     conditions: &[Condition { when: When::Missing, class: Omitted, reason: "media_missing" }],
 };
-const LINK_TITLE: Rule = rule(Feature::LinkTitle, Approximated, "link_title_unsupported");
+const LINK_TITLE: Rule = rule(Feature::LinkTitle, Omitted, "link_title_omitted");
 const INVISIBLE: Condition = Condition { when: When::LabelInvisible, class: Omitted, reason: "link_label_invisible" };
 const TEXTUAL: [Rule; 6] = [
     rule(Feature::ThematicBreak, TextualFallback, "thematic_break_as_text"),
