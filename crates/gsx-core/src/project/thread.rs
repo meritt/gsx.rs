@@ -18,7 +18,7 @@ pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) ->
         if first { appended(request.target, rendered, suffix) } else { rendered }
     };
     let probe = |span: Span<usize>, first: bool| {
-        let rendered = decorate(part(full, span), first);
+        let rendered = decorate(Rendered::text(full.text[span].to_owned()), first);
         let values = request.values(&limits, &rendered);
         within(&limits, &values)
     };
@@ -33,17 +33,20 @@ pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) ->
     let mut start = 0;
     while start < length {
         let first = spans.is_empty();
-        if probe(start..length, first) {
-            spans.push(start..length);
-            break;
-        }
         let fits = |end: usize| probe(start..end, first);
-        let cut = classes.iter().find_map(|class| {
-            let candidates = &class[class.partition_point(|&(end, _)| end <= start)..];
-            let count = candidates.partition_point(|&(end, _)| fits(end));
-            count.checked_sub(1).map(|last| candidates[last])
-        });
-        let (end, next) = cut.or_else(|| grapheme(&full.text, start, fits))?;
+        let words = &classes[2][classes[2].partition_point(|&(end, _)| end <= start)..];
+        let coarser = |(furthest, _): (usize, usize)| {
+            classes[..2].iter().find_map(|class| {
+                let from = class.partition_point(|&(end, _)| end <= start);
+                let upto = class.partition_point(|&(end, _)| end <= furthest);
+                (upto > from).then(|| class[upto - 1])
+            })
+        };
+        let (end, next) = match last_fitting(words.len(), |index| fits(words[index].0)) {
+            Some(last) if last + 1 == words.len() && fits(length) => (length, length),
+            Some(last) => coarser(words[last]).unwrap_or(words[last]),
+            None => grapheme(&full.text, start, fits)?,
+        };
         spans.push(start..end);
         start = next;
     }
@@ -66,15 +69,43 @@ pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) ->
     Some(Thread { parts, spans })
 }
 
+fn last_fitting(count: usize, fits: impl Fn(usize) -> bool) -> Option<usize> {
+    if count == 0 || !fits(0) {
+        return None;
+    }
+    let (mut low, mut step) = (0, 1);
+    while low + step < count && fits(low + step) {
+        low += step;
+        step *= 2;
+    }
+    let high = (low + step).min(count);
+    let (mut fitting, mut failing) = (low, high);
+    while failing - fitting > 1 {
+        let middle = fitting + (failing - fitting) / 2;
+        if fits(middle) { fitting = middle } else { failing = middle }
+    }
+    Some(fitting)
+}
+
 fn grapheme(text: &str, start: usize, fits: impl Fn(usize) -> bool) -> Option<(usize, usize)> {
     let mut ends = vec![];
     let mut at = start;
-    for cluster in clusters(&text[start..]) {
-        at += cluster.len();
-        ends.push(at);
+    let mut clusters = clusters(&text[start..]);
+    let mut reached = |index: usize, ends: &mut Vec<usize>| {
+        while ends.len() <= index {
+            let Some(cluster) = clusters.next() else { return false };
+            at += cluster.len();
+            ends.push(at);
+        }
+        true
+    };
+    let mut frontier = 0;
+    while reached(frontier, &mut ends) && fits(ends[frontier]) {
+        frontier = frontier * 2 + 1;
     }
-    let count = ends.partition_point(|&end| fits(end));
-    count.checked_sub(1).map(|last| (ends[last], ends[last]))
+    let count = ends.len().min(frontier + 1);
+    let last = last_fitting(count, |index| fits(ends[index]))?;
+    Some((ends[last], ends[last]))
 }
 
 fn part(full: &Rendered, span: Span<usize>) -> Rendered {

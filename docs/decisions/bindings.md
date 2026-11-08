@@ -30,7 +30,7 @@ One wire format for every binding: JSON of the `gsx/1` model, written by `gsx_co
 - Swift: `GSXFFI.xcframework` holds a universal static library for `arm64` and `x86_64`. `Package.swift` pins the release binary by URL and checksum.
 - Python: wheels `py3-none-<platform>` for macOS `universal2` and for `manylinux_2_28` and `musllinux_1_2` on `x86_64` and `aarch64`, each built in its PyPA image. No ABI tag, so any Python 3 loads them. musl links C statically by default, which rules out a cdylib, so the musl build turns `crt-static` off. CI runs the images with `docker run` rather than as job containers, because JavaScript actions cannot run in musl containers on Arm.
 - Release artifacts have fixed entry order, times and modes, and remap the workspace, Cargo home and Rust sources to `/gsx`, `/cargo` and `/rustc/<commit>`, so the checksum pinned in `Package.swift` before tagging is the checksum of the tagged build.
-- `gsx.wasm` has a gzip budget of 345 000 bytes, enforced by `cargo xtask replay`.
+- `gsx.wasm` has a gzip budget of 365 000 bytes, enforced by `cargo xtask replay`. It was 345 000 through v0.1; v0.2.0 adds thread splitting, new facts and limits and the Default_Ignorable table, and builds dependencies with `opt-level = "z"`.
 
 ## Wire format
 

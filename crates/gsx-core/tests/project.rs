@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use gsx_core::document::{Document, parse};
 use gsx_core::project::{
-    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Placement, Projection, Style, Target,
-    Unit, project, project_with,
+    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Placement, Projection, Style,
+    Target, Unit, project, project_with,
 };
 use gsx_core::targets::{TARGETS, target};
 
@@ -36,6 +36,31 @@ fn whitespace_free_runs_project_linearly() {
         let large = parse(&pattern.repeat(4 * times), &[]).unwrap();
         for target in TARGETS {
             let (short, long) = (fastest(&small, target), fastest(&large, target));
+            let floor = short.max(std::time::Duration::from_millis(2));
+            assert!(long < floor * 10, "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
+        }
+    }
+}
+
+#[test]
+fn threads_split_linearly() {
+    let threaded = |document: &Document, target: &'static Target| {
+        let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+        (0..2)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                assert!(project(document, target, &facts).parts.len() > 1, "{} did not split", target.name);
+                started.elapsed()
+            })
+            .min()
+            .unwrap()
+    };
+    for pattern in ["word ", "x", "One sentence here. "] {
+        let times = 20_000 / pattern.len();
+        let small = parse(&pattern.repeat(times), &[]).unwrap();
+        let large = parse(&pattern.repeat(4 * times), &[]).unwrap();
+        for target in TARGETS.iter().filter(|target| target.threads()) {
+            let (short, long) = (threaded(&small, target), threaded(&large, target));
             let floor = short.max(std::time::Duration::from_millis(2));
             assert!(long < floor * 10, "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
         }
