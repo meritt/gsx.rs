@@ -1,15 +1,22 @@
 use super::limits::{CodePoints, Limit, Post, Reel, Story, Text, With, Without, limit};
 use super::plain::BODY;
-use super::{DATE_BOUNDS, DEFAULT, MATH, TELEGRAM_TIME_FORMATS, TEXT, THREADED_TEXT, rule};
+use super::{ALT_REFUSED, DATE_BOUNDS, DEFAULT, MATH, TELEGRAM_TIME_FORMATS, TEXT, THREADED_TEXT, rule};
 use crate::document::Layout;
 use crate::forms::html::RENDERER;
+use crate::measure::Placement;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
     Condition, Feature, Form, Format, HtmlBlocks, HtmlForm, MathTags, Normalization, Rule, Search, Spoilers, Structure,
     Target, When,
 };
 
-const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlForm, limits: &'static [Limit]) -> Target {
+const fn html(
+    name: &'static str,
+    rules: &'static [Rule],
+    form: &'static HtmlForm,
+    limits: &'static [Limit],
+    alt: &'static [Format],
+) -> Target {
     Target {
         name,
         rules,
@@ -20,7 +27,8 @@ const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlFor
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
-        alt: Format::ALL,
+        alt,
+        alt_placements: Placement::ALL,
     }
 }
 
@@ -33,6 +41,7 @@ const MEDIA: Rule = Rule {
     conditions: &[
         Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
         Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" },
+        ALT_REFUSED,
     ],
 };
 const HIDDEN: Spoilers = Spoilers::Items(&[Format::Image, Format::Gif, Format::Video]);
@@ -128,6 +137,7 @@ pub static TELEGRAM: Target = Target {
             limit(Text, CodePoints, 1024).on(&[Post, Reel]).when(With).visible(),
             limit(Text, CodePoints, 2048).on(&[Story]).visible(),
         ],
+        &[],
     )
 };
 
@@ -190,6 +200,7 @@ pub static TELEGRAM_RICH: Target = Target {
         ],
         &RICH_FORM,
         &[limit(Text, CodePoints, 32768).on(&[Post]).visible()],
+        Format::ALL,
     )
 };
 
@@ -239,4 +250,5 @@ pub static MAX: Target = html(
     ],
     &MAX_FORM,
     &[limit(Text, CodePoints, 4000).visible()],
+    &[],
 );

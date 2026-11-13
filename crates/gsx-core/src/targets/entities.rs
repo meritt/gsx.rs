@@ -2,8 +2,12 @@ use super::limits::{
     Alt, CodePoints, Fact, Graphemes, Limit, Links, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
 };
 use super::plain::BODY;
-use super::{DATE_BOUNDS, DEFAULT, LINK, Rules, SPOILERS_PER_POST, TELEGRAM_TIME_FORMATS, THREADED_TEXT, rule};
+use super::{
+    ALT_REFUSED, ATTACHED, DATE_BOUNDS, DEFAULT, LINK, Rules, SPOILER_WIDENED, TELEGRAM_TIME_FORMATS, THREADED_TEXT,
+    rule,
+};
 use crate::forms::plain::RENDERER;
+use crate::measure::Placement;
 use crate::project::Class::{Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
     Condition, Detection, EntityForm, Feature, Form, Format, Normalization, Offsets, Rule, Search, Spoilers, Style,
@@ -15,6 +19,7 @@ const fn entities(
     rules: &'static [Rule],
     form: &'static EntityForm,
     limits: &'static [Limit],
+    alt: &'static [Format],
 ) -> Target {
     Target {
         name,
@@ -26,7 +31,8 @@ const fn entities(
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
-        alt: Format::ALL,
+        alt,
+        alt_placements: Placement::ALL,
     }
 }
 
@@ -54,6 +60,7 @@ pub static BLUESKY: Target = entities(
         limit(Alt, Graphemes, 2000),
         limit(Alt, Utf8Bytes, 20000),
     ],
+    &[Format::Image, Format::Gif, Format::Video],
 );
 
 static THREADS_FORM: EntityForm = EntityForm {
@@ -76,6 +83,9 @@ const THREADS_LINK: [Condition; 3] = [
     Condition { when: When::Overflow, class: Blocked, reason: "link_limit_exceeded" },
 ];
 
+const THREADS_MEDIA: Rule =
+    Rule { conditions: &[ATTACHED[0], ATTACHED[1], ATTACHED[2], SPOILER_WIDENED, ALT_REFUSED], ..DEFAULT.media };
+
 pub static THREADS: Target = Target {
     spoilers: Spoilers::Post,
     ..entities(
@@ -85,7 +95,7 @@ pub static THREADS: Target = Target {
                 spoiler: rule(Feature::Spoiler, Unwrapped, "spoiler_limit"),
                 link: Rule { conditions: &THREADS_LINK, ..LINK },
                 text: THREADED_TEXT,
-                media: SPOILERS_PER_POST,
+                media: THREADS_MEDIA,
                 ..DEFAULT
             },
             Rule {
@@ -100,6 +110,7 @@ pub static THREADS: Target = Target {
         ),
         &THREADS_FORM,
         &[limit(Text, ThreadsWeighted, 500), limit(Text, Links, 5), limit(Alt, CodePoints, 1000)],
+        &[Format::Image, Format::Video],
     )
 };
 
@@ -189,4 +200,5 @@ pub static TELEGRAM: Target = entities(
     }),
     &TELEGRAM_FORM,
     &[resolved(Text, CodePoints, Fact::CaptionLimit, 200).on(&[Story])],
+    &[],
 );

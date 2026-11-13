@@ -57,6 +57,16 @@ pub struct Measurement {
     pub item: Option<usize>,
 }
 
+impl Measurement {
+    fn exceeds(&self) -> bool {
+        self.maximum.is_some_and(|maximum| self.value > maximum)
+    }
+
+    fn links_exceeded(measurements: &[Measurement]) -> bool {
+        measurements.iter().any(|measured| measured.unit == Unit::Links && measured.exceeds())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Projection {
     pub fields: Vec<Field>,
@@ -126,7 +136,8 @@ pub struct Context<'a> {
     alts: Vec<(usize, Option<String>)>,
     urls: Vec<String>,
     url_cap: Option<usize>,
-    origins: bool,
+    uncapped: bool,
+    thread: bool,
 }
 
 impl<'a> Context<'a> {
@@ -147,11 +158,12 @@ impl<'a> Context<'a> {
         if self.urls.iter().any(|url| url == href) {
             return true;
         }
-        let admitted = self.urls.len() < cap;
-        if admitted {
+        if self.urls.len() < cap {
             self.urls.push(href.to_owned());
+            return true;
         }
-        admitted
+        self.uncapped = self.thread;
+        self.thread
     }
 
     pub fn published_alt(&mut self, item: usize, alt: Option<String>) {
@@ -286,6 +298,12 @@ impl<'a> Context<'a> {
         &mut self.writer
     }
 
+    pub fn group(&mut self, mark: usize) {
+        if self.thread {
+            self.writer.group(mark);
+        }
+    }
+
     pub fn done(&self) -> bool {
         self.done
     }
@@ -309,7 +327,7 @@ impl<'a> Context<'a> {
                 let end = self.writer.mark();
                 self.writer.eligible(start..end);
             }
-            if self.origins {
+            if self.thread {
                 self.writer.origin(start, node.range);
             }
         }
@@ -325,7 +343,7 @@ impl<'a> Context<'a> {
         } else {
             let start = self.writer.mark();
             self.writer.push(&map(value, Piece::Whole));
-            if self.origins {
+            if self.thread {
                 self.writer.origin(start, node.range);
             }
         }
@@ -374,6 +392,8 @@ struct Rendered {
     alts: Vec<(usize, Option<String>)>,
     prefixes: Vec<Span<usize>>,
     origins: Vec<(Span<usize>, Range)>,
+    groups: Vec<Span<usize>>,
+    uncapped: bool,
 }
 
 impl Rendered {
@@ -387,6 +407,8 @@ impl Rendered {
             alts: vec![],
             prefixes: vec![],
             origins: vec![],
+            groups: vec![],
+            uncapped: false,
         }
     }
 
@@ -412,7 +434,7 @@ fn render(
     field: FieldName,
     spent: Spent,
     cut: Option<&Cut>,
-    origins: bool,
+    thread: bool,
     draw: impl FnOnce(&mut Context),
 ) -> Rendered {
     let mut context = Context {
@@ -434,7 +456,8 @@ fn render(
             let reserved = facts.target_url.is_some() && target.handles(Feature::TargetUrl);
             cap - usize::from(reserved)
         }),
-        origins,
+        uncapped: false,
+        thread,
     };
     draw(&mut context);
     let mut written = std::mem::replace(&mut context.writer, Writer::new(Escape::None)).finish();
@@ -457,17 +480,30 @@ fn render(
     };
     let mut anchors = context.anchors;
     let mut origins = written.origins;
+    let mut groups = written.groups;
     let (text, links, prefixes) = match target.normalization {
         Normalization::None => (written.text, written.links, written.prefixes),
         Normalization::Nfc => {
-            nfc_offsets(&written.text, anchors.iter_mut().map(|anchor| &mut anchor.at));
-            nfc_offsets(&written.text, origins.iter_mut().flat_map(|(span, _)| [&mut span.start, &mut span.end]));
-            let (text, links) = normalized(&written.text, &written.links);
+            let (text, links) = (&written.text, &written.links);
+            nfc_offsets(text, links, &mut anchors.iter_mut().map(|anchor| &mut anchor.at));
+            nfc_offsets(text, links, &mut origins.iter_mut().flat_map(|(span, _)| [&mut span.start, &mut span.end]));
+            nfc_offsets(text, links, &mut groups.iter_mut().flat_map(|span| [&mut span.start, &mut span.end]));
+            let (text, links) = normalized(text, links);
             (text, links, vec![])
         }
     };
-    let mut rendered =
-        Rendered { text, links, styled, changes: context.changes, anchors, alts: context.alts, prefixes, origins };
+    let mut rendered = Rendered {
+        text,
+        links,
+        styled,
+        changes: context.changes,
+        anchors,
+        alts: context.alts,
+        prefixes,
+        origins,
+        groups,
+        uncapped: context.uncapped,
+    };
     cap_markers(target, &resolved(facts), field, spent, &mut rendered);
     rendered
 }
@@ -490,7 +526,8 @@ fn cap_markers(
         let Some(dropped) = markers.get(kept..).filter(|dropped| !dropped.is_empty()) else {
             continue;
         };
-        rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links, &mut rendered.origins);
+        rendered.text =
+            without_sigils(&rendered.text, dropped, &mut rendered.links, &mut rendered.groups, &mut rendered.origins);
         rendered.prefixes.clear();
         let (class, reason) = target.rule(feature).outcome(None);
         let value = u32::try_from(spent + markers.len()).unwrap_or(u32::MAX);
@@ -503,6 +540,7 @@ fn without_sigils(
     text: &str,
     sigils: &[usize],
     links: &mut [Span<usize>],
+    groups: &mut [Span<usize>],
     origins: &mut [(Span<usize>, Range)],
 ) -> String {
     let mut out = String::with_capacity(text.len());
@@ -513,19 +551,63 @@ fn without_sigils(
     }
     out.push_str(&text[cursor..]);
     let shift = |offset: usize| offset - sigils.partition_point(|&at| at < offset);
-    for span in links.iter_mut().chain(origins.iter_mut().map(|(span, _)| span)) {
+    for span in links.iter_mut().chain(groups.iter_mut()).chain(origins.iter_mut().map(|(span, _)| span)) {
         *span = shift(span.start)..shift(span.end);
     }
     out
 }
 
-fn nfc_offsets<'o>(text: &str, offsets: impl Iterator<Item = &'o mut usize>) {
+fn nfc_offsets(text: &str, links: &[Span<usize>], offsets: &mut dyn Iterator<Item = &mut usize>) {
+    let mut edges = links.iter().flat_map(|link| [link.start, link.end]).peekable();
     let (mut from, mut to) = (0, 0);
+    let mut held: Option<(usize, usize)> = None;
     for offset in offsets {
-        to += nfc::nfc(&text[from..*offset]).len();
-        from = *offset;
-        *offset = to;
+        let at = *offset;
+        while let Some(edge) = edges.next_if(|&edge| edge <= at) {
+            to += nfc::nfc(&text[from..edge]).len();
+            from = edge;
+            held = None;
+        }
+        let next = text[at..].chars().next();
+        if let Some((last, mapped)) = held
+            && next.is_some_and(|next| !nfc::opens(next))
+            && !text[last..at].chars().any(nfc::opens)
+        {
+            *offset = mapped;
+            held = Some((at, mapped));
+            continue;
+        }
+        let piece = nfc::nfc(&text[from..at]);
+        match next {
+            Some(next) if at > from && !nfc::boundary(piece.chars().next_back(), next) => {
+                let cluster = piece.char_indices().rev().find(|&(_, char)| nfc::starter(char));
+                *offset = to + cluster.map_or(0, |(index, _)| index);
+                held = Some((at, *offset));
+                if let Some((start, length)) = nfc_boundary_before(text, from, at) {
+                    from = start;
+                    to += length;
+                }
+            }
+            _ => {
+                to += piece.len();
+                from = at;
+                held = None;
+                *offset = to;
+            }
+        }
     }
+}
+
+fn nfc_boundary_before(text: &str, from: usize, at: usize) -> Option<(usize, usize)> {
+    text[from..at]
+        .char_indices()
+        .rev()
+        .take_while(|&(index, _)| index > 0)
+        .filter(|&(_, char)| nfc::opens(char))
+        .find_map(|(index, char)| {
+            let prefix = nfc::nfc(&text[from..from + index]);
+            nfc::boundary(prefix.chars().next_back(), char).then(|| (from + index, prefix.len()))
+        })
 }
 
 fn normalized(text: &str, links: &[Span<usize>]) -> (String, Vec<Span<usize>>) {
@@ -566,11 +648,12 @@ struct Split {
 struct Bound {
     unit: Unit,
     maximum: Option<usize>,
+    binding: bool,
 }
 
 impl Bound {
     fn cap(self) -> Option<usize> {
-        self.maximum.filter(|_| !self.unit.counts_markers())
+        self.maximum.filter(|_| self.binding)
     }
 
     fn binds(self) -> bool {
@@ -658,9 +741,13 @@ impl Request<'_, '_> {
         let mut limits: Vec<Bound> = self
             .target
             .applicable(field, measure::Context { placement, media: self.facts.media })
-            .map(|limit| Bound { unit: limit.unit, maximum: limit.maximum(&facts).map(|maximum| maximum as usize) })
+            .map(|limit| Bound {
+                unit: limit.unit,
+                maximum: limit.maximum(&facts).map(|maximum| maximum as usize),
+                binding: !limit.unit.counts_markers(),
+            })
             .collect();
-        if let Some(first) = limits.iter_mut().find(|limit| !limit.unit.counts_markers()) {
+        if let Some(first) = limits.iter_mut().find(|limit| limit.binding) {
             first.maximum = self.options.maximum.or(first.maximum);
         }
         limits
@@ -831,10 +918,7 @@ impl Request<'_, '_> {
         draw: &dyn Fn(Option<&Cut>) -> Rendered,
     ) -> Option<(Fitted, Option<Change>)> {
         let mut fitted = self.fit(outline, true, draw);
-        let over = |measurement: &Measurement| {
-            !measurement.unit.counts_markers() && measurement.maximum.is_some_and(|maximum| measurement.value > maximum)
-        };
-        if fitted.measurements.iter().any(over) {
+        if fitted.measurements.iter().any(|measured| !measured.unit.counts_markers() && measured.exceeds()) {
             return None;
         }
         let changes = &mut fitted.rendered.changes;
@@ -1020,6 +1104,11 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                         changes.reserve_exact(first.rendered.changes.len() + 1);
                         changes.append(&mut first.rendered.changes);
                         changes.push(request.change(Feature::Text, None, Some(When::Thread)));
+                        for (part, range) in split.parts.iter().zip(&split.ranges[1..]) {
+                            if Measurement::links_exceeded(&part.measurements) {
+                                changes.push(request.change(Feature::Link, Some(*range), Some(When::Overflow)));
+                            }
+                        }
                         first.rendered.changes = changes;
                         first.rendered.alts = full.alts;
                         threaded = Some((spec.name, split));
@@ -1028,6 +1117,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     (_, full) => {
                         let draw =
                             |cut: Option<&Cut>| appended(target, draw_body(spec.name, spent, cut, false), suffix);
+                        let full = full.filter(|full| !full.uncapped);
                         let whole = full.map_or_else(|| draw(None), |full| appended(target, full, suffix));
                         request.fit_from(whole, &|| Outline::of_nodes(document, body, math), !removed, &draw)
                     }
@@ -1071,8 +1161,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         if spec.required && measure::blank(&rendered.text) {
             required.push(request.change(Feature::Title, None, Some(When::Empty)));
         }
-        let over = |measured: &Measurement| measured.maximum.is_some_and(|maximum| measured.value > maximum);
-        if measured.iter().any(|measured| measured.unit == Unit::Links && over(measured)) {
+        if Measurement::links_exceeded(&measured) {
             rendered.changes.push(request.change(Feature::Link, None, Some(When::Overflow)));
         }
         for ((unit, _), spent) in MARKERS.into_iter().zip(&mut spent) {

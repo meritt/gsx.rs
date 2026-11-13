@@ -381,6 +381,19 @@ fn instagram_publishes_alt_for_images_only() {
     );
     assert_eq!(projection.measurements.iter().filter(|measured| measured.field == FieldName::Alt).count(), 1);
     assert_eq!(target("instagram-plain").unwrap().media().alt, [Format::Image]);
+    for placement in [Placement::Reel, Placement::Story] {
+        let placed = Facts { placement: Some(placement), items: Some(&items[..1]), media_count: 1, ..facts };
+        let projection = run("instagram-plain", "Look", &placed);
+        assert_eq!(projection.items[0].alt, None);
+        let alt: Vec<_> = projection
+            .changes
+            .iter()
+            .filter(|change| change.field == FieldName::Alt)
+            .map(|change| (change.class, change.reason, change.truncated))
+            .collect();
+        assert_eq!(alt, [(Class::Omitted, "media_alt_omitted", None)]);
+        assert!(projection.measurements.iter().all(|measured| measured.field != FieldName::Alt));
+    }
 }
 
 #[test]
@@ -611,6 +624,51 @@ fn thread_parts_cut_a_long_word_by_graphemes() {
     let ranges: Vec<_> = projection.parts.iter().map(|part| (part.range.start, part.range.end)).collect();
     assert_eq!(ranges, [(0, 280), (280, 560), (560, 700)]);
     assert_eq!(boundaries(&projection), [Some(Boundary::Grapheme), Some(Boundary::Grapheme), None]);
+}
+
+#[test]
+fn thread_parts_cut_where_normalization_composes_across_a_label() {
+    let tail = format!("{} z", "y".repeat(270));
+    let projection = thread("x-plain", &format!("e[\u{301}x](https://a.example) {tail}"));
+    let texts: Vec<_> = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+    assert_eq!(texts, ["\u{e9}x (https://a.example/)", tail.as_str()]);
+    let long = "x".repeat(400);
+    let label = format!("e[\u{301}{long}](https://a.example) tail");
+    assert_eq!(thread("x-plain", &label).parts.len(), thread("x-plain", &label.replace("e[\u{301}", "[")).parts.len());
+    assert!(thread("x-plain", &format!("e*\u{301}* a*\u{301}* {long}")).parts.len() > 1);
+}
+
+#[test]
+fn thread_parts_split_link_labels_that_exceed_a_part() {
+    for name in ["x-plain", "mastodon-plain", "threads-entities"] {
+        for label in ["word ".repeat(120), "y".repeat(600)] {
+            let projection = thread(name, &format!("[{}](https://a.example) tail", label.trim_end()));
+            let joined: String = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+            let word = &label[..1];
+            assert_eq!(joined.matches(word).count(), label.matches(word).count(), "{name} {joined:?}");
+            assert!(joined.contains("https://a.example") && joined.ends_with("tail"), "{name} {joined:?}");
+        }
+    }
+    let markdown = format!("[{}word](https://a.example.com) tail", "word ".repeat(93));
+    let target_url = Some("https://www.threads.com/@gsx/post/C1");
+    let projection =
+        run("threads-entities", &markdown, &Facts { overflow: Overflow::Thread, target_url, ..Facts::default() });
+    let joined: String = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+    assert!(projection.changes.iter().all(|change| change.reason != "text_truncated"), "{joined:?}");
+    assert!(joined.matches("word").count() == 94 && joined.contains("(https://a.example.com/)"), "{joined:?}");
+}
+
+#[test]
+fn threads_map_singleton_decompositions_linearly() {
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let threaded = |times: usize| {
+        let document = parse(&"\u{2126}*\u{2126}*".repeat(times), &[]).unwrap();
+        best(|| {
+            project(&document, target("x-plain").unwrap(), &facts);
+        })
+    };
+    let (short, long) = (threaded(60), threaded(240));
+    assert!(scales(short, long, 10), "{short:?} for 60, {long:?} for 4x");
 }
 
 #[test]

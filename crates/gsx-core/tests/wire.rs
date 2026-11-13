@@ -214,7 +214,7 @@ fn lists_target_capabilities_from_the_rule_table() {
             r#"{"when":"overflow","class":"blocked","reason":"text_too_long"},"#,
             r#"{"when":"blank_lines","class":"approximated","reason":"blank_lines_collapsed"},"#,
             r#"{"when":"thread","class":"approximated","reason":"text_threaded"}]}],"#,
-            r#""media":{"formats":["image","gif","video","audio"],"alt":["image","gif","video","audio"],"#,
+            r#""media":{"formats":["image","gif","video","audio"],"alt":[],"#,
             r#""spoiler":{"mode":"carried","formats":["image","gif","video"]},"inline":false,"groups":[]}},"#,
             r#"{"name":"telegram-html-rich""#,
         ),
@@ -241,6 +241,9 @@ fn lists_target_capabilities_from_the_rule_table() {
         ),
         r#""facts":["mediaCount","placement","captionLimit","entitiesAllowed","items"]"#,
         r#""facts":["mediaCount","title","items"],"fields":[{"name":"title","required":true,"media":"any"}"#,
+        r#"{"name":"instagram-plain","form":"plain/1","#,
+        r#""facts":["mediaCount","placement","hashtagLimit","items"]"#,
+        r#""media":{"formats":["image","gif","video","audio"],"alt":["image"],"#,
     ];
     for expected in expected {
         assert!(json.contains(expected), "{expected}\n{json}");

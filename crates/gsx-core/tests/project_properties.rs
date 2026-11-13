@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use gsx_core::document::{Document, Kind, Media, Range, parse};
 use gsx_core::project::{
-    Class, Facts, Form, Format, MediaFact, MediaKind, Offsets, Options, Overflow, Placement, Projection, Target,
+    Class, Facts, Form, Format, MediaFact, MediaKind, Offsets, Options, Overflow, Placement, Projection, Target, Unit,
     project_with,
 };
 use gsx_core::targets::TARGETS;
@@ -295,9 +295,17 @@ fn check(
     for (index, part) in projection.parts.iter().enumerate() {
         for measurement in &part.measurements {
             let Some(maximum) = measurement.maximum else { continue };
-            let blocked = projection.changes.iter().any(|change| change.class == Class::Blocked);
+            let links = measurement.unit == Unit::Links;
+            let blocked = projection.changes.iter().any(|change| {
+                change.class == Class::Blocked
+                    && (!links
+                        || index == 0
+                        || change
+                            .range
+                            .is_some_and(|range| part.range.start <= range.start && range.end <= part.range.end))
+            });
             prop_assert!(
-                measurement.value <= maximum || measurement.unit.counts_markers() || blocked,
+                measurement.value <= maximum || measurement.unit.counts_markers() && !links || blocked,
                 "{name} part measures {} > {maximum} {:?}",
                 measurement.value,
                 measurement.unit

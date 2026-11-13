@@ -71,14 +71,16 @@ fn detected(written: &Written, out: &mut Vec<Styled>) {
     }
 }
 
-fn trim(text: &mut String, styled: &mut Vec<Styled>, origins: &mut Vec<(Span<usize>, Range)>) {
+fn trim(written: &mut Written, styled: &mut Vec<Styled>) {
+    let text = &mut written.text;
     let lead = text.len() - text.trim_start_matches(blank).len();
     let end = text.trim_end_matches(blank).len().max(lead);
     text.truncate(end);
     text.replace_range(..lead, "");
     let kept = lead..end;
     styled.retain_mut(|entity| super::layout::within(&mut entity.span, &kept));
-    origins.retain_mut(|(span, _)| super::layout::within(span, &kept));
+    written.origins.retain_mut(|(span, _)| super::layout::within(span, &kept));
+    written.groups.retain_mut(|span| super::layout::within(span, &kept));
 }
 
 fn code(style: Style) -> bool {
@@ -123,7 +125,7 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
         Detection::Bluesky => detected(written, &mut styled),
     }
     if form.trim {
-        trim(&mut written.text, &mut styled, &mut written.origins);
+        trim(written, &mut styled);
         tighten(&written.text, &mut styled);
     }
     crate::order::sort_by_key(&mut styled, |entity| {

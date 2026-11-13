@@ -207,6 +207,7 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                 context.writer().push(" (");
                 context.writer().link(&href);
                 context.writer().push(")");
+                context.group(mark);
             }
             Kind::Datetime { unix, format, .. } => {
                 let Some(style) = context.native(Feature::Datetime) else {

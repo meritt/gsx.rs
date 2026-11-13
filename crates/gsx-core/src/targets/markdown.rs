@@ -2,6 +2,7 @@ use super::limits::{Alt, CodePoints, Image, Limit, Only, Text, limit};
 use super::plain::BODY;
 use super::{DEFAULT, Rules, SPOILERS_CARRIED, THREADED_TEXT, rule};
 use crate::forms::markdown::RENDERER;
+use crate::measure::Placement;
 use crate::project::Class::{Approximated, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
     Condition, Feature, Form, Format, LineStart, MarkdownForm, Normalization, Rule, Search, Spoilers, Target, When,
@@ -12,6 +13,7 @@ const fn markdown(
     rules: &'static [Rule],
     form: &'static MarkdownForm,
     limits: &'static [Limit],
+    alt: &'static [Format],
 ) -> Target {
     Target {
         name,
@@ -23,7 +25,8 @@ const fn markdown(
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
-        alt: Format::ALL,
+        alt,
+        alt_placements: Placement::ALL,
     }
 }
 
@@ -74,6 +77,7 @@ pub static DISCORD: Target = Target {
         rules!(Rules { media: SPOILERS_CARRIED, text: THREADED_TEXT, ..DISCORD_RULES }),
         &DISCORD_FORM,
         &[limit(Text, CodePoints, 2000), limit(Alt, CodePoints, 1024)],
+        Format::ALL,
     )
 };
 
@@ -119,4 +123,5 @@ pub static SLACK: Target = markdown(
     rules!(Rules { text: THREADED_TEXT, ..SLACK_RULES }),
     &SLACK_FORM,
     &[limit(Text, CodePoints, 12000), limit(Alt, CodePoints, 1000).when(Only(Image))],
+    &[Format::Image, Format::Gif],
 );

@@ -418,6 +418,7 @@ pub struct BlocksForm {
     pub spoiler: bool,
     pub separator: bool,
     pub unplaced: Unplaced,
+    pub unplaced_alt: Option<measure::Limit>,
 }
 
 impl BlocksForm {
@@ -601,6 +602,9 @@ impl Form {
                     form.spoiler,
                     form.separator,
                 );
+                if let Some(limit) = &form.unplaced_alt {
+                    let _ = writeln!(out, "  unplaced {}", describe_limit(limit));
+                }
             }
         }
     }
@@ -679,6 +683,23 @@ fn visible_parts(text: &str, form: &HtmlForm, window: usize, emit: &mut dyn FnMu
     true
 }
 
+fn describe_limit(limit: &measure::Limit) -> String {
+    let maximum = match limit.maximum {
+        measure::Maximum::Fixed(value) => value.to_string(),
+        measure::Maximum::Resolved(fact, value) => format!("{value} fact={}", fact.name()),
+        measure::Maximum::Given(fact) => format!("none fact={}", fact.name()),
+        measure::Maximum::Unlimited => "none".to_owned(),
+    };
+    format!(
+        "{} {} maximum={maximum} placements={} media={} rendering={}",
+        limit.field.name(),
+        limit.unit.name(),
+        join(limit.placements.iter().map(|placement| placement.name())),
+        limit.media.name(),
+        limit.rendering.name(),
+    )
+}
+
 #[derive(Clone, Copy)]
 pub struct Renderer {
     pub blocks: fn(&mut Context, &[Node]),
@@ -709,6 +730,7 @@ pub struct Target {
     pub limits: &'static [measure::Limit],
     pub spoilers: Spoilers,
     pub alt: &'static [Format],
+    pub alt_placements: &'static [Placement],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -827,6 +849,7 @@ impl Target {
                 "placement",
                 self.threads()
                     || self.spoilers != Spoilers::None
+                    || self.alt_placements != Placement::ALL
                     || bodies().any(|limit| limit.placements != Placement::ALL),
             ),
             ("title", self.fields.iter().any(|field| field.source == Source::Title { fact: true })),
@@ -889,6 +912,10 @@ impl Target {
         }
     }
 
+    pub fn carries_alt(&self, format: Format, placement: Option<Placement>) -> bool {
+        self.alt.contains(&format) && placement.is_none_or(|placement| self.alt_placements.contains(&placement))
+    }
+
     pub fn class(&self, feature: Feature) -> Class {
         self.rule(feature).class
     }
@@ -924,6 +951,10 @@ impl Target {
         if self.alt != self.form.blocks().map_or(Format::ALL, |form| form.formats) {
             let _ = writeln!(out, "alt {}", join(self.alt.iter().map(|format| format.name())));
         }
+        if self.alt_placements != Placement::ALL {
+            let _ =
+                writeln!(out, "alt placements {}", join(self.alt_placements.iter().map(|placement| placement.name())));
+        }
         for rule in self.rules {
             let _ = writeln!(out, "feature {} {} {}", rule.feature.name(), rule.class.name(), rule.reason);
             for condition in rule.conditions {
@@ -950,21 +981,7 @@ impl Target {
             );
         }
         for limit in self.limits {
-            let maximum = match limit.maximum {
-                measure::Maximum::Fixed(value) => value.to_string(),
-                measure::Maximum::Resolved(fact, value) => format!("{value} fact={}", fact.name()),
-                measure::Maximum::Given(fact) => format!("none fact={}", fact.name()),
-                measure::Maximum::Unlimited => "none".to_owned(),
-            };
-            let _ = writeln!(
-                out,
-                "limit {} {} maximum={maximum} placements={} media={} rendering={}",
-                limit.field.name(),
-                limit.unit.name(),
-                join(limit.placements.iter().map(|placement| placement.name())),
-                limit.media.name(),
-                limit.rendering.name(),
-            );
+            let _ = writeln!(out, "limit {}", describe_limit(limit));
         }
         out
     }

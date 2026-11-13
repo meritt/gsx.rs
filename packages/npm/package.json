@@ -1,6 +1,6 @@
 {
   "name": "@meritt/gsx-wasm",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "The gsx/1 markup language in WebAssembly: parsing, diagnostics and projections for social platforms",
   "keywords": [
     "gsx",

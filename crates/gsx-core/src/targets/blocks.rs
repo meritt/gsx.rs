@@ -1,9 +1,10 @@
 use super::limits::{Alt, CodePoints, Limit, Text, limit};
 use super::markdown::{DISCORD_FORM, DISCORD_RULES, SLACK_FORM, SLACK_RULES};
 use super::plain::BODY;
-use super::{Rules, rule};
+use super::{ALT_REFUSED, Rules, rule};
 use crate::document::Layout;
 use crate::forms::blocks::RENDERER;
+use crate::measure::Placement;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback};
 use crate::project::{
     BlocksForm, Ceiling, Condition, Feature, Form, Format, Normalization, Rule, Search, Spoilers, Target, Unplaced,
@@ -27,6 +28,7 @@ const fn blocks(
         limits,
         spoilers: Spoilers::None,
         alt: form.formats,
+        alt_placements: Placement::ALL,
     }
 }
 
@@ -39,7 +41,7 @@ const fn media(unplaced: &'static str) -> Rule {
             Condition { when: When::Group, class: Approximated, reason: "media_group_split" },
             Condition { when: When::Cut, class: Approximated, reason: "media_after_cut" },
             Condition { when: When::Truncated, class: Approximated, reason: "media_alt_truncated" },
-            Condition { when: When::Refused, class: Omitted, reason: "media_alt_omitted" },
+            ALT_REFUSED,
             Condition { when: When::Spoiler, class: Omitted, reason: "media_spoiler_omitted" },
             Condition { when: When::Count, class: Omitted, reason: "media_count_exceeded" },
             Condition { when: When::Missing, class: Omitted, reason: "media_missing" },
@@ -57,6 +59,7 @@ static DISCORD_FORM_BLOCKS: BlocksForm = BlocksForm {
     spoiler: true,
     separator: true,
     unplaced: Unplaced::File,
+    unplaced_alt: None,
 };
 
 pub static DISCORD: Target = blocks(
@@ -75,6 +78,7 @@ static SLACK_FORM_BLOCKS: BlocksForm = BlocksForm {
     spoiler: false,
     separator: false,
     unplaced: Unplaced::Attach,
+    unplaced_alt: Some(limit(Alt, CodePoints, 1000)),
 };
 
 pub static SLACK: Target = blocks(

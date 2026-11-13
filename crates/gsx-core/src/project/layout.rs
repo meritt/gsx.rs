@@ -79,6 +79,7 @@ pub struct Written {
     pub eligible: Vec<Span<usize>>,
     pub suffix: Option<Span<usize>>,
     pub origins: Vec<(Span<usize>, Range)>,
+    pub groups: Vec<Span<usize>>,
 }
 
 impl Written {
@@ -96,6 +97,7 @@ impl Written {
         self.eligible.retain_mut(|span| clamp(span));
         self.suffix = self.suffix.take().and_then(|mut span| clamp(&mut span).then_some(span));
         self.origins.retain_mut(|(span, _)| clamp(span));
+        self.groups.retain_mut(|span| clamp(span));
         kept
     }
 }
@@ -229,6 +231,7 @@ impl Writer {
         self.out.eligible.clear();
         self.out.suffix = None;
         self.out.origins.clear();
+        self.out.groups.clear();
     }
 
     pub fn newlines(&mut self, count: u32) {
@@ -282,6 +285,12 @@ impl Writer {
             }
             start = end + 1;
         }
+    }
+
+    pub fn group(&mut self, mark: usize) {
+        let inner = self.out.groups.partition_point(|span| span.start < mark);
+        self.out.groups.truncate(inner);
+        self.out.groups.push(mark..self.out.text.len());
     }
 
     pub fn since(&self, mark: usize) -> &str {

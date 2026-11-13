@@ -1,6 +1,6 @@
 [project]
 name = "gsx"
-version = "0.3.0"
+version = "0.3.1"
 description = "The gsx/1 markup language: parsing, diagnostics and projections for social platforms"
 license = "MIT"
 authors = [{ name = "Alexey Simonenko", email = "alexey@simonenko.dev" }]

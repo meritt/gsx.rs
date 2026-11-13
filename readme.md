@@ -147,12 +147,12 @@ Release stream &lt;tg-time unix=&quot;1794409200&quot;&gt;11 November, 18:00 TRT
 <p><code>[<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:banner&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;gsx 0.2: one source, native projections&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;},<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:preview&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;The same post adapted for Telegram and Discord&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;}<br>
 ]</code></p>
@@ -275,12 +275,12 @@ Keep the message. Adapt the…</code></p>
 <p><code>[<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:banner&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;gsx 0.2: one source, native projections&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;},<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:preview&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;The same post adapted for Telegram and Discord&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;}<br>
 ]</code></p>
@@ -579,12 +579,12 @@ Release stream 11 November, 18:00 TRT. Thanks @meritt! #release #rust</code></p>
 <p><code>[<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:banner&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;gsx 0.2: one source, native projections&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;},<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:preview&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;The same post adapted for Telegram and Discord&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;}<br>
 ]</code></p>
@@ -1121,12 +1121,12 @@ Release stream 11 November, 18:00 TRT. Thanks @meritt! #release #rust</code></p>
 <p><code>[<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:banner&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;gsx 0.2: one source, native projections&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;},<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:preview&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;The same post adapted for Telegram and Discord&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;}<br>
 ]</code></p>
@@ -1180,12 +1180,12 @@ Release stream 11 November, 18:00 TRT. Thanks @meritt! #release #rust</code></p>
 <p><code>[<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:banner&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;gsx 0.2: one source, native projections&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;},<br>
 &nbsp;&nbsp;{<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;reference&quot;: &quot;media:preview&quot;,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: &quot;The same post adapted for Telegram and Discord&quot;,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&quot;alt&quot;: null,<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&quot;spoiler&quot;: false<br>
 &nbsp;&nbsp;}<br>
 ]</code></p>

@@ -51,6 +51,7 @@ Every target writes one blank line between paragraphs and collapses two or more 
 | Rich HTML: `<br>` outside a block becomes a paragraph of line breaks; adjacent blocks receive the block gap; `<br>` inside `<p>` is a line break | Owner's published rich message of 2026-11-11 (`rich_message.blocks` of the response); [Bot API rich messages](https://core.telegram.org/bots/api#rich-html-style) | Observed in that response; the page is silent and shows `<br>` only inside block quotations |
 | Rich HTML block types, `<hr/>` as a divider block, the 500-block count including nested blocks and list items | [Bot API rich messages](https://core.telegram.org/bots/api#richblock), [rich message limits](https://core.telegram.org/bots/api#rich-message-limits) | Confirmed 2026-11-11 |
 | Rich text limit over "the rich message text"; whether block boundaries count | [Rich message limits](https://core.telegram.org/bots/api#rich-message-limits) | Assumption: the page is silent on boundaries, so measurement counts one line feed per boundary, an upper bound |
+| Media alt: none on `telegram-html` and `telegram-entities`; images, GIFs, videos and audio on `telegram-html-rich` | [sendPhoto](https://core.telegram.org/bots/api#sendphoto), [sendVideo](https://core.telegram.org/bots/api#sendvideo), [sendAnimation](https://core.telegram.org/bots/api#sendanimation), [sendAudio](https://core.telegram.org/bots/api#sendaudio), [sendMediaGroup](https://core.telegram.org/bots/api#sendmediagroup), [stories.sendStory](https://core.telegram.org/method/stories.sendStory), [Bot API rich messages](https://core.telegram.org/bots/api#rich-html-style) | Confirmed 2026-11-13: the Bot API media methods and MTProto `stories.sendStory` have no alt parameter, so `telegram-html` and `telegram-entities` omit alt on every format; rich messages carry alt as a `<figcaption>` |
 
 ## MAX
 
@@ -60,6 +61,7 @@ The [API changelog](https://dev.max.ru/docs-api/changelog-api/) dates the docume
 | --- | --- | --- |
 | Message text limit, `format` values | [POST /messages](https://dev.max.ru/docs-api/methods/POST/messages) | Confirmed |
 | HTML tags | [Text formatting](https://dev.max.ru/docs-api/use-cases/sending-messages/text-formatting/) | Confirmed; the tag set has no spoiler |
+| Media alt: none | [POST /messages](https://dev.max.ru/docs-api/methods/POST/messages), [POST /uploads](https://dev.max.ru/docs-api/methods/POST/uploads) | Confirmed 2026-11-13: neither method has an alt parameter, so `max-html` omits alt on every format |
 
 ## Discord
 
@@ -86,7 +88,8 @@ The [API changelog](https://dev.max.ru/docs-api/changelog-api/) dates the docume
 | Date syntax, escaping | [Formatting message text](https://docs.slack.dev/messaging/formatting-message-text) | Confirmed |
 | Date tokens `{time}`, `{time_secs}`, `{date_num}`, `{date}`, `{date_short}`, `{date_long}`, `{ago}` combined with plain text in one token string | [Formatting message text](https://docs.slack.dev/messaging/formatting-message-text) | Confirmed 2026-11-11; the page shows `{date} at {time}`, and `{date_long} {time}` follows its plain-text rule without an example |
 | File comment on `slack-plain` | [files.completeUploadExternal](https://docs.slack.dev/reference/methods/files.completeUploadExternal) | Confirmed: `initial_comment` states no maximum |
-| Uploaded image alt of 1000 on `slack-markdown` and `slack-plain` | [files.getUploadURLExternal](https://docs.slack.dev/reference/methods/files.getUploadURLExternal), [Add alt text to images](https://slack.com/help/articles/4403914924435-Add-alt-text-to-images) | Assumption: `alt_txt` and the help article state no maximum |
+| Uploaded image alt of 1000 on `slack-markdown`, `slack-plain` and files attached on `slack-blocks` | [files.getUploadURLExternal](https://docs.slack.dev/reference/methods/files.getUploadURLExternal) | Confirmed 2026-11-13: `alt_txt` describes an image for screen readers, and the error `alt_txt_too_large` states the limit of 1000 |
+| Uploaded alt formats on `slack-markdown`, `slack-plain` and files attached on `slack-blocks`: images and GIFs | [files.getUploadURLExternal](https://docs.slack.dev/reference/methods/files.getUploadURLExternal) | Confirmed 2026-11-13 for images. Assumption: a GIF takes alt as an image; videos and audio take none |
 | Slideshow group of ten images on `slack-blocks` | None | Assumption: the Block Kit and file upload pages state no group bound |
 
 ## X
@@ -95,7 +98,8 @@ The [API changelog](https://dev.max.ru/docs-api/changelog-api/) dates the docume
 | --- | --- | --- |
 | Weighted length, URL weight, emoji weight, NFC | [Counting characters](https://docs.x.com/fundamentals/counting-characters) | Confirmed |
 | Code point weight ranges | [twitter-text configuration v3](https://raw.githubusercontent.com/twitter/twitter-text/master/config/v3.json) | Confirmed |
-| Alt text | [Create media metadata](https://docs.x.com/x-api/media/create-media-metadata) | Confirmed |
+| Sensitive media warning carried as the item spoiler on images, GIFs and videos | [Create media metadata](https://docs.x.com/x-api/media/create-media-metadata), XDK [`latest-openapi.json`](https://github.com/xdevplatform/xdk/blob/main/latest-openapi.json) | Confirmed 2026-11-13: the schema `SensitiveMediaWarning` under `MetadataCreateRequest.metadata.sensitive_media_warning` takes the booleans `adult_content`, `graphic_violence` and `other`; the projection reports the spoiler state and leaves the choice of category to the caller. Assumption: the warning applies to GIFs and videos as well as images |
+| Alt text of 1000; alt formats images, GIFs and videos, no audio | [Create media metadata](https://docs.x.com/x-api/media/create-media-metadata), [Media introduction](https://docs.x.com/x-api/media/introduction) | Confirmed 2026-11-13 for images: `alt_text.text` takes at most 1000 characters, and media are photos, videos or animated GIFs. Assumption: GIF and video alt, since the XDK documents `alt_text` only on photos |
 
 ## Threads
 
@@ -105,6 +109,7 @@ The [API changelog](https://dev.max.ru/docs-api/changelog-api/) dates the docume
 | Text spoiler count, media spoilers | [Spoilers](https://developers.facebook.com/documentation/threads/create-posts/spoilers) | Confirmed |
 | UTF-16 spoiler offsets | [Spoilers](https://developers.facebook.com/documentation/threads/create-posts/spoilers) | Assumption: the page states no offset unit |
 | Alt text, reply and quote parameters | [Publishing reference](https://developers.facebook.com/documentation/threads/reference/publishing) | Confirmed |
+| Alt formats: images and videos | [Publishing reference](https://developers.facebook.com/documentation/threads/reference/publishing) | Confirmed 2026-11-13: `alt_text` applies to an image or video, up to 1000 characters; a GIF attached through `gif_attachment` carries no alt |
 
 ## Bluesky
 
@@ -116,6 +121,7 @@ The `app.bsky` lexicons are canonical in `bluesky-social/bsky` ([lexicons direct
 | Mention, link and tag facets, UTF-8 byte offsets, tag length | [app.bsky.richtext.facet](https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/richtext/facet.json) | Confirmed |
 | Image and video alt in graphemes | [social-app constants](https://github.com/bluesky-social/social-app/blob/main/src/lib/constants.ts) | Confirmed as the official app's limit; the [images](https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/images.json) and [video](https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/video.json) lexicons state no alt maximum |
 | Alt of 20000 UTF-8 bytes | None | Assumption: neither the lexicons nor the app constants state a byte limit |
+| Alt formats: images, GIFs and videos, no audio | [images](https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/images.json) and [video](https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/video.json) lexicons | Confirmed 2026-11-13: both embeds carry `alt`, a GIF uploads as an image or a video, and no embed carries audio |
 
 ## Mastodon
 
@@ -125,6 +131,7 @@ The current release is [4.7.5](https://github.com/mastodon/mastodon/releases/lat
 | --- | --- | --- |
 | Status length counting, default maximum and URL weight | [StatusLengthValidator](https://github.com/mastodon/mastodon/blob/main/app/validators/status_length_validator.rb) | Confirmed |
 | `max_characters`, `characters_reserved_per_url`, `description_limit` | [Instance entity](https://docs.joinmastodon.org/entities/Instance/) | Confirmed; the documented example reports a `description_limit` of 1500, and the target configures no alt maximum until `descriptionLimit` is supplied |
+| Alt formats: images, GIFs, videos and audio | [MediaAttachment](https://docs.joinmastodon.org/entities/MediaAttachment/) | Confirmed 2026-11-13: the entity, shared by image, GIF, video and audio attachments, carries `description` as alternate text |
 
 ## LinkedIn
 
@@ -134,19 +141,21 @@ The current release is [4.7.5](https://github.com/mastodon/mastodon/releases/lat
 | Commentary limit of 3000 | [Posts API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api), [Post schema](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/post-api-schema), [UGC Post API](https://learn.microsoft.com/en-us/linkedin/compliance/integrations/shares/ugc-post-api) | Assumption: only the legacy UGC Post API states it |
 | Image alt | [Images API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/images-api) | Confirmed |
 | Alt of 4086 on other media | [Post schema](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/post-api-schema), [Videos API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api) | Assumption: the Post schema `altText` states no maximum and the Videos API defines no alt |
+| Alt formats: images, GIFs and videos, no audio | [Images API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/images-api), [Post schema](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/post-api-schema) | Confirmed 2026-11-13 for images. GIF alt is inferred from images; video alt is an assumption. Marketing API version 202511 sunsets on 2026-11-16 |
 
 ## Facebook
 
 | Facts | Source | Status |
 | --- | --- | --- |
 | Page post `message` limit of 63206 | [Page feed](https://developers.facebook.com/docs/graph-api/reference/v27.0/page/feed) | Assumption: `message` states no maximum |
+| Alt formats: images and GIFs | [Page photos](https://developers.facebook.com/docs/graph-api/reference/v27.0/page/photos) | Confirmed 2026-11-13 for images: `alt_text_custom`; videos take no alt. Assumption: a GIF takes alt as an image |
 
 ## Instagram
 
 | Facts | Source | Status |
 | --- | --- | --- |
 | Caption limit, mentions | [IG User Media](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/media) | Confirmed |
-| Alt text | [IG User Media](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/media), [Content Publishing](https://developers.facebook.com/documentation/instagram-platform/content-publishing) | Confirmed 2026-11-11: `alt_text` is for a single image or an image in a carousel, up to 1000 characters; Reels and stories are not supported. The target publishes alt for `image` items only. Assumption: a GIF is not an image here, since JPEG is the only accepted image format, so a caller publishes it as video, which takes no alt. Not encoded: an image story also takes no alt, and the target still returns it under story placement |
+| Alt text | [IG User Media](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/media), [Content Publishing](https://developers.facebook.com/documentation/instagram-platform/content-publishing) | Confirmed 2026-11-11: `alt_text` is for a single image or an image in a carousel, up to 1000 characters; Reels and stories are not supported. The target publishes alt for `image` items only. Assumption: a GIF is not an image here, since JPEG is the only accepted image format, so a caller publishes it as video, which takes no alt. Reels and stories take no alt, so reel and story placement omit it, also on an image (2026-11-13) |
 | Hashtags | [IG User Media](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/media), [Use hashtags on Instagram](https://help.instagram.com/351460621611097) | Confirmed: the default follows the Help Centre; the API reference states 30, which callers supply through `hashtagLimit` |
 
 ## VK
@@ -158,6 +167,7 @@ The current release is [4.7.5](https://github.com/mastodon/mastodon/releases/lat
 | Wall post text | [wall methods](https://raw.githubusercontent.com/VKCOM/vk-api-schema/master/wall/methods.json) | Confirmed: `message` states no maximum |
 | Image alt as photo caption | [photos methods](https://raw.githubusercontent.com/VKCOM/vk-api-schema/master/photos/methods.json) | Confirmed |
 | Video title of 128 and video alt of 5000 | [video methods](https://raw.githubusercontent.com/VKCOM/vk-api-schema/master/video/methods.json) | Assumption: the schema states no maximum for `name` or `description` |
+| Alt formats: images and videos | [photos methods](https://raw.githubusercontent.com/VKCOM/vk-api-schema/master/photos/methods.json), [video methods](https://raw.githubusercontent.com/VKCOM/vk-api-schema/master/video/methods.json) | Confirmed 2026-11-13: `photos.save` takes a caption and `video.save` a description; a GIF is a document, which takes no alt |
 
 ## YouTube
 
@@ -165,6 +175,7 @@ The current release is [4.7.5](https://github.com/mastodon/mastodon/releases/lat
 | --- | --- | --- |
 | Title and description limits, excluded `<` and `>` | [Videos resource](https://developers.google.com/youtube/v3/docs/videos) | Confirmed |
 | Hashtags | [Find videos using hashtags](https://support.google.com/youtube/answer/6390658?hl=en) | Confirmed 2026-11-11: over 60 hashtags on a video, YouTube ignores every one of them. Assumption: the count covers the title and description together, since the page counts per video and names both as places for hashtags; the target keeps the title's hashtags and removes the description's excess sigils |
+| Media alt: none | [videos.insert](https://developers.google.com/youtube/v3/docs/videos/insert), [thumbnails.set](https://developers.google.com/youtube/v3/docs/thumbnails/set) | Confirmed 2026-11-13: neither method has an alt parameter, so `youtube-plain` omits alt on every format |
 
 ## TikTok
 
@@ -173,3 +184,4 @@ The current release is [4.7.5](https://github.com/mastodon/mastodon/releases/lat
 | Video caption | [Direct Post](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post) | Confirmed |
 | Photo title and description | [Photo](https://developers.tiktok.com/docs/en/content-posting-api-reference-photo-post) | Confirmed |
 | Mentions | [Direct Post](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post), [Photo](https://developers.tiktok.com/docs/en/content-posting-api-reference-photo-post), [Mentions on TikTok](https://support.tiktok.com/en/using-tiktok/messaging-and-notifications/mentions-on-tiktok) | Confirmed 2026-11-12: no page states a maximum number of mentions in a caption, title or description, so `tiktok-plain` declares no `mentions` limit; the help article only gates mentions on the mentioned account's settings |
+| Media alt: none | [Direct Post](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post), [Photo](https://developers.tiktok.com/docs/en/content-posting-api-reference-photo-post) | Confirmed 2026-11-13: neither post type has an alt parameter, so `tiktok-plain` omits alt on every format |

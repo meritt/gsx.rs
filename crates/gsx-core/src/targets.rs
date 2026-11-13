@@ -77,7 +77,7 @@ const DEFAULT: Rules = Rules {
         feature: Feature::Media,
         class: Approximated,
         reason: "media_attached",
-        conditions: &[ATTACHED[0], ATTACHED[1], ATTACHED[2], SPOILER_OMITTED],
+        conditions: &[ATTACHED[0], ATTACHED[1], ATTACHED[2], SPOILER_OMITTED, ALT_REFUSED],
     },
 };
 
@@ -91,26 +91,12 @@ const SPOILER_OMITTED: Condition = Condition { when: When::Spoiler, class: Omitt
 
 const SPOILERS_CARRIED: Rule = Rule { conditions: &ATTACHED, ..DEFAULT.media };
 
-const ALT_REFUSED: Rule = Rule {
-    conditions: &[
-        ATTACHED[0],
-        ATTACHED[1],
-        ATTACHED[2],
-        SPOILER_OMITTED,
-        Condition { when: When::Refused, class: Omitted, reason: "media_alt_omitted" },
-    ],
-    ..DEFAULT.media
-};
+const ALT_REFUSED: Condition = Condition { when: When::Refused, class: Omitted, reason: "media_alt_omitted" };
 
-const SPOILERS_PER_POST: Rule = Rule {
-    conditions: &[
-        ATTACHED[0],
-        ATTACHED[1],
-        ATTACHED[2],
-        Condition { when: When::Post, class: Approximated, reason: "media_spoiler_widened" },
-    ],
-    ..DEFAULT.media
-};
+const SPOILER_WIDENED: Condition = Condition { when: When::Post, class: Approximated, reason: "media_spoiler_widened" };
+
+const SPOILERS_PER_POST: Rule =
+    Rule { conditions: &[ATTACHED[0], ATTACHED[1], ATTACHED[2], SPOILER_WIDENED], ..DEFAULT.media };
 
 macro_rules! rules {
     ($rules:expr $(, $extra:expr)* $(,)?) => {{

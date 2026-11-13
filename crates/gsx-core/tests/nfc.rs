@@ -28,3 +28,13 @@ fn normalization_test_passes() {
         assert_eq!(nfc(&text), text.as_str(), "{:X}", char as u32);
     }
 }
+
+#[test]
+fn every_combining_class_belongs_to_a_mark() {
+    let classes = icu_normalizer::properties::CanonicalCombiningClassMapBorrowed::new();
+    let categories = icu_properties::CodePointMapData::<icu_properties::props::GeneralCategory>::new();
+    for char in (0..=0x10FFFF).filter_map(char::from_u32).filter(|&char| classes.get_u8(char) != 0) {
+        let category = categories.get(char);
+        assert!(icu_properties::props::GeneralCategoryGroup::Mark.contains(category), "{:X}", char as u32);
+    }
+}

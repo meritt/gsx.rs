@@ -1,3 +1,4 @@
+use std::iter::Peekable;
 use std::ops::Range;
 
 use super::{X_URL_WEIGHT, clusters, emoji, grapheme};
@@ -29,14 +30,37 @@ fn valid<'a>(text: &'a str, spans: &'a [Range<usize>]) -> impl Iterator<Item = &
 }
 
 pub(super) fn unique_urls(text: &str, urls: &[Range<usize>]) -> usize {
+    let mut seen = vec![];
+    admit_urls(text, &mut valid(text, urls).peekable(), text.len(), &mut seen);
+    seen.len()
+}
+
+pub(super) fn unique_url_prefixes(text: &str, urls: &[Range<usize>], ends: &[usize]) -> Measured {
+    let mut prefixes = Prefixes::new(ends);
+    let mut urls = valid(text, urls).peekable();
     let mut seen: Vec<&str> = vec![];
-    for url in valid(text, urls) {
+    for (at, char) in text.char_indices() {
+        if prefixes.wanted(at) && char.is_whitespace() {
+            admit_urls(text, &mut urls, at, &mut seen);
+            prefixes.set(seen.len());
+        }
+    }
+    admit_urls(text, &mut urls, text.len(), &mut seen);
+    prefixes.done(text.len(), seen.len())
+}
+
+fn admit_urls<'t>(
+    text: &'t str,
+    urls: &mut Peekable<impl Iterator<Item = &'t Range<usize>>>,
+    at: usize,
+    seen: &mut Vec<&'t str>,
+) {
+    while let Some(url) = urls.next_if(|url| url.end <= at) {
         let url = &text[url.clone()];
         if !seen.contains(&url) {
             seen.push(url);
         }
     }
-    seen.len()
 }
 
 fn x_char(char: char) -> usize {
