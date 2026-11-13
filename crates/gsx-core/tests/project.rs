@@ -381,6 +381,19 @@ fn instagram_publishes_alt_for_images_only() {
     );
     assert_eq!(projection.measurements.iter().filter(|measured| measured.field == FieldName::Alt).count(), 1);
     assert_eq!(target("instagram-plain").unwrap().media().alt, [Format::Image]);
+    for placement in [Placement::Reel, Placement::Story] {
+        let placed = Facts { placement: Some(placement), items: Some(&items[..1]), media_count: 1, ..facts };
+        let projection = run("instagram-plain", "Look", &placed);
+        assert_eq!(projection.items[0].alt, None);
+        let alt: Vec<_> = projection
+            .changes
+            .iter()
+            .filter(|change| change.field == FieldName::Alt)
+            .map(|change| (change.class, change.reason, change.truncated))
+            .collect();
+        assert_eq!(alt, [(Class::Omitted, "media_alt_omitted", None)]);
+        assert!(projection.measurements.iter().all(|measured| measured.field != FieldName::Alt));
+    }
 }
 
 #[test]

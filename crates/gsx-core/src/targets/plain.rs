@@ -2,8 +2,9 @@ use super::limits::{
     Alt, CodePoints, Description, Fact, Hashtags, Image, Limit, MastodonWeighted, Mentions, Only, Post, Text, Title,
     Utf8Bytes, Utf16CodeUnits, Video, XWeighted, given, limit, resolved, unlimited,
 };
-use super::{ALT_REFUSED, DEFAULT, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
+use super::{DEFAULT, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
+use crate::measure::Placement;
 use crate::project::Class::{Approximated, Blocked, TextualFallback};
 use crate::project::{
     Condition, Escape, Feature, FieldName, FieldSpec, Form, Format, Media, Normalization, Rule, Search, Source,
@@ -37,6 +38,7 @@ const fn text(
     rules: &'static [Rule],
     fields: &'static [FieldSpec],
     limits: &'static [Limit],
+    alt: &'static [Format],
 ) -> Target {
     Target {
         name,
@@ -48,7 +50,8 @@ const fn text(
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
-        alt: Format::ALL,
+        alt,
+        alt_placements: Placement::ALL,
     }
 }
 
@@ -63,6 +66,7 @@ pub static X: Target = Target {
         rules!(Rules { text: THREADED_TEXT, ..DEFAULT }),
         BODY,
         &[resolved(Text, XWeighted, Fact::MaxCharacters, 280), limit(Alt, CodePoints, 1000)],
+        &[Format::Image, Format::Gif, Format::Video],
     )
 };
 
@@ -74,6 +78,7 @@ pub static MASTODON: Target = Target {
         rules!(Rules { text: THREADED_TEXT, media: SPOILERS_PER_POST, ..DEFAULT }),
         BODY,
         &[resolved(Text, MastodonWeighted, Fact::MaxCharacters, 500), given(Alt, CodePoints, Fact::DescriptionLimit)],
+        Format::ALL,
     )
 };
 
@@ -83,18 +88,25 @@ pub static LINKEDIN: Target = text(
     plain!(&[]),
     BODY,
     &[limit(Text, CodePoints, 3000), limit(Alt, CodePoints, 4086)],
+    &[Format::Image, Format::Gif, Format::Video],
 );
 
-pub static FACEBOOK: Target =
-    text(Escape::None, "facebook-plain", plain!(&[]), BODY, &[limit(Text, CodePoints, 63206)]);
+pub static FACEBOOK: Target = text(
+    Escape::None,
+    "facebook-plain",
+    plain!(&[]),
+    BODY,
+    &[limit(Text, CodePoints, 63206)],
+    &[Format::Image, Format::Gif],
+);
 
 pub static INSTAGRAM: Target = Target {
-    alt: &[Format::Image],
+    alt_placements: &[Placement::Post],
     ..text(
         Escape::None,
         "instagram-plain",
         rules!(
-            Rules { media: ALT_REFUSED, ..DEFAULT },
+            DEFAULT,
             rule(Feature::Hashtag, Approximated, "hashtag_limit_exceeded"),
             rule(Feature::Mention, Approximated, "mention_limit_exceeded"),
         ),
@@ -105,6 +117,7 @@ pub static INSTAGRAM: Target = Target {
             limit(Text, Mentions, 20),
             limit(Alt, CodePoints, 1000).when(Only(Image)),
         ],
+        &[Format::Image],
     )
 };
 
@@ -122,6 +135,7 @@ pub static VK: Target = text(
         limit(Alt, CodePoints, 5000).when(Only(Video)),
         limit(Alt, CodePoints, 2048).when(Only(Image)),
     ],
+    &[Format::Image, Format::Video],
 );
 
 pub static YOUTUBE: Target = text(
@@ -148,6 +162,7 @@ pub static YOUTUBE: Target = text(
         limit(Description, Utf8Bytes, 5000),
         limit(Description, Hashtags, 60),
     ],
+    &[],
 );
 
 pub static TIKTOK: Target = text(
@@ -167,6 +182,7 @@ pub static TIKTOK: Target = text(
         limit(Title, Utf16CodeUnits, 90).on(&[Post]).when(Only(Image)),
         unlimited(Text, Mentions),
     ],
+    &[],
 );
 
 pub static SLACK: Target = text(
@@ -175,4 +191,5 @@ pub static SLACK: Target = text(
     plain!(&[]),
     BODY,
     &[unlimited(Text, CodePoints), limit(Alt, CodePoints, 1000).when(Only(Image))],
+    &[Format::Image, Format::Gif],
 );

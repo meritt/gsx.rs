@@ -2,7 +2,7 @@ mod support;
 
 use gsx_core::forms::{blocks, html, markdown, plain};
 use gsx_core::measure::{Context, Field, Maximum};
-use gsx_core::project::{Facts, Form, HtmlBlocks, MediaKind, Placement, Renderer, Unit, project};
+use gsx_core::project::{Facts, Feature, Form, HtmlBlocks, MediaKind, Placement, Renderer, Unit, When, project};
 use gsx_core::targets::TARGETS;
 use support::documents;
 
@@ -33,6 +33,17 @@ fn at_most_one_limit_applies_to_a_field_unit_placement_and_media_kind() {
                 }
             }
         }
+    }
+}
+
+#[test]
+fn a_target_declares_alt_refusal_exactly_when_it_omits_alt() {
+    for target in TARGETS {
+        let media = target.media();
+        let narrowed = media.formats.iter().any(|format| !media.alt.contains(format))
+            || target.alt_placements != Placement::ALL
+            || target.form.blocks().is_some();
+        assert_eq!(target.conditions(Feature::Media, When::Refused), narrowed, "{}", target.name);
     }
 }
 

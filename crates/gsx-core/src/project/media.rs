@@ -57,8 +57,29 @@ struct Alt {
     change: Option<Change>,
 }
 
-fn fit_alt(target: &'static Target, alt: &str, format: Format, resolved: &[(Fact, u32)]) -> Alt {
-    if !target.alt.contains(&format) {
+impl Alt {
+    fn place(
+        &self,
+        range: Option<Range>,
+        slot: Slot,
+        measurements: &mut Vec<Measurement>,
+        changes: &mut Vec<Change>,
+    ) -> Option<String> {
+        let (block, item) = (slot.block.map(|block| block as usize), Some(slot.item as usize));
+        measurements.extend(self.measurements.iter().map(|measured| Measurement { block, item, ..*measured }));
+        changes.extend(self.change.clone().map(|change| Change { range, slot: Some(slot), ..change }));
+        self.text.clone()
+    }
+}
+
+fn fit_alt(
+    target: &'static Target,
+    alt: &str,
+    format: Format,
+    placement: Option<Placement>,
+    resolved: &[(Fact, u32)],
+) -> Alt {
+    if !target.carries_alt(format, placement) {
         let (class, reason) = target.rule(Feature::Media).outcome(Some(When::Refused));
         let field = FieldName::Alt;
         let change = Change { class, feature: Feature::Media, reason, field, range: None, truncated: None, slot: None };
@@ -125,12 +146,13 @@ pub(super) fn attach(target: &'static Target, facts: &Facts, children: &[Node]) 
     for (index, fact) in items.iter().enumerate() {
         let range = ranges.get(fact.id).map(|&top| children[top].range);
         let alt = authored(fact).and_then(|alt| {
-            let fitted = fit_alt(target, alt, fact.format, &resolved);
-            let slot = Some(Slot { block: None, item: index as u32 });
-            let placed = fitted.measurements.into_iter().map(|measured| Measurement { item: Some(index), ..measured });
-            attached.measurements.extend(placed);
-            attached.changes.extend(fitted.change.map(|change| Change { range, slot, ..change }));
-            fitted.text
+            let slot = Slot { block: None, item: index as u32 };
+            fit_alt(target, alt, fact.format, facts.placement, &resolved).place(
+                range,
+                slot,
+                &mut attached.measurements,
+                &mut attached.changes,
+            )
         });
         let spoiler = match spoilers {
             Spoilers::None => false,
@@ -207,6 +229,7 @@ struct Layouter {
     target: &'static Target,
     form: &'static BlocksForm,
     resolved: Vec<(Fact, u32)>,
+    placement: Option<Placement>,
     alts: Vec<Option<Alt>>,
     laid: Laid,
 }
@@ -226,19 +249,14 @@ impl Layouter {
     }
 
     fn item(&mut self, (index, fact): (usize, &MediaFact), range: Option<Range>, slot: (usize, usize)) -> Item {
-        let (block, item) = (Some(slot.0), slot.1);
         let slot = Slot { block: Some(slot.0 as u32), item: slot.1 as u32 };
         if fact.spoiler && !self.form.spoiler {
             self.change_at(FieldName::Text, range, When::Spoiler, Some(slot));
         }
         let alt = authored(fact).and_then(|alt| {
-            let (target, resolved) = (self.target, &self.resolved);
-            let fitted = self.alts[index].get_or_insert_with(|| fit_alt(target, alt, fact.format, resolved));
-            let placed =
-                fitted.measurements.iter().map(|measured| Measurement { block, item: Some(item), ..*measured });
-            self.laid.measurements.extend(placed);
-            self.laid.changes.extend(fitted.change.clone().map(|change| Change { range, slot: Some(slot), ..change }));
-            fitted.text.clone()
+            let (target, placement, resolved) = (self.target, self.placement, &self.resolved);
+            let fitted = self.alts[index].get_or_insert_with(|| fit_alt(target, alt, fact.format, placement, resolved));
+            fitted.place(range, slot, &mut self.laid.measurements, &mut self.laid.changes)
         });
         Item { reference: format!("media:{}", fact.id), alt, spoiler: fact.spoiler && self.form.spoiler }
     }
@@ -324,6 +342,7 @@ pub(super) fn layout(
         target,
         form,
         resolved: super::resolved(facts),
+        placement: facts.placement,
         alts: items.iter().map(|_| None).collect(),
         laid: Laid { blocks: vec![], attachments: vec![], changes: vec![], measurements: vec![] },
     };
