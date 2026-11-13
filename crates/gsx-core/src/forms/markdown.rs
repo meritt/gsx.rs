@@ -2,7 +2,7 @@ use super::{closing_bidi, dropped, language, math_block, media, spelled, underli
 use crate::document::{Align, Kind, Node, Provenance, TimeFormat};
 use crate::project::links::accepted;
 use crate::project::{
-    CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, RULE, Renderer, Style, When, href, time_format,
+    CELL, Class, Context, Feature, LineStart, MarkdownForm, RULE, Renderer, Style, When, href, time_format,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
@@ -234,7 +234,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                 let href = href(url);
                 if !form.url_labels {
                     let mut label = String::new();
-                    plain(&node.children, &mut label);
+                    super::label(&node.children, &mut label, true);
                     if let Some(label) = accepted(&label) {
                         let bare = !context.contains_cut(node) && label == href;
                         context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
@@ -299,7 +299,7 @@ fn datetime(context: &mut Context, node: &Node, unix: i64, format: Option<TimeFo
         return;
     };
     let mut label = String::new();
-    plain(&node.children, &mut label);
+    super::label(&node.children, &mut label, true);
     if label.contains(|char| form.separators.contains(char)) {
         context.report(Feature::Datetime, node.range);
         inline_at(context, &node.children, cell);
@@ -326,21 +326,6 @@ fn skip(context: &mut Context, nodes: &[Node]) {
     }
 }
 
-fn plain(nodes: &[Node], out: &mut String) {
-    for node in nodes {
-        match &node.kind {
-            Kind::Text { value } | Kind::InlineCode { value } => out.push_str(value),
-            Kind::Math { value } => out.push_str(&spelled(value, Piece::Whole)),
-            Kind::Break => out.push('\n'),
-            Kind::Link { url, .. } => {
-                plain(&node.children, out);
-                out.push_str(&href(url));
-            }
-            _ => plain(&node.children, out),
-        }
-    }
-}
-
 fn flat(context: &mut Context, nodes: &[Node], cell: bool) {
     let form = form(context);
     for node in nodes {
@@ -362,7 +347,7 @@ fn flat(context: &mut Context, nodes: &[Node], cell: bool) {
             Kind::Link { url, .. } => {
                 let href = href(url);
                 let mut label = String::new();
-                plain(&node.children, &mut label);
+                super::label(&node.children, &mut label, true);
                 let bare = !context.contains_cut(node) && accepted(&label).is_some_and(|label| label == href);
                 context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
                 if bare {
@@ -431,12 +416,15 @@ fn raw(value: String, cell: bool) -> String {
 }
 
 fn escape(out: &mut String, value: &str, set: &str) {
-    for char in value.chars() {
-        if char.is_ascii() && set.contains(char) {
-            out.push('\\');
-        }
-        out.push(char);
+    let mask = set.bytes().filter(u8::is_ascii).fold(0u128, |mask, byte| mask | (1 << byte));
+    let mut rest = value;
+    while let Some(at) = rest.bytes().position(|byte| byte.is_ascii() && (mask >> byte) & 1 == 1) {
+        out.push_str(&rest[..at]);
+        out.push('\\');
+        out.push(char::from(rest.as_bytes()[at]));
+        rest = &rest[at + 1..];
     }
+    out.push_str(rest);
 }
 
 fn spans(out: &mut String, line: &str, form: &MarkdownForm, live: bool) {
@@ -522,6 +510,12 @@ pub fn owned(line: &str) -> Vec<(usize, usize)> {
     let mail = line.contains('@');
     let mut at = 0;
     while at < line.len() {
+        if !mail {
+            match line.as_bytes()[at..].iter().position(|byte| matches!(byte, b'h' | b'#' | b'$')) {
+                Some(skip) => at += skip,
+                None => break,
+            }
+        }
         let rest = &line[at..];
         match span(rest, mail) {
             Some((length, start, end)) => {

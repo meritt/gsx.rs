@@ -581,9 +581,18 @@ impl Inline<'_, '_> {
         }
     }
 
+    fn ordinal(&self) -> bool {
+        let digits = self.out.bytes().rev().take_while(u8::is_ascii_digit).count();
+        let start = self.out.len() - digits;
+        (1..=9).contains(&digits) && if start == 0 { self.opens_line } else { self.out.as_bytes()[start - 1] == b'\n' }
+    }
+
+    fn www(&self) -> bool {
+        self.out.chars().rev().take(3).filter(|char| matches!(char, 'w' | 'W')).count() == 3
+    }
+
     fn text(&mut self, value: &str, after: Option<char>, (edge_start, edge_end): (bool, bool)) {
         let chars: Vec<char> = value.chars().collect();
-        let mut digits: Option<usize> = None;
         let mut index = 0;
         while index < chars.len() {
             let char = chars[index];
@@ -605,7 +614,6 @@ impl Inline<'_, '_> {
                     }
                 }
                 index = end;
-                digits = None;
                 continue;
             }
             if char == '\n' {
@@ -616,11 +624,7 @@ impl Inline<'_, '_> {
                     reference(&mut self.out, '\n');
                 }
                 index += 1;
-                digits = None;
                 continue;
-            }
-            if line_start {
-                digits = Some(0);
             }
             let escape = match char {
                 '\\' => !next.is_some_and(|next| next.is_alphanumeric() || next == ' '),
@@ -634,17 +638,10 @@ impl Inline<'_, '_> {
                 '@' => previous.is_some_and(|previous| {
                     previous.is_ascii_alphanumeric() || matches!(previous, '.' | '+' | '-' | '_')
                 }),
-                '.' => {
-                    digits.is_some_and(|count| (1..=9).contains(&count))
-                        || index >= 3 && chars[index - 3..index].iter().all(|char| matches!(char, 'w' | 'W'))
-                }
+                '.' => self.ordinal() || self.www(),
                 '#' | '>' | '-' => line_start,
-                ')' => digits.is_some_and(|count| (1..=9).contains(&count)),
+                ')' => self.ordinal(),
                 _ => false,
-            };
-            digits = match (digits, char.is_ascii_digit()) {
-                (Some(count), true) => Some(count + 1),
-                _ => None,
             };
             if escape || std::mem::take(&mut self.reference_next) {
                 reference(&mut self.out, char);

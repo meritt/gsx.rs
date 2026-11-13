@@ -158,7 +158,7 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
             Kind::Link { url, title, .. } => {
                 let href = href(url);
                 let mut text = String::new();
-                label(&node.children, &mut text);
+                label(&node.children, &mut text, false);
                 let bare = !context.contains_cut(node) && links::accepted(&text).is_some_and(|label| label == href);
                 if context.declared(Feature::Link) {
                     if title.is_some() {
@@ -203,7 +203,8 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                 context.within_link(|context| inline(context, &node.children));
                 let closing = closing_bidi(context.writer().since(mark));
                 context.writer().source(node.range);
-                context.writer().push(&format!("{closing} ("));
+                context.writer().push(&closing);
+                context.writer().push(" (");
                 context.writer().link(&href);
                 context.writer().push(")");
             }
@@ -215,7 +216,7 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                 };
                 let format = context.time_format(*format);
                 let mut text = String::new();
-                label(&node.children, &mut text);
+                label(&node.children, &mut text, false);
                 let when = if context.nested() || contains_entity(&node.children) {
                     Some(When::Nested)
                 } else {

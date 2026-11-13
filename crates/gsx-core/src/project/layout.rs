@@ -13,6 +13,20 @@ pub const QUOTE: &str = "› ";
 pub const CELL: &str = " | ";
 pub const ELLIPSIS: &str = "…";
 
+const LINKEDIN_ESCAPED: u128 = escaped(b"|{}@[]()<>#\\*_~");
+const HTML_ESCAPED: u128 = escaped(b"&<>");
+const ANGLE_ESCAPED: u128 = escaped(b"<>");
+
+const fn escaped(set: &[u8]) -> u128 {
+    let mut mask = 0;
+    let mut at = 0;
+    while at < set.len() {
+        mask |= 1 << set[at];
+        at += 1;
+    }
+    mask
+}
+
 pub fn marker(ordered: bool, start: Option<u32>, index: usize, checked: Option<bool>) -> String {
     let task = match checked {
         None => "",
@@ -148,14 +162,16 @@ impl Writer {
             return;
         }
         self.begin();
-        let escaped: &[u8] = match self.escape {
-            Escape::None => b"",
-            Escape::LinkedIn => b"|{}@[]()<>#\\*_~",
-            Escape::Html | Escape::HtmlBreaks => b"&<>",
-            Escape::Angle => b"<>",
+        let escaped = match self.escape {
+            Escape::None => 0,
+            Escape::LinkedIn => LINKEDIN_ESCAPED,
+            Escape::Html | Escape::HtmlBreaks => HTML_ESCAPED,
+            Escape::Angle => ANGLE_ESCAPED,
         };
         let mut rest = line;
-        while let Some(at) = rest.bytes().position(|byte| escaped.contains(&byte)) {
+        while escaped != 0
+            && let Some(at) = rest.bytes().position(|byte| byte.is_ascii() && (escaped >> byte) & 1 == 1)
+        {
             self.out.text.push_str(&rest[..at]);
             let byte = rest.as_bytes()[at];
             if self.escape == Escape::LinkedIn && byte == b'#' && self.hashtag(&rest[at + 1..]) {

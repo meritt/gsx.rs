@@ -47,18 +47,25 @@ fn language(lang: Option<&str>) -> &str {
     .unwrap_or("")
 }
 
-fn label(nodes: &[Node], out: &mut String) {
+fn label(nodes: &[Node], out: &mut String, hrefs: bool) {
     for node in nodes {
         match &node.kind {
             Kind::Text { value } | Kind::InlineCode { value } => out.push_str(value),
             Kind::Math { value } => out.push_str(&spelled(value, Piece::Whole)),
             Kind::Break => out.push('\n'),
-            _ => label(&node.children, out),
+            Kind::Link { url, .. } if hrefs => {
+                label(&node.children, out, hrefs);
+                out.push_str(&crate::project::href(url));
+            }
+            _ => label(&node.children, out, hrefs),
         }
     }
 }
 
 fn closing_bidi(label: &str) -> String {
+    if !label.as_bytes().contains(&0xE2) {
+        return String::new();
+    }
     let mut open = vec![];
     for char in label.chars() {
         match char {

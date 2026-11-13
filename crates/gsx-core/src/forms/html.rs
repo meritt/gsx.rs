@@ -352,7 +352,7 @@ impl Html {
                     });
                     let refusal = open.as_ref().and_then(|_| {
                         let mut text = String::new();
-                        label(&node.children, &mut text);
+                        label(&node.children, &mut text, false);
                         date_refusal(&text, *unix, format.is_some())
                     });
                     match refusal {

@@ -1,5 +1,3 @@
-use std::fmt::Write;
-
 use crate::document::{
     self, Align, Code, Details, Diagnostic, Document, Error, Kind, Layout, Marker, MarkerKind, Media, Node, Provenance,
     Range, Severity, TimeFormat,
@@ -248,6 +246,40 @@ pub fn result(result: &Result<Document, Error>) -> String {
     out.0
 }
 
+trait Unsigned {
+    fn wide(self) -> u64;
+}
+
+impl Unsigned for u64 {
+    fn wide(self) -> u64 {
+        self
+    }
+}
+
+impl Unsigned for usize {
+    fn wide(self) -> u64 {
+        self as u64
+    }
+}
+
+impl Unsigned for u32 {
+    fn wide(self) -> u64 {
+        u64::from(self)
+    }
+}
+
+impl Unsigned for u8 {
+    fn wide(self) -> u64 {
+        u64::from(self)
+    }
+}
+
+impl<T: Unsigned + Copy> Unsigned for &T {
+    fn wide(self) -> u64 {
+        (*self).wide()
+    }
+}
+
 struct Out(String);
 
 impl Out {
@@ -255,8 +287,26 @@ impl Out {
         self.0.push_str(text);
     }
 
-    fn number(&mut self, value: impl std::fmt::Display) {
-        let _ = write!(self.0, "{value}");
+    fn number(&mut self, value: impl Unsigned) {
+        let mut value = value.wide();
+        let mut digits = [0; 20];
+        let mut at = digits.len();
+        loop {
+            at -= 1;
+            digits[at] = b'0' + (value % 10) as u8;
+            value /= 10;
+            if value == 0 {
+                break;
+            }
+        }
+        self.0.extend(digits[at..].iter().map(|&digit| char::from(digit)));
+    }
+
+    fn signed(&mut self, value: i64) {
+        if value < 0 {
+            self.0.push('-');
+        }
+        self.number(value.unsigned_abs());
     }
 
     fn bool(&mut self, value: bool) {
@@ -280,7 +330,9 @@ impl Out {
             };
             self.0.push_str(&value[start..at]);
             if escape.is_empty() {
-                let _ = write!(self.0, "\\u{byte:04x}");
+                self.0.push_str("\\u00");
+                self.0.push(char::from(b"0123456789abcdef"[usize::from(byte >> 4)]));
+                self.0.push(char::from(b"0123456789abcdef"[usize::from(byte & 0x0f)]));
             } else {
                 self.0.push_str(escape);
             }
@@ -315,7 +367,11 @@ impl Out {
     }
 
     fn range(&mut self, range: Range) {
-        let _ = write!(self.0, "[{},{}]", range.start, range.end);
+        self.0.push('[');
+        self.number(range.start);
+        self.0.push(',');
+        self.number(range.end);
+        self.0.push(']');
     }
 
     fn node(&mut self, node: &Node) {
@@ -393,7 +449,7 @@ impl Out {
                 self.key("datetime");
                 self.optional(datetime.as_deref());
                 self.key("unix");
-                self.number(unix);
+                self.signed(*unix);
                 self.key("format");
                 self.optional(format.map(TimeFormat::as_str));
             }

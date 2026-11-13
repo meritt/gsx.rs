@@ -172,6 +172,16 @@ fn serializes_bench_cases_in_linear_time() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+#[test]
+fn escapes_dots_on_a_long_line_in_linear_time() {
+    let cost = |count: usize| {
+        let markdown = "a. ".repeat(count);
+        seconds_per_byte(&parse(&markdown, &[]).unwrap(), markdown.len())
+    };
+    let growth = cost(84_000) / cost(21_000);
+    assert!(growth < 2.0, "costs {growth:.1} times more per byte at four times the size");
+}
+
 fn canonically(source: &str) -> String {
     let media = [Media { id: "a", cover: None }, Media { id: "b", cover: None }];
     let document = parse(source, &media).unwrap();
@@ -211,6 +221,13 @@ fn writes_canonical_markdown() {
     assert_eq!(canonically("a $5 and $10"), "a &#36;5 and &#36;10");
     assert_eq!(canonically("> a\n>\n> - b\n\n    c"), "> a\n>\n> - b\n\n```\nc\n```");
     assert_eq!(canonically("- [ ]   \n*$[a]: x\n  *$"), "- [ ]   \n*$[a]: x\n  *$");
+}
+
+#[test]
+fn escapes_from_the_written_text_whatever_the_text_nodes() {
+    for source in ["WWW..*<U", "www..", "wWw.*.", "1.*", "12)<"] {
+        canonically(source);
+    }
 }
 
 #[test]
