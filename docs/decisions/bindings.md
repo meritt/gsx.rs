@@ -10,6 +10,24 @@ Bindings pass text and explicit facts into `gsx-core` and decode its JSON. They 
 | UTF-8 input, UTF-16 source ranges | Native Rust input with offsets directly usable by JavaScript and Foundation string APIs |
 | Shared C ABI for Swift and Python | `ctypes` reuses the native library without a Python extension ABI or a separate implementation |
 | Reused Wasm input buffer | `TextEncoder.encodeInto` writes directly into linear memory, avoiding a per-call allocation and intermediate copy |
+| Source text on every call, no document references | Repeated parsing costs milliseconds per publication, small next to platform network calls; [document references](#document-references) would add handles, release errors and a ceiling to four bindings and exceed the Wasm budget |
+
+### Document references
+
+Bindings do not keep a parsed document between calls. The measurements compare a reference scheme (parse once, then project the kept document once per call, each call naming its own target and facts, with explicit release) with the current API, using the call pattern of a client publishing to 14 destinations: about two `project` calls per destination (text and media alt, three for Discord, four for Slack), one more before publication and one separate `parse`, which is 28 to 35 `project` calls. The acceptance threshold is a saving of at least 20% of total time and at least 5 ms at 4000 UTF-16 units and 14 targets, decided by the typical post.
+
+| Text, 4000 units, 14 destinations | Calls | Text per call, ms | Parse once, project by reference, ms | Saving, ms | Saving |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Typical post: prose with links | 28 | 13.59 | 7.07 | 6.5 | 48% |
+| Typical post: prose with links | 35 | 16.93 | 8.70 | 8.2 | 49% |
+| Lower bound: plain filler prose | 28 | 6.56 | 3.70 | 2.9 | 44% |
+| Lower bound: plain filler prose | 35 | 8.44 | 4.84 | 3.6 | 43% |
+
+Parsing costs 0.22 ms per call on the typical post and a projection costs about as much, so parsing is about 45% of the time at every call count; markup-dense text saves 29 to 37 ms (62 to 64%). Over three runs the saving share varies by at most 4 points, while milliseconds vary up to threefold under machine load and only upward; the table is the run on an idle machine.
+
+The typical post passes both halves of the threshold, with a margin of 1.5 ms at 28 calls, and plain prose fails the 5 ms half. The scheme is rejected regardless: about 7 ms per 14-destination publication is negligible next to the network calls to the platforms, while references need handles, defined errors for use after release, double release and a reference outliving Wasm trap recovery, and a ceiling on live references in npm, Python, Swift and C. The minimal Wasm exports alone add 2349 bytes `gzip -9`, more than the headroom left under the [npm size ceiling](../../AGENTS.md#replay-and-performance).
+
+Method: Wasm built by `cargo xtask wasm`, run in Node.js 26.13 on an Intel i9-10910 under macOS 15. A prototype keeping one document in the Wasm instance returns the same projection bytes as `project` for every call, and its per-call path matches an unmodified build within 1%. Texts are exactly 300, 2000 and 4000 units: paragraphs of the `rich.long-article` benchmark post for the typical post, the `rich.boundary.text-*` posts for the lower bound, and the `section` block of `testdata/bench/cases.json` for dense markup. Variants alternate in one process with rotating order after warm-up; each cell reports the median of 30 to 100 rounds.
 
 ## API
 
