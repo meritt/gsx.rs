@@ -18,7 +18,7 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
 }
 
 fn blocks_at(context: &mut Context, nodes: &[Node], depth: u32) {
-    let mut first = true;
+    let mut previous: Option<&Node> = None;
     for node in nodes {
         if media(node) {
             context.report_media(node);
@@ -27,11 +27,30 @@ fn blocks_at(context: &mut Context, nodes: &[Node], depth: u32) {
         if context.done() {
             continue;
         }
-        if !first {
-            context.writer().newlines(node.gap_before.unwrap_or(1));
+        if let Some(previous) = previous {
+            let gap = context.gap(Some(previous.range.end), node, node.gap_before.unwrap_or(1));
+            separate(context, previous, node, gap);
         }
-        first = false;
+        previous = Some(node);
         block(context, node, depth);
+    }
+}
+
+pub(crate) fn separate(context: &mut Context, previous: &Node, next: &Node, gap: u32) {
+    let form = form(context);
+    if gap != 1 || form.line_break == "\n" {
+        context.writer().newlines(gap);
+        return;
+    }
+    let rule = matches!(next.kind, Kind::ThematicBreak);
+    let interrupts = matches!(next.kind, Kind::Code { .. } | Kind::Blockquote | Kind::List { .. } | Kind::Table { .. });
+    match previous.kind {
+        Kind::ThematicBreak | Kind::Code { .. } => context.writer().push("\n"),
+        Kind::Blockquote | Kind::List { .. } | Kind::Table { .. } if rule || interrupts => context.writer().push("\n"),
+        Kind::Blockquote | Kind::List { .. } | Kind::Table { .. } => context.writer().newlines(2),
+        _ if rule => context.writer().newlines(2),
+        _ if interrupts => context.writer().push("\n"),
+        _ => context.writer().push(form.line_break),
     }
 }
 
@@ -117,7 +136,8 @@ fn list(context: &mut Context, node: &Node, ordered: bool, start: Option<u32>, d
             break;
         }
         if index > 0 {
-            context.writer().push("\n");
+            let after = Some(node.children[index - 1].range.end);
+            context.break_before(after, item);
         }
         let marker =
             if ordered { format!("{}. ", u64::from(start.unwrap_or(1)) + index as u64) } else { "- ".to_owned() };
@@ -206,7 +226,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                 context.report(Feature::Math, node.range);
                 context.leaf_with(node, value, |piece, kind| text(form, &spelled(piece, kind), true, false));
             }
-            Kind::Break => context.writer().push("\n"),
+            Kind::Break => context.writer().push(form.line_break),
             Kind::Link { url, title, .. } => {
                 if title.is_some() {
                     context.report(Feature::LinkTitle, node.range);
@@ -437,7 +457,7 @@ fn text(form: &MarkdownForm, value: &str, literal: bool, live: bool) -> String {
     let mut out = String::with_capacity(value.len() + value.len() / 4 + 2);
     for (index, line) in value.split('\n').enumerate() {
         if index > 0 {
-            out.push('\n');
+            out.push_str(form.line_break);
         }
         if literal {
             escape(&mut out, line, form.escaped);

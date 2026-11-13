@@ -32,6 +32,7 @@ pub enum When {
     Thread,
     Code,
     Post,
+    BlankLines,
 }
 
 impl When {
@@ -59,6 +60,7 @@ impl When {
             When::Thread => "thread",
             When::Code => "code",
             When::Post => "post",
+            When::BlankLines => "blank_lines",
         }
     }
 }
@@ -247,6 +249,26 @@ impl EntityForm {
     }
 }
 
+const RICH_BLOCKS: [&str; 17] = [
+    "p",
+    "pre",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "table",
+    "tr",
+    "hr",
+    "img",
+    "video",
+    "audio",
+    "figure",
+    "figcaption",
+    "tg-collage",
+    "tg-slideshow",
+    "tg-math-block",
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HtmlBlocks {
     Message,
@@ -315,6 +337,7 @@ pub struct MarkdownForm {
     pub separators: &'static str,
     pub quote_depth: Option<u32>,
     pub url_labels: bool,
+    pub line_break: &'static str,
 }
 
 impl MarkdownForm {
@@ -340,7 +363,7 @@ impl MarkdownForm {
             out,
             "  delimiters {delimiters}\n  native {}\n  escaped {}\n  owned {}\n  neutralised {neutralised}\n  html {}\n  \
              datetime {}\n  time_format {}\n  time_formats {}\n  separators {}\n  quote_depth {quote_depth}\n  \
-             url_labels {}",
+             url_labels {}\n  line_break {}",
             join(self.native.iter().map(|feature| feature.name())),
             quoted(self.escaped),
             self.owned,
@@ -350,6 +373,7 @@ impl MarkdownForm {
             describe_time_formats(self.time_formats),
             quoted(self.separators),
             self.url_labels,
+            quoted(self.line_break),
         );
     }
 }
@@ -583,30 +607,44 @@ impl Form {
     }
 
     pub fn visible(self, text: &str) -> Cow<'_, str> {
-        if self.html().is_none() {
+        let Some(form) = self.html() else {
             return Cow::Borrowed(text);
-        }
+        };
+        let rich = form.blocks == HtmlBlocks::Rich;
         let mut out = String::with_capacity(text.len());
+        let mut boundary = false;
+        let push = |out: &mut String, text: &str, boundary: &mut bool| {
+            if text.is_empty() {
+                return;
+            }
+            if std::mem::take(boundary) && !out.is_empty() && !out.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(text);
+        };
         let mut rest = text;
         while let Some(at) = rest.find(['<', '&']) {
-            out.push_str(&rest[..at]);
+            push(&mut out, &rest[..at], &mut boundary);
             rest = &rest[at..];
             if rest.starts_with('<') {
                 let end = rest.find('>').map_or(rest.len(), |end| end + 1);
+                let name = rest[1..end].trim_start_matches('/').split([' ', '/', '>']).next().unwrap_or("");
                 if &rest[..end] == "<br>" {
-                    out.push('\n');
+                    push(&mut out, "\n", &mut boundary);
+                } else if rich && RICH_BLOCKS.contains(&name) {
+                    boundary = true;
                 }
                 rest = &rest[end..];
             } else {
-                let (decoded, length) = [("&lt;", '<'), ("&gt;", '>'), ("&quot;", '"'), ("&amp;", '&')]
+                let (decoded, length) = [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&amp;", "&")]
                     .into_iter()
                     .find(|(entity, _)| rest.starts_with(entity))
-                    .map_or(('&', 1), |(entity, char)| (char, entity.len()));
-                out.push(decoded);
+                    .map_or(("&", 1), |(entity, char)| (char, entity.len()));
+                push(&mut out, decoded, &mut boundary);
                 rest = &rest[length..];
             }
         }
-        out.push_str(rest);
+        push(&mut out, rest, &mut boundary);
         Cow::Owned(out)
     }
 }

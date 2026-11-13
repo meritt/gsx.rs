@@ -370,7 +370,8 @@ export type When =
   | 'refused'
   | 'thread'
   | 'code'
-  | 'post';
+  | 'post'
+  | 'blank_lines';
 
 /** A feature's default outcome and the conditional outcomes that replace it. */
 export interface Rule {

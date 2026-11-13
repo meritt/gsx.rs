@@ -415,7 +415,8 @@
                         "refused",
                         "thread",
                         "code",
-                        "post"
+                        "post",
+                        "blank_lines"
                       ]
                     },
                     "class": { "$ref": "#/$defs/changeClass" },

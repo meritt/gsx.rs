@@ -78,7 +78,7 @@ import Testing
     let facts = GSX.Facts(media: .image, mediaCount: 1, items: [gif])
     let blocks = try GSX.project("a\n\n::media{id=\"p\"}", target: "discord-blocks", facts: facts, media: [GSX.Media(id: "p")])
     let laid = try #require(blocks.blocks)
-    #expect(laid.first == .text("a\n\n"))
+    #expect(laid.first == .text("a"))
     guard case .media(let items, let layout) = laid.last else { Issue.record("no media block in \(laid)"); return }
     #expect(items.map(\.reference) == ["media:p"] && items.first?.spoiler == true && layout == nil)
     let audio = GSX.Facts(media: .audio, mediaCount: 1, items: [GSX.MediaFact(id: "s", format: .audio, inline: true)])

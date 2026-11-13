@@ -160,7 +160,8 @@ fn lists_target_capabilities_from_the_rule_table() {
         concat!(
             r#"{"feature":"text","class":"approximated","reason":"text_truncated","conditions":["#,
             r#"{"when":"empty","class":"blocked","reason":"text_empty"},"#,
-            r#"{"when":"overflow","class":"blocked","reason":"text_too_long"}]}],"#,
+            r#"{"when":"overflow","class":"blocked","reason":"text_too_long"},"#,
+            r#"{"when":"blank_lines","class":"approximated","reason":"blank_lines_collapsed"}]}],"#,
             r#""media":{"formats":["image","gif","video","audio"],"alt":["image","gif","video","audio"],"#,
             r#""spoiler":{"mode":"carried","formats":["image","gif","video"]},"inline":false,"groups":[]}},"#,
             r#"{"name":"telegram-html-rich""#,

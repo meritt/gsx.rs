@@ -62,6 +62,37 @@ pub struct Written {
     pub origins: Vec<(Span<usize>, Range)>,
 }
 
+impl Written {
+    pub fn trim_lines(&mut self) -> Span<usize> {
+        let kept = lines(&self.text);
+        if kept.len() == self.text.len() {
+            return kept;
+        }
+        self.text.truncate(kept.end);
+        self.text.replace_range(..kept.start, "");
+        let clamp = |span: &mut Span<usize>| {
+            *span =
+                span.start.clamp(kept.start, kept.end) - kept.start..span.end.clamp(kept.start, kept.end) - kept.start;
+            span.start < span.end
+        };
+        self.links.retain_mut(|span| clamp(span));
+        self.styled.retain_mut(|styled| clamp(&mut styled.span));
+        self.prefixes.retain_mut(|span| clamp(span));
+        self.eligible.retain_mut(|span| clamp(span));
+        self.suffix = self.suffix.take().and_then(|mut span| clamp(&mut span).then_some(span));
+        self.origins.retain_mut(|(span, _)| clamp(span));
+        kept
+    }
+}
+
+pub fn lines(text: &str) -> Span<usize> {
+    let content = text.len() - text.trim_start_matches(blank).len();
+    let start = text[..content].rfind('\n').map_or(0, |at| at + 1);
+    let end = text.trim_end_matches(blank).len();
+    let end = if text[end..].contains('\n') { end } else { text.len() };
+    start..end.max(start)
+}
+
 #[derive(Debug)]
 pub struct Writer {
     out: Written,

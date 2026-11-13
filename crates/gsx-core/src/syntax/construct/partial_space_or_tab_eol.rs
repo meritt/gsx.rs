@@ -93,7 +93,6 @@ pub fn after_eol(tokenizer: &mut Tokenizer) -> State {
 }
 
 pub fn after_more(tokenizer: &mut Tokenizer) -> State {
-    debug_assert!(!matches!(tokenizer.current, None | Some(b'\n')), "did not expect blank line");
     tokenizer.tokenize_state.space_or_tab_eol_content = None;
     tokenizer.tokenize_state.space_or_tab_eol_connect = false;
     tokenizer.tokenize_state.space_or_tab_eol_ok = false;

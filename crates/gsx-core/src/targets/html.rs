@@ -189,9 +189,10 @@ pub static TELEGRAM_RICH: Target = Target {
     )
 };
 
-const RICH_TEXT_CONDITIONS: [Condition; 4] = [
+const RICH_TEXT_CONDITIONS: [Condition; 5] = [
     TEXT.conditions[0],
     TEXT.conditions[1],
+    TEXT.conditions[2],
     Condition { when: When::Blocks, class: Blocked, reason: "block_limit_exceeded" },
     Condition { when: When::Depth, class: Blocked, reason: "nesting_limit_exceeded" },
 ];

@@ -6,7 +6,7 @@ use crate::project::{CELL, Class, Context, Feature, QUOTE, RULE, Renderer, Style
 pub const RENDERER: Renderer = Renderer { blocks, inline };
 
 pub fn blocks(context: &mut Context, nodes: &[Node]) {
-    let mut first = true;
+    let mut after = None;
     for node in nodes {
         if media(node) {
             context.report_media(node);
@@ -15,10 +15,10 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
         if context.done() {
             continue;
         }
-        if !first {
-            context.writer().newlines(node.gap_before.unwrap_or(1));
+        if after.is_some() {
+            context.break_before(after, node);
         }
-        first = false;
+        after = Some(node.range.end);
         block(context, node);
     }
 }
@@ -92,7 +92,8 @@ fn block(context: &mut Context, node: &Node) {
                     break;
                 }
                 if index > 0 {
-                    context.writer().push("\n");
+                    let after = Some(node.children[index - 1].range.end);
+                    context.break_before(after, item);
                 }
                 let checked = match item.kind {
                     Kind::ListItem { checked, .. } => checked,

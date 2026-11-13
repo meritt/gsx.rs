@@ -86,3 +86,60 @@ fn emitted_changes_are_declared_by_the_table() {
         }
     }
 }
+
+const CLOSED: [&str; 10] =
+    ["p", "ul", "ol", "blockquote", "pre", "table", "figure", "tg-slideshow", "tg-collage", "details"];
+const OPENED: [&str; 14] = [
+    "p",
+    "ul",
+    "ol",
+    "blockquote",
+    "pre",
+    "table",
+    "figure",
+    "tg-slideshow",
+    "tg-collage",
+    "details",
+    "img",
+    "video",
+    "audio",
+    "hr",
+];
+
+fn breaks_between_blocks(html: &str) -> Option<String> {
+    let closed = CLOSED.iter().map(|tag| format!("</{tag}><br>"));
+    let opened = OPENED.iter().map(|tag| format!("<br><{tag}"));
+    let edges = ["/><br>", "<p><br>", "<br></p>", "<p></p>"].map(str::to_owned);
+    closed.chain(opened).chain(edges).find(|pattern| html.contains(pattern.as_str()))
+}
+
+#[test]
+fn no_line_break_stands_between_blocks_or_at_a_field_edge() {
+    let documents = documents();
+    for target in TARGETS {
+        for (id, document) in &documents {
+            let projection = project(document, target, &Facts::default());
+            for field in &projection.fields {
+                let text = &field.text;
+                assert!(
+                    !text.starts_with(['\n', '\r']) && !text.trim_end_matches([' ', '\t']).ends_with(['\n', '\r']),
+                    "{} {id} {:?} starts or ends with a line break: {text:?}",
+                    target.name,
+                    field.name
+                );
+                if target.form.html().is_some_and(|form| form.blocks == HtmlBlocks::Rich) {
+                    assert_eq!(breaks_between_blocks(text), None, "{} {id}: {text}", target.name);
+                }
+            }
+            for block in &projection.blocks {
+                if let gsx_core::project::Block::Text(text) = block {
+                    assert!(
+                        !text.starts_with('\n') && !text.ends_with('\n') && !text.trim().is_empty(),
+                        "{} {id} text block {text:?}",
+                        target.name
+                    );
+                }
+            }
+        }
+    }
+}

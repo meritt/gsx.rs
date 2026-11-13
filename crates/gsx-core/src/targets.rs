@@ -18,12 +18,14 @@ const TEXT: Rule = Rule {
     conditions: &[
         Condition { when: When::Empty, class: Blocked, reason: "text_empty" },
         Condition { when: When::Overflow, class: Blocked, reason: "text_too_long" },
+        Condition { when: When::BlankLines, class: Approximated, reason: "blank_lines_collapsed" },
     ],
 };
 const THREADED_TEXT: Rule = Rule {
     conditions: &[
         TEXT.conditions[0],
         TEXT.conditions[1],
+        TEXT.conditions[2],
         Condition { when: When::Thread, class: Approximated, reason: "text_threaded" },
     ],
     ..TEXT

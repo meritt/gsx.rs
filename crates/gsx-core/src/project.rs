@@ -150,6 +150,24 @@ impl<'a> Context<'a> {
         self.alts.push((item, alt));
     }
 
+    pub fn gap(&mut self, after: Option<u32>, node: &Node, gap: u32) -> u32 {
+        let collapses = self.target.handles(Feature::Text)
+            && self.target.rule(Feature::Text).conditions.iter().any(|condition| condition.when == When::BlankLines);
+        if !collapses || gap <= 2 {
+            return gap;
+        }
+        if let Some(start) = after {
+            let range = Range { start, end: node.range.start.max(start) };
+            self.report_when(Feature::Text, Some(range), Some(When::BlankLines));
+        }
+        2
+    }
+
+    pub fn break_before(&mut self, after: Option<u32>, node: &Node) {
+        let gap = self.gap(after, node, node.gap_before.unwrap_or(1));
+        self.writer.newlines(gap);
+    }
+
     pub fn anchor(&mut self, node: Option<&Node>) {
         self.anchors.push(Anchor { at: self.writer.mark(), node: node.map(|node| node.range), cut: self.done });
     }
@@ -400,6 +418,10 @@ fn render(
     };
     draw(&mut context);
     let mut written = std::mem::replace(&mut context.writer, Writer::new(Escape::None)).finish();
+    let kept = written.trim_lines();
+    for anchor in &mut context.anchors {
+        anchor.at = anchor.at.clamp(kept.start, kept.end) - kept.start;
+    }
     for &range in &written.replaced {
         context.report(Feature::AngleBrackets, range);
     }

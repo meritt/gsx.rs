@@ -53,6 +53,7 @@ pub(super) static DISCORD_FORM: MarkdownForm = MarkdownForm {
     separators: "",
     quote_depth: Some(1),
     url_labels: false,
+    line_break: "\n",
 };
 
 pub(super) const DISCORD_RULES: Rules = Rules {
@@ -106,6 +107,7 @@ pub(super) static SLACK_FORM: MarkdownForm = MarkdownForm {
     separators: "^|\n",
     quote_depth: None,
     url_labels: true,
+    line_break: "  \n",
 };
 
 pub(super) const SLACK_RULES: Rules =

@@ -165,7 +165,7 @@ impl Html {
     }
 
     fn blocks(&mut self, context: &mut Context, nodes: &[Node]) {
-        let mut first = true;
+        let mut after = None;
         for node in nodes {
             if media(node) {
                 context.report_media(node);
@@ -174,10 +174,10 @@ impl Html {
             if context.done() {
                 continue;
             }
-            if !first {
-                context.writer().newlines(node.gap_before.unwrap_or(1));
+            if after.is_some() {
+                context.break_before(after, node);
             }
-            first = false;
+            after = Some(node.range.end);
             self.block(context, node);
         }
     }
@@ -208,7 +208,7 @@ impl Html {
                         break;
                     }
                     if index > 0 {
-                        context.writer().push("\n");
+                        context.break_before(Some(node.children[index - 1].range.end), item);
                     }
                     let checked = match item.kind {
                         Kind::ListItem { checked, .. } => checked,
@@ -557,10 +557,7 @@ impl Html {
             }
             context.report_when(Feature::Media, Some(node.range), Some(When::Group));
         }
-        for (position, &index) in indices.iter().enumerate() {
-            if position > 0 {
-                context.writer().raw("<br>");
-            }
+        for &index in indices {
             self.single(context, index, Some(node.range), level);
         }
     }
@@ -589,7 +586,7 @@ impl Html {
             for (index, (item, alt)) in figure.alts.iter().enumerate() {
                 let Some(alt) = alt.as_deref().filter(|alt| !alt.trim().is_empty()) else { continue };
                 let prefix = if figure.group { format!("{}. ", index + 1) } else { String::new() };
-                let separator = if entries.is_empty() { "" } else { "\n" };
+                let separator = "\n";
                 let overhead = cost(&format!("{separator}{prefix}"));
                 let room = remaining.saturating_sub(overhead);
                 let value = cost(alt);
@@ -643,7 +640,7 @@ impl Html {
 
     fn rich(&mut self, context: &mut Context, nodes: &[Node], level: usize) {
         let mut first = true;
-        let mut paragraph = false;
+        let mut after = None;
         let mut carry = 0;
         if level == 1 {
             let placed_ids = references(nodes);
@@ -651,13 +648,9 @@ impl Html {
                 .filter(|&index| !placed_ids.contains_key(self.media[index].id.as_str()))
                 .collect();
             for index in unplaced {
-                if !first {
-                    context.writer().raw("<br>");
-                }
                 first = false;
                 self.single(context, index, None, level);
             }
-            carry = u32::from(!first);
         }
         for node in nodes {
             let ids = placed(node);
@@ -665,61 +658,67 @@ impl Html {
                 continue;
             }
             let gap = carry.max(node.gap_before.unwrap_or(1));
-            if let Some(ids) = ids {
-                let indices = self.resolve(context, node, &ids);
-                if indices.is_empty() {
-                    carry = gap;
-                    continue;
-                }
-                if paragraph {
-                    context.writer().raw("</p>");
-                    paragraph = false;
-                }
-                if !first {
-                    (0..gap).for_each(|_| context.writer().raw("<br>"));
-                }
-                first = false;
-                carry = 0;
+            let indices = ids.map(|ids| self.resolve(context, node, &ids));
+            if indices.as_ref().is_some_and(Vec::is_empty) {
+                carry = gap;
+                continue;
+            }
+            if !first {
+                context.gap(after, node, gap);
+            }
+            first = false;
+            carry = 0;
+            after = Some(node.range.end);
+            if let Some(indices) = indices {
                 if context.done() {
                     context.report_when(Feature::Media, Some(node.range), Some(When::Cut));
                 }
                 self.place(context, node, &indices, level);
-                continue;
-            }
-            let gap = if first { 0 } else { gap };
-            first = false;
-            carry = 0;
-            let prose = matches!(node.kind, Kind::Paragraph | Kind::Heading { .. });
-            if paragraph && !prose {
-                context.writer().raw("</p>");
-                paragraph = false;
-            }
-            for _ in 0..gap {
-                context.writer().raw("<br>");
-            }
-            if prose {
-                let heading = matches!(node.kind, Kind::Heading { .. });
-                let decorated = self.form.tag(Feature::Underline).is_some();
-                let depth = level + usize::from(heading) + formatting(&node.children, decorated);
-                if paragraph {
-                    self.deepen(context, node.range, depth);
-                } else {
-                    self.count(context, node.range, depth);
-                    context.writer().raw("<p>");
-                    paragraph = true;
-                }
-                if heading {
-                    context.report(Feature::Heading, node.range);
-                    self.heading(context, node);
-                } else {
-                    self.inline(context, &node.children);
-                }
-            } else {
+            } else if matches!(
+                node.kind,
+                Kind::ThematicBreak | Kind::Blockquote | Kind::Code { .. } | Kind::List { .. } | Kind::Table { .. }
+            ) {
                 self.rich_block(context, node, level);
+            } else {
+                self.paragraph(context, node, level);
             }
         }
-        if paragraph {
-            context.writer().raw("</p>");
+    }
+
+    fn paragraph(&mut self, context: &mut Context, node: &Node, level: usize) {
+        let heading = matches!(node.kind, Kind::Heading { .. });
+        let children = match node.kind {
+            Kind::Paragraph | Kind::Heading { .. } => &node.children[..],
+            _ => std::slice::from_ref(node),
+        };
+        let decorated = self.form.tag(Feature::Underline).is_some();
+        let depth = level + usize::from(heading) + formatting(children, decorated);
+        let start = context.writer().mark();
+        context.writer().raw("<p>");
+        if heading {
+            context.report(Feature::Heading, node.range);
+            self.heading(context, node);
+        } else {
+            self.inline(context, children);
+        }
+        context.writer().raw("</p>");
+        let form = context.target.form;
+        let written = context.writer().since(start);
+        let inner = &written["<p>".len()..written.len() - "</p>".len()];
+        let empty = form.visible(inner).trim_matches(blank).is_empty();
+        let lead = inner.len() - inner.trim_start_matches("<br>").len();
+        let trail = inner.len() - inner.trim_end_matches("<br>").len();
+        if empty {
+            return context.writer().edit(|text| text.truncate(start));
+        }
+        self.count(context, node.range, depth);
+        if lead + trail > 0 {
+            let body = start + "<p>".len();
+            context.writer().edit(|text| {
+                let end = text.len() - "</p>".len();
+                text.replace_range(end - trail..end, "");
+                text.replace_range(body..body + lead, "");
+            });
         }
     }
 
@@ -810,12 +809,7 @@ impl Html {
                 }
                 context.writer().raw("</table>");
             }
-            _ => {
-                self.count(context, node.range, level);
-                context.writer().verbatim(true);
-                self.inline(context, std::slice::from_ref(node));
-                context.writer().verbatim(false);
-            }
+            _ => {}
         }
     }
 }

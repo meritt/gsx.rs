@@ -63,11 +63,11 @@ fn slack_datetime_label_with_a_line_break_falls_back_to_text() {
     let cases = [
         (
             "Meeting ::time[today\n\\`\\`\\`]{unix=\"1794139200\"} **below**\n\n- first",
-            "Meeting today\n\\`\\`\\` **below**\n\n- first",
+            "Meeting today  \n\\`\\`\\` **below**\n\n- first",
         ),
-        ("::time[today\n\\- free pizza]{unix=\"1794139200\"} ok", "today\n\\- free pizza ok"),
-        ("::time[a\\\nb]{unix=\"1794139200\"}", "a\nb"),
-        ("::time[a\r\n\\+ b]{unix=\"1794139200\"}", "a\n\\+ b"),
+        ("::time[today\n\\- free pizza]{unix=\"1794139200\"} ok", "today  \n\\- free pizza ok"),
+        ("::time[a\\\nb]{unix=\"1794139200\"}", "a  \nb"),
+        ("::time[a\r\n\\+ b]{unix=\"1794139200\"}", "a  \n\\+ b"),
     ];
     for name in ["slack-markdown", "slack-blocks"] {
         for (markdown, expected) in cases {
@@ -92,7 +92,7 @@ fn code_info_loss_is_reported() {
 #[test]
 fn line_starts_are_neutralised() {
     assert_eq!(text(&run("discord-markdown", "\\# a\n1\\. b\n\\#")), "\\# a\n1\\. b\n\\#");
-    assert_eq!(text(&run("slack-markdown", "a\\\n\\=\\=")), "a\n\\==");
+    assert_eq!(text(&run("slack-markdown", "a\\\n\\=\\=")), "a  \n\\==");
 }
 
 #[test]

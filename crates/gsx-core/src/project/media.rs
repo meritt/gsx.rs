@@ -5,6 +5,7 @@ use crate::measure::{self, Fact, MediaKind, Placement};
 
 use super::change::{Change, Feature, FieldName, Slot, Truncated};
 use super::facts::{Facts, Format, MediaFact};
+use super::layout::{blank, lines};
 use super::table::{BlocksForm, Spoilers, Target, Unplaced, When};
 use super::{Measurement, shortened};
 
@@ -231,7 +232,8 @@ impl Layouter {
     }
 
     fn text(&mut self, text: &str) {
-        if !text.is_empty() {
+        let text = &text[lines(text)];
+        if !text.trim_matches(blank).is_empty() {
             self.laid.blocks.push(Block::Text(text.to_owned()));
         }
     }
