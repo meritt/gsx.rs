@@ -247,6 +247,18 @@ fn check(input: &str, target: &Target, projection: &Projection) -> Result<(), Te
             );
         }
         prop_assert!(part.fields.iter().all(|field| !field.text.is_empty()), "{name} has an empty part");
+        prop_assert!(
+            part.range.start <= part.range.end && part.range.end <= units,
+            "{name} part range {:?} outside the input",
+            part.range
+        );
+    }
+    for (index, pair) in projection.parts.windows(2).enumerate() {
+        prop_assert!(pair[0].range.start <= pair[1].range.start, "{name} part {index} ranges run backwards");
+        prop_assert!(pair[0].boundary.is_some(), "{name} part {index} has no boundary before the next part");
+    }
+    if let Some(last) = projection.parts.last() {
+        prop_assert!(last.boundary.is_none(), "{name} last part has a boundary");
     }
     for field in &projection.fields {
         let utf16 = boundaries(&field.text);

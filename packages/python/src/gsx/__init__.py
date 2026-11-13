@@ -379,6 +379,8 @@ class Part:
     measurements: List[Measurement]
     media: List[str]
     items: List[Attachment]
+    range: Range
+    boundary: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -570,6 +572,8 @@ def _part(part: dict) -> Part:
         _measurements(part["measurements"]),
         part["media"],
         [Attachment(**item) for item in part["items"]],
+        Range(*part["range"]),
+        part["boundary"],
     )
 
 

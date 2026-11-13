@@ -5,12 +5,15 @@ use crate::measure::clusters;
 use super::change::Feature;
 use super::layout::Styled;
 use super::table::When;
-use super::{Fitted, Rendered, Request, appended, within};
+use super::{Boundary, Fitted, Rendered, Request, appended, within};
 
 pub(super) struct Thread {
     pub parts: Vec<Fitted>,
     pub spans: Vec<Span<usize>>,
+    pub boundaries: Vec<Option<Boundary>>,
 }
+
+const COARSER: [Boundary; 2] = [Boundary::Paragraph, Boundary::Sentence];
 
 pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) -> Option<Thread> {
     let limits = request.limits();
@@ -30,24 +33,29 @@ pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) ->
     guarded.extend(full.styled.iter().filter(|styled| styled.value.is_some()).map(|styled| styled.span.clone()));
     let classes = breaks(&full.text, &guarded);
     let mut spans = vec![];
+    let mut boundaries = vec![];
     let mut start = 0;
     while start < length {
         let first = spans.is_empty();
         let fits = |end: usize| probe(start..end, first);
         let words = &classes[2][classes[2].partition_point(|&(end, _)| end <= start)..];
         let coarser = |(furthest, _): (usize, usize)| {
-            classes[..2].iter().find_map(|class| {
+            classes[..2].iter().zip(COARSER).find_map(|(class, boundary)| {
                 let from = class.partition_point(|&(end, _)| end <= start);
                 let upto = class.partition_point(|&(end, _)| end <= furthest);
-                (upto > from).then(|| class[upto - 1])
+                (upto > from).then(|| (class[upto - 1], boundary))
             })
         };
-        let (end, next) = match last_fitting(words.len(), |index| fits(words[index].0)) {
-            Some(last) if last + 1 == words.len() && fits(length) => (length, length),
-            Some(last) => coarser(words[last]).unwrap_or(words[last]),
-            None => grapheme(&full.text, start, fits)?,
+        let ((end, next), boundary) = match last_fitting(words.len(), |index| fits(words[index].0)) {
+            Some(last) if last + 1 == words.len() && fits(length) => ((length, length), None),
+            Some(last) => {
+                let (found, boundary) = coarser(words[last]).unwrap_or((words[last], Boundary::Word));
+                (found, Some(boundary))
+            }
+            None => (grapheme(&full.text, start, fits)?, Some(Boundary::Grapheme)),
         };
         spans.push(start..end);
+        boundaries.push(if next < length { boundary } else { None });
         start = next;
     }
     if spans.is_empty() {
@@ -66,7 +74,7 @@ pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) ->
     first.changes.clone_from(&full.changes);
     first.alts.clone_from(&full.alts);
     first.changes.push(request.change(Feature::Text, None, Some(When::Thread)));
-    Some(Thread { parts, spans })
+    Some(Thread { parts, spans, boundaries })
 }
 
 fn last_fitting(count: usize, fits: impl Fn(usize) -> bool) -> Option<usize> {

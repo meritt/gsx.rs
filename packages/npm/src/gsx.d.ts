@@ -279,6 +279,10 @@ export interface Part {
   measurements: Measurement[];
   media: string[];
   items: Attachment[];
+  /** UTF-16 range of the part's source in the original input; exact where the rendered text matches its source, otherwise covering and possibly overlapping a neighbor. */
+  range: Range;
+  /** Where the split after this part falls; null on the last part. */
+  boundary: 'paragraph' | 'sentence' | 'word' | 'grapheme' | null;
 }
 
 export interface Attachment {

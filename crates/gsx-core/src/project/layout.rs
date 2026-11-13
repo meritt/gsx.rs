@@ -58,6 +58,7 @@ pub struct Written {
     pub prefixes: Vec<Span<usize>>,
     pub eligible: Vec<Span<usize>>,
     pub suffix: Option<Span<usize>>,
+    pub origins: Vec<(Span<usize>, Range)>,
 }
 
 #[derive(Debug)]
@@ -178,6 +179,7 @@ impl Writer {
         self.out.prefixes.clear();
         self.out.eligible.clear();
         self.out.suffix = None;
+        self.out.origins.clear();
     }
 
     pub fn newlines(&mut self, count: u32) {
@@ -244,6 +246,13 @@ impl Writer {
     pub fn decorate(&mut self, style: Style, mark: usize) {
         let span = mark..self.out.text.len();
         self.out.styled.push(Styled { style, value: None, span, source: None, decoration: true });
+    }
+
+    pub fn origin(&mut self, start: usize, range: Range) {
+        let end = self.out.text.len();
+        if end > start {
+            self.out.origins.push((start..end, range));
+        }
     }
 
     pub fn eligible(&mut self, span: Span<usize>) {

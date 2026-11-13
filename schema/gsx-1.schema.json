@@ -77,9 +77,17 @@
         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
         "measurements": { "type": "array", "items": { "$ref": "#/$defs/measurement" } },
         "media": { "type": "array", "items": { "type": "string" } },
-        "items": { "type": "array", "items": { "$ref": "#/$defs/attachment" } }
+        "items": { "type": "array", "items": { "$ref": "#/$defs/attachment" } },
+        "range": {
+          "description": "Source text of the part as UTF-16 offsets in the original input. Exact where the rendered text matches its source; otherwise it covers the part and may overlap a neighbor.",
+          "$ref": "#/$defs/range"
+        },
+        "boundary": {
+          "description": "Where the split after this part falls; null on the last part.",
+          "enum": ["paragraph", "sentence", "word", "grapheme", null]
+        }
       },
-      "required": ["fields", "measurements", "media", "items"],
+      "required": ["fields", "measurements", "media", "items", "range", "boundary"],
       "additionalProperties": false
     },
     "attachment": {

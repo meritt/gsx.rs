@@ -69,15 +69,17 @@ fn detected(written: &Written, out: &mut Vec<Styled>) {
     }
 }
 
-fn trim(text: &mut String, styled: &mut Vec<Styled>) {
+fn trim(text: &mut String, styled: &mut Vec<Styled>, origins: &mut Vec<(Span<usize>, Range)>) {
     let lead = text.len() - text.trim_start_matches(blank).len();
     let end = text.trim_end_matches(blank).len().max(lead);
     text.truncate(end);
     text.replace_range(..lead, "");
-    styled.retain_mut(|entity| {
-        entity.span = entity.span.start.clamp(lead, end) - lead..entity.span.end.clamp(lead, end) - lead;
-        !entity.span.is_empty()
-    });
+    let clamp = |span: &mut Span<usize>| {
+        *span = span.start.clamp(lead, end) - lead..span.end.clamp(lead, end) - lead;
+        span.start < span.end
+    };
+    styled.retain_mut(|entity| clamp(&mut entity.span));
+    origins.retain_mut(|(span, _)| clamp(span));
 }
 
 fn code(style: Style) -> bool {
@@ -122,7 +124,7 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
         Detection::Bluesky => detected(written, &mut styled),
     }
     if form.trim {
-        trim(&mut written.text, &mut styled);
+        trim(&mut written.text, &mut styled, &mut written.origins);
         tighten(&written.text, &mut styled);
     }
     styled.sort_by_key(|entity| (entity.span.start, std::cmp::Reverse(entity.span.end)));

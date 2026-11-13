@@ -61,7 +61,7 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
     if !parts.is_empty() {
         out.raw(",\"parts\":");
         out.list(&parts, |out, part| {
-            let Part { fields, measurements, media, items } = part;
+            let Part { fields, measurements, media, items, range, boundary } = part;
             out.raw("{\"fields\":");
             out.list(fields, Out::field);
             out.raw(",\"measurements\":");
@@ -70,6 +70,13 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
             out.list(media, |out, id| out.string(id));
             out.raw(",\"items\":");
             out.list(items, Out::attachment);
+            out.raw(",\"range\":");
+            out.range(*range);
+            out.raw(",\"boundary\":");
+            match boundary {
+                Some(boundary) => out.string(boundary.name()),
+                None => out.raw("null"),
+            }
             out.0.push('}');
         });
     }

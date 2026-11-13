@@ -58,6 +58,21 @@ import Testing
     #expect(throws: ParseError.self) { try GSX.project("a\u{0}b", target: "x-plain") }
 }
 
+@Test func locatesThreadPartsInTheSource() throws {
+    let paragraph = "Ёжик в тумане 👩🏽‍💻 идёт по лесу и считает шаги до самого конца тропинки, не торопясь."
+    let markdown = Array(repeating: paragraph, count: 8).joined(separator: "\n\n")
+    let projection = try GSX.project(markdown, target: "x-plain", facts: Facts(overflow: .thread))
+    let parts = try #require(projection.parts)
+    #expect(parts.count > 1)
+    let units = Array(markdown.utf16)
+    for part in parts {
+        let source = String(decoding: units[part.range], as: UTF16.self)
+        #expect(source == part.fields.first?.text)
+    }
+    #expect(parts.dropLast().allSatisfy { $0.boundary == .paragraph })
+    #expect(parts.last?.boundary == nil)
+}
+
 @Test func laysOutBlocksWithMediaFacts() throws {
     let gif = MediaFact(id: "p", format: .gif, alt: "A cat", spoiler: true, inline: true)
     let facts = Facts(media: .image, mediaCount: 1, items: [gif])

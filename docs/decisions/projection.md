@@ -143,4 +143,6 @@ for (const part of projection.parts ?? [projection]) {
 }
 ```
 
-`parts` holds each post's fields, measurements, media and items. Top-level output repeats the first part. Rendering changes appear once; the split adds `text_threaded`.
+`parts` holds each post's fields, measurements, media, items, `range` and `boundary`. Top-level output repeats the first part. Rendering changes appear once; the split adds `text_threaded`.
+
+A part's `range` locates its source as UTF-16 offsets in the original input, so an editor can mark each cut where the author wrote it; output offsets alone cannot be mapped back without repeating the renderer. Rendering records the source range of every text leaf it writes. Inside a leaf whose rendered text equals its source, the range is exact; elsewhere, including escapes, entities, normalization and generated text such as list markers, it widens to the enclosing leaves, so it always covers the part and may overlap a neighbor. `boundary` names the rule that ended the part — `paragraph`, `sentence`, `word` or `grapheme` — and is null on the last part; a grapheme boundary means no whitespace break fit, which a client may present differently from a natural break.

@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use gsx_core::document::{Document, parse};
 use gsx_core::project::{
-    Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Placement, Projection, Style,
-    Target, Unit, project, project_with,
+    Boundary, Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Placement, Projection,
+    Style, Target, Unit, project, project_with,
 };
 use gsx_core::targets::{TARGETS, target};
 
@@ -327,6 +327,61 @@ fn threads_caps_spoiler_ranges() {
     let capped: Vec<_> = projection.changes.iter().filter(|change| change.reason == "spoiler_limit").collect();
     assert_eq!(capped.len(), 2);
     assert!(capped.iter().all(|change| change.class == Class::Unwrapped && change.feature == Feature::Spoiler));
+}
+
+fn thread(name: &str, markdown: &str) -> Projection {
+    run(name, markdown, &Facts { overflow: Overflow::Thread, ..Facts::default() })
+}
+
+fn source(markdown: &str, range: gsx_core::document::Range) -> String {
+    let units: Vec<u16> = markdown.encode_utf16().collect();
+    String::from_utf16(&units[range.start as usize..range.end as usize]).unwrap()
+}
+
+fn boundaries(projection: &Projection) -> Vec<Option<Boundary>> {
+    projection.parts.iter().map(|part| part.boundary).collect()
+}
+
+#[test]
+fn thread_parts_locate_their_source() {
+    let paragraph = "Ёжик в тумане 👩🏽‍💻 идёт по лесу и считает шаги до самого конца тропинки, не торопясь.";
+    let cases = [
+        ([paragraph; 8].join("\n\n"), Boundary::Paragraph),
+        (["Каждое предложение здесь достаточно длинное."; 14].join(" "), Boundary::Sentence),
+        (["слово"; 120].join(" "), Boundary::Word),
+    ];
+    for name in ["x-plain", "mastodon-plain", "bluesky-entities", "threads-entities"] {
+        for (markdown, inner) in &cases {
+            let projection = thread(name, markdown);
+            assert!(projection.parts.len() > 1, "{name} did not split");
+            for part in &projection.parts {
+                assert_eq!(source(markdown, part.range), part.fields[0].text, "{name} {inner:?}");
+            }
+            let mut expected = vec![Some(*inner); projection.parts.len() - 1];
+            expected.push(None);
+            assert_eq!(boundaries(&projection), expected, "{name}");
+        }
+    }
+}
+
+#[test]
+fn thread_parts_cut_a_long_word_by_graphemes() {
+    let markdown = "x".repeat(700);
+    let projection = thread("x-plain", &markdown);
+    let ranges: Vec<_> = projection.parts.iter().map(|part| (part.range.start, part.range.end)).collect();
+    assert_eq!(ranges, [(0, 280), (280, 560), (560, 700)]);
+    assert_eq!(boundaries(&projection), [Some(Boundary::Grapheme), Some(Boundary::Grapheme), None]);
+}
+
+#[test]
+fn thread_parts_cover_text_rendered_differently_from_its_source() {
+    let markdown = [r"Звёздочка \* и решётка \# стоят в середине довольно длинного предложения без точки"; 6].join(" ");
+    let projection = thread("x-plain", &markdown);
+    assert!(projection.parts.len() > 1);
+    for part in &projection.parts {
+        let covered = source(&markdown, part.range).replace('\\', "");
+        assert!(covered.contains(&part.fields[0].text), "{covered:?} misses {:?}", part.fields[0].text);
+    }
 }
 
 #[test]

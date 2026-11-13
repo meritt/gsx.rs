@@ -139,6 +139,14 @@ public struct Part: Sendable, Hashable, Decodable {
     public let measurements: [Measurement]
     public let media: [String]
     public let items: [Attachment]
+    /// UTF-16 range of the part's source in the original input; exact where the rendered text matches its source, otherwise covering and possibly overlapping a neighbor.
+    public let range: Range<Int>
+    /// Where the split after this part falls; nil on the last part.
+    public let boundary: Boundary?
+}
+
+public enum Boundary: String, Sendable, Hashable, Decodable {
+    case paragraph, sentence, word, grapheme
 }
 
 public struct Attachment: Sendable, Hashable, Decodable {
