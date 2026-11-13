@@ -98,6 +98,7 @@ The [API changelog](https://dev.max.ru/docs-api/changelog-api/) dates the docume
 | --- | --- | --- |
 | Weighted length, URL weight, emoji weight, NFC | [Counting characters](https://docs.x.com/fundamentals/counting-characters) | Confirmed |
 | Code point weight ranges | [twitter-text configuration v3](https://raw.githubusercontent.com/twitter/twitter-text/master/config/v3.json) | Confirmed |
+| Sensitive media warning carried as the item spoiler on images, GIFs and videos | [Create media metadata](https://docs.x.com/x-api/media/create-media-metadata), XDK [`latest-openapi.json`](https://github.com/xdevplatform/xdk/blob/main/latest-openapi.json) | Confirmed 2026-11-13: the schema `SensitiveMediaWarning` under `MetadataCreateRequest.metadata.sensitive_media_warning` takes the booleans `adult_content`, `graphic_violence` and `other`; the projection reports the spoiler state and leaves the choice of category to the caller. Assumption: the warning applies to GIFs and videos as well as images |
 | Alt text of 1000; alt formats images, GIFs and videos, no audio | [Create media metadata](https://docs.x.com/x-api/media/create-media-metadata), [Media introduction](https://docs.x.com/x-api/media/introduction) | Confirmed 2026-11-13 for images: `alt_text.text` takes at most 1000 characters, and media are photos, videos or animated GIFs. Assumption: GIF and video alt, since the XDK documents `alt_text` only on photos |
 
 ## Threads
