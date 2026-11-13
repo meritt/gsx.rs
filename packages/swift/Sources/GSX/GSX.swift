@@ -20,6 +20,16 @@ public enum GSX {
 
     public static let version = String(cString: gsx_version())
 
+    public static let mediaIdMaximumBytes = Int(GSX_MEDIA_ID_MAX_BYTES)
+    public static let mediaIdPattern = GSX_MEDIA_ID_PATTERN
+    public static let mediaGroupMinimumCount = Int(GSX_MEDIA_GROUP_MIN)
+    public static let mediaGroupMaximumCount = Int(GSX_MEDIA_GROUP_MAX)
+
+    public static func isMediaId(_ id: String) -> Bool {
+        var id = id
+        return id.withUTF8 { utf8 in gsx_is_media_id(utf8.baseAddress, utf8.count) }
+    }
+
     /// Every target, in the order of the core's table.
     public static var targets: [Target] {
         get throws { try listing.get() }

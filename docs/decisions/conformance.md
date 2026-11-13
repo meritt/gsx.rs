@@ -16,7 +16,7 @@ Headings, lists, task items, quotes, code, tables and hard breaks retain their s
 
 Explicit links and angle autolinks accept only absolute HTTP(S) URLs with a host and without credentials. Destinations pass through the WHATWG `url` parser, including IDNA and percent-encoding, and use its serialized URL. Projection-generated link destinations use the same policy. A refused syntactic link becomes literal text with `LINK_LITERALIZED`; bare URL and mention detection belongs to the projection.
 
-Media directives occupy top-level blocks, separated from non-media blocks by a blank line; up to three leading spaces are allowed. Invalid contexts produce `MEDIA_REFERENCE_CONTEXT_UNSUPPORTED`. Parse-time `media` declares valid IDs and optional covers. Projection-time `facts.items` describes the selected media and is a separate input ([media](projection.md#media)).
+Media directives occupy top-level blocks, separated from non-media blocks by a blank line; up to three leading spaces are allowed. Invalid contexts produce `MEDIA_REFERENCE_CONTEXT_UNSUPPORTED`. A media ID has 1 to 128 bytes: an ASCII letter or digit, then ASCII letters, digits, `.`, `_`, `:` or `-`. A group lists 2 to 64 IDs separated by commas without spaces. A directive with an invalid ID or group size produces `MEDIA_DIRECTIVE_INVALID`. Parse-time `media` declares valid IDs and optional covers. Projection-time `facts.items` describes the selected media and is a separate input ([media](projection.md#media)).
 
 ## Parsing and diagnostics
 

@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define GSX_MEDIA_ID_PATTERN "^[A-Za-z0-9][A-Za-z0-9._:\\-]{0,127}$"
+
 #define GSX_MEDIA_NONE 0
 
 #define GSX_MEDIA_IMAGE 1
@@ -34,6 +36,12 @@
 #define GSX_FORMAT_VIDEO 2
 
 #define GSX_FORMAT_AUDIO 3
+
+#define GSX_MEDIA_ID_MAX_BYTES 128
+
+#define GSX_MEDIA_GROUP_MIN 2
+
+#define GSX_MEDIA_GROUP_MAX 64
 
 typedef struct gsx_error gsx_error;
 
@@ -103,6 +111,16 @@ struct gsx_output *gsx_project(const uint8_t *text,
                                struct gsx_error **error);
 
 struct gsx_output *gsx_targets(struct gsx_error **error);
+
+bool gsx_is_media_id(const uint8_t *id, size_t len);
+
+size_t gsx_media_id_max_bytes(void);
+
+size_t gsx_media_group_min(void);
+
+size_t gsx_media_group_max(void);
+
+const char *gsx_media_id_pattern(void);
 
 const char *gsx_output_json(const struct gsx_output *output, size_t *len);
 

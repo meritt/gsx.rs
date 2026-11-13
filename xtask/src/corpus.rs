@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
-use gsx_core::document::Media;
+use gsx_core::document::{MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, MEDIA_ID_MAX_BYTES, MEDIA_ID_PATTERN, Media, is_media_id};
 use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target};
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire;
@@ -15,6 +15,7 @@ enum Operation {
     Parse,
     Serialize,
     Project,
+    Media,
 }
 
 #[derive(Debug)]
@@ -32,6 +33,10 @@ pub fn load(files: &[impl AsRef<Path>]) -> Result<Vec<Case>> {
         let text = read(file)?;
         for (number, _, value) in records(file, &text)? {
             let place = format!("{}:{number}", file.display());
+            if let Some(case) = media_case(&value) {
+                cases.push(case);
+                continue;
+            }
             let target = match value.get("target").string() {
                 Some(name) => Some(target(&name).ok_or_else(|| format!("{place}: no target {name}"))?),
                 None => None,
@@ -49,6 +54,60 @@ pub fn load(files: &[impl AsRef<Path>]) -> Result<Vec<Case>> {
         }
     }
     Ok(cases)
+}
+
+fn media_case(value: &Json) -> Option<Case> {
+    let expected = match (value.get("mediaRule"), value.get("mediaId").string()) {
+        (Json::Bool(true), _) => format!(
+            "{{\"mediaIdMaxBytes\":{MEDIA_ID_MAX_BYTES},\"mediaGroupMin\":{MEDIA_GROUP_MIN},\
+             \"mediaGroupMax\":{MEDIA_GROUP_MAX},\"mediaIdPattern\":{}}}",
+            json(&MEDIA_ID_PATTERN.encode_utf16().collect::<Vec<_>>())
+        ),
+        (_, Some(id)) => is_media_id(&id).to_string(),
+        _ => return None,
+    };
+    let id = value.get("id").string().unwrap_or_default();
+    Some(Case { id, expected, well_formed: true, operation: Operation::Media })
+}
+
+pub fn media(out: &Path) -> Result {
+    let longest = "a".repeat(MEDIA_ID_MAX_BYTES);
+    let samples = [
+        "",
+        "p",
+        &longest,
+        &format!("{longest}a"),
+        ".a",
+        "a.b",
+        "_a",
+        "a_b",
+        ":a",
+        "a:b",
+        "-a",
+        "a-b",
+        "A",
+        "z",
+        "0",
+        "AZaz09",
+        "a b",
+        "a\"b",
+        "a,b",
+        "a/b",
+        "é",
+        "aé",
+        "a😀",
+        "a\n",
+        "a\0b",
+    ];
+    let mut lines =
+        vec!["{\"corpus\":\"gsx-media\"}".to_owned(), "{\"id\":\"media-rule\",\"mediaRule\":true}".to_owned()];
+    for (index, id) in samples.iter().enumerate() {
+        lines.push(format!(
+            "{{\"id\":\"media-id-{index}\",\"mediaId\":{}}}",
+            json(&id.encode_utf16().collect::<Vec<_>>())
+        ));
+    }
+    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
 }
 
 pub fn regenerate(dir: &Path) -> Result {
@@ -359,10 +418,11 @@ pub fn compare(binding: &str, cases: &[Case], out: &Path, skips_ill_formed: bool
         cases.iter().filter(|case| case.operation == operation && (case.well_formed || !skips_ill_formed)).count()
     };
     println!(
-        "{binding}: {} parse, {} serialize and {} projection cases byte-identical to Rust{}",
+        "{binding}: {} parse, {} serialize, {} projection and {} media rule cases byte-identical to Rust{}",
         count(Operation::Parse),
         count(Operation::Serialize),
         count(Operation::Project),
+        count(Operation::Media),
         if skipped > 0 { format!(", {skipped} ill-formed lines skipped") } else { String::new() }
     );
     Ok(())

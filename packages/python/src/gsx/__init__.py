@@ -7,6 +7,10 @@ from dataclasses import dataclass, field
 from typing import Iterable, List, NamedTuple, Optional, Tuple
 
 __all__ = [
+    "MEDIA_GROUP_MAX",
+    "MEDIA_GROUP_MIN",
+    "MEDIA_ID_MAX_BYTES",
+    "MEDIA_ID_PATTERN",
     "Attachment",
     "Block",
     "Change",
@@ -29,6 +33,7 @@ __all__ = [
     "Range",
     "Target",
     "Truncated",
+    "is_media_id",
     "parse",
     "parse_json",
     "project",
@@ -78,8 +83,19 @@ _lib.gsx_error_free.argtypes = [ctypes.c_void_p]
 _lib.gsx_error_free.restype = None
 _lib.gsx_version.argtypes = []
 _lib.gsx_version.restype = ctypes.c_char_p
+_lib.gsx_is_media_id.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
+_lib.gsx_is_media_id.restype = ctypes.c_bool
+_lib.gsx_media_id_pattern.argtypes = []
+_lib.gsx_media_id_pattern.restype = ctypes.c_char_p
+for _bound in (_lib.gsx_media_id_max_bytes, _lib.gsx_media_group_min, _lib.gsx_media_group_max):
+    _bound.argtypes = []
+    _bound.restype = ctypes.c_size_t
 
 __version__: str = _lib.gsx_version().decode()
+MEDIA_ID_MAX_BYTES: int = _lib.gsx_media_id_max_bytes()
+MEDIA_GROUP_MIN: int = _lib.gsx_media_group_min()
+MEDIA_GROUP_MAX: int = _lib.gsx_media_group_max()
+MEDIA_ID_PATTERN: str = _lib.gsx_media_id_pattern().decode()
 
 
 class Range(NamedTuple):
@@ -212,6 +228,13 @@ def _text(text: str) -> bytes:
     if not isinstance(text, str):
         raise TypeError("text must be a str")
     return _encode(text)
+
+
+def is_media_id(id: str) -> bool:
+    if not isinstance(id, str):
+        raise TypeError("id must be a str")
+    data = _encode(id)
+    return _lib.gsx_is_media_id(data, len(data))
 
 
 def parse_json(text: str, media: Iterable[Media] = ()) -> str:

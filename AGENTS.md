@@ -79,7 +79,7 @@ cargo xtask replay swift
 cargo xtask replay python
 ```
 
-Replay builds and installs packages as consumers, then compares raw parse, serialize and projection JSON with Rust byte for byte. Projection inputs run against every target with empty facts and a populated fact set covering placement, media, limits and threads. The full replay and Swift replay require macOS; npm and Python can run individually on Linux. `GSX_PYTHON` selects Python. npm replay enforces the 365000-byte `gzip -9` budget declared in [`xtask`](xtask/src/main.rs).
+Replay builds and installs packages as consumers, then compares raw parse, serialize and projection JSON with Rust byte for byte. Projection inputs run against every target with empty facts and a populated fact set covering placement, media, limits and threads. Media ID samples compare each binding's predicate answers and rule constants with Rust, and each consumer checks the media ID pattern against the predicate with its own regular expression engine. The full replay and Swift replay require macOS; npm and Python can run individually on Linux. `GSX_PYTHON` selects Python. npm replay enforces the 365000-byte `gzip -9` budget declared in [`xtask`](xtask/src/main.rs).
 
 ```bash
 cargo xtask bench

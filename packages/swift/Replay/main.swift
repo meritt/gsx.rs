@@ -30,8 +30,35 @@ struct Case: Decodable {
     let facts: Given?
 }
 
+struct MediaRule: Decodable {
+    let mediaRule: Bool?
+    let mediaId: String?
+}
+
 let targets = try GSX.targets
 guard targets.contains(where: { $0.name == "x-plain" }) else { fatalError("targets: \(targets)") }
+
+do {
+    let items = [GSX.MediaFact(id: #"x"/><img src="media:evil"#, format: .image)]
+    _ = try GSX.projectJSON("", target: "telegram-html-rich", facts: GSX.Facts(items: items))
+    fatalError("projectJSON accepts an item ID outside the media ID rule")
+} catch {
+    guard error.message == "item 0 id is not a media ID" else { fatalError("item ID refusal: \(error)") }
+}
+
+let pattern = try NSRegularExpression(pattern: GSX.mediaIdPattern)
+
+func mediaRule(_ record: MediaRule) throws -> String {
+    guard let id = record.mediaId else {
+        let quoted = String(decoding: try JSONEncoder().encode(GSX.mediaIdPattern), as: UTF8.self)
+        return #"{"mediaIdMaxBytes":\#(GSX.mediaIdMaximumBytes),"mediaGroupMin":\#(GSX.mediaGroupMinimumCount),"#
+            + #""mediaGroupMax":\#(GSX.mediaGroupMaximumCount),"mediaIdPattern":\#(quoted)}"#
+    }
+    let whole = NSRange(id.startIndex..., in: id)
+    let matched = pattern.firstMatch(in: id, range: whole)?.range == whole
+    guard matched == GSX.isMediaId(id) else { fatalError("mediaIdPattern and isMediaId differ for \(id.debugDescription)") }
+    return matched ? "true" : "false"
+}
 
 let arguments = CommandLine.arguments.dropFirst()
 guard let out = arguments.first, arguments.count > 1 else {
@@ -44,6 +71,12 @@ let decoder = JSONDecoder()
 for file in arguments.dropFirst() {
     let text = try String(contentsOfFile: file, encoding: .utf8)
     for line in text.split(separator: "\n").dropFirst() {
+        if let record = try? decoder.decode(MediaRule.self, from: Data(line.utf8)),
+            record.mediaRule != nil || record.mediaId != nil
+        {
+            lines.append(try mediaRule(record))
+            continue
+        }
         guard let input = try? decoder.decode(Case.self, from: Data(line.utf8)) else {
             lines.append("-")
             if !line.contains(#""target":"#) { lines.append("-") }

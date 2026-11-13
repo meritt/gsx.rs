@@ -321,6 +321,10 @@ export declare class VersionError extends Error {
 
 export interface GSX {
   readonly VERSION: string;
+  readonly MEDIA_ID_MAX_BYTES: number;
+  readonly MEDIA_ID_PATTERN: string;
+  readonly MEDIA_GROUP_MIN: number;
+  readonly MEDIA_GROUP_MAX: number;
   readonly ParseError: typeof ParseError;
   readonly VersionError: typeof VersionError;
   parse(text: string, media?: Iterable<Media>): Document;
@@ -330,6 +334,7 @@ export interface GSX {
   project(text: string, target: string, facts?: Facts, media?: Iterable<Media>): Projection;
   projectJSON(text: string, target: string, facts?: Facts, media?: Iterable<Media>): string;
   targets(): readonly Readonly<Target>[];
+  isMediaId(id: string): boolean;
 }
 
 export declare function load(

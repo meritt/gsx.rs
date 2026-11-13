@@ -5,7 +5,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr;
 use std::sync::LazyLock;
 
-use gsx_core::document::Media as CoreMedia;
+use gsx_core::document::{self, Media as CoreMedia};
 use gsx_core::project::{Facts as CoreFacts, Format, MediaFact as CoreMediaFact, MediaKind, Overflow, Placement};
 use gsx_core::{targets, wire};
 
@@ -110,6 +110,16 @@ pub const GSX_FORMAT_GIF: u32 = 1;
 pub const GSX_FORMAT_VIDEO: u32 = 2;
 pub const GSX_FORMAT_AUDIO: u32 = 3;
 
+pub const GSX_MEDIA_ID_MAX_BYTES: usize = 128;
+pub const GSX_MEDIA_GROUP_MIN: usize = 2;
+pub const GSX_MEDIA_GROUP_MAX: usize = 64;
+
+const _: () = assert!(
+    GSX_MEDIA_ID_MAX_BYTES == document::MEDIA_ID_MAX_BYTES
+        && GSX_MEDIA_GROUP_MIN == document::MEDIA_GROUP_MIN
+        && GSX_MEDIA_GROUP_MAX == document::MEDIA_GROUP_MAX
+);
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct MediaFact {
@@ -170,7 +180,7 @@ impl Facts {
             };
             list.push(CoreMediaFact { id, format, alt, spoiler: entry.spoiler, inline: entry.inline });
         }
-        Ok(Some(list))
+        wire::refused_item(&list).map_or(Ok(Some(list)), Err)
     }
 
     /// # Safety
@@ -291,6 +301,35 @@ pub unsafe extern "C" fn gsx_project(
 pub unsafe extern "C" fn gsx_targets(error: *mut *mut Error) -> *mut Output {
     // SAFETY: `error` is as this function's contract states.
     unsafe { output(error, || Ok(wire::targets())) }
+}
+
+/// # Safety
+/// `id` points to `len` bytes, or `len` is 0.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gsx_is_media_id(id: *const u8, len: usize) -> bool {
+    // SAFETY: `id` is as this function's contract states.
+    unsafe { string(id, len, "media id") }.is_ok_and(document::is_media_id)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsx_media_id_max_bytes() -> usize {
+    GSX_MEDIA_ID_MAX_BYTES
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsx_media_group_min() -> usize {
+    GSX_MEDIA_GROUP_MIN
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsx_media_group_max() -> usize {
+    GSX_MEDIA_GROUP_MAX
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsx_media_id_pattern() -> *const c_char {
+    static PATTERN: LazyLock<CString> = LazyLock::new(|| c_string(document::MEDIA_ID_PATTERN.to_owned()));
+    PATTERN.as_ptr()
 }
 
 /// # Safety
@@ -528,6 +567,10 @@ mod tests {
         let bad = [MediaFact { format: 4, ..item }];
         let bad = Facts { items: bad.as_ptr(), ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "item format 4 is not GSX_FORMAT_*");
+        let hostile = "x\"/><img src=\"media:evil";
+        let bad = [item, MediaFact { id: hostile.as_ptr(), id_len: hostile.len(), ..item }];
+        let bad = Facts { items: bad.as_ptr(), items_len: 2, ..facts };
+        assert_eq!(project(b"", "telegram-html-rich", Some(&bad)).unwrap_err(), "item 1 id is not a media ID");
         let bad = Facts { items: ptr::null(), ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "items is NULL");
         let none: [MediaFact; 0] = [];
@@ -564,5 +607,30 @@ mod tests {
         assert_eq!(parse(b"a", &[entry]).unwrap_err(), "media id must be UTF-8");
         // SAFETY: the version is a static NUL-terminated string.
         assert_eq!(unsafe { CStr::from_ptr(gsx_version()) }.to_str().unwrap(), gsx_core::VERSION);
+    }
+
+    #[test]
+    fn validates_media_ids() {
+        let longest = "a".repeat(GSX_MEDIA_ID_MAX_BYTES);
+        let too_long = "a".repeat(GSX_MEDIA_ID_MAX_BYTES + 1);
+        let valid: [&[u8]; 3] = [b"p", b"0a._:-z", longest.as_bytes()];
+        let invalid: [&[u8]; 6] = [b"", b".a", b"a b", "é".as_bytes(), too_long.as_bytes(), &[b'a', 0xff]];
+        // SAFETY: local buffers with their lengths, and a NULL pointer with length 0.
+        unsafe {
+            assert!(valid.iter().all(|id| gsx_is_media_id(id.as_ptr(), id.len())));
+            assert!(!invalid.iter().any(|id| gsx_is_media_id(id.as_ptr(), id.len())));
+            assert!(!gsx_is_media_id(ptr::null(), 0));
+        }
+    }
+
+    #[test]
+    fn exposes_the_media_rule() {
+        assert_eq!(gsx_media_id_max_bytes(), document::MEDIA_ID_MAX_BYTES);
+        assert_eq!(gsx_media_group_min(), document::MEDIA_GROUP_MIN);
+        assert_eq!(gsx_media_group_max(), document::MEDIA_GROUP_MAX);
+        // SAFETY: the pattern is a static NUL-terminated string.
+        let pattern = unsafe { CStr::from_ptr(gsx_media_id_pattern()) };
+        assert_eq!(pattern.to_str().unwrap(), document::MEDIA_ID_PATTERN);
+        assert_eq!(gsx_media_id_pattern(), pattern.as_ptr());
     }
 }

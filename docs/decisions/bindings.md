@@ -19,6 +19,7 @@ Bindings pass text and explicit facts into `gsx-core` and decode its JSON. They 
 | Serialize | `serialize::serialize` | `serialize` | `serialize` |
 | Project | `project::project` | `project` | `project` |
 | Targets | `targets::TARGETS` | `targets()` / `GSX.targets` | `targets()` |
+| Media ID rule | `document::{is_media_id, MEDIA_ID_MAX_BYTES, MEDIA_ID_PATTERN, MEDIA_GROUP_MIN, MEDIA_GROUP_MAX}` | `isMediaId`, `MEDIA_ID_MAX_BYTES`, `MEDIA_ID_PATTERN`, `MEDIA_GROUP_MIN`, `MEDIA_GROUP_MAX` / `GSX.isMediaId(_:)`, `GSX.mediaIdMaximumBytes`, `GSX.mediaIdPattern`, `GSX.mediaGroupMinimumCount`, `GSX.mediaGroupMaximumCount` | `is_media_id`, `MEDIA_ID_MAX_BYTES`, `MEDIA_ID_PATTERN`, `MEDIA_GROUP_MIN`, `MEDIA_GROUP_MAX` |
 | Raw JSON | `wire::{parse, serialize, project, targets}` | `parseJSON`, `serializeJSON`, `projectJSON` | `parse_json`, `serialize_json`, `project_json` |
 
 Rust serializes and projects an existing document. Other bindings accept source text and optional parse-time media declarations on each call. Typed methods raise a parse error for rejected input; raw methods retain the error object. Document diagnostics are returned without raising.
@@ -26,6 +27,8 @@ Rust serializes and projects an existing document. Other bindings accept source 
 Signatures and types: [TypeScript](../../packages/npm/src/gsx.d.ts), [Swift](../../packages/swift/Sources/GSX/GSX.swift), [Python](../../packages/python/src/gsx/__init__.py).
 
 Swift nests every public type in the `GSX` enum, which shares the module's name: client code writes `GSX.Document`, `GSX.Measurement`, `GSX.Unit` or `GSX.Layout`, and Foundation or SwiftUI types of the same names remain unambiguous. `GSX.targets` is a throwing property: a failed call or decode throws instead of trapping.
+
+The media ID members expose the core's [media ID and group rules](conformance.md#syntax): on the object returned by JavaScript `load()`, on the `GSX` enum and at Python module level. The predicate answers for any string, including one with lone surrogates, which is never a media ID; a non-string argument raises `TypeError` in JavaScript and Python. The pattern states the predicate as an ECMA-262 regular expression for a JSON Schema `pattern` or form validation. It is ASCII-only with the byte limit folded into its quantifier: every character it matches is one byte, one UTF-16 unit and one code point. It compiles without flags, with `u` and with `v`, which HTML `pattern` attributes use. Apply it as a whole-string match: in Python use `re.fullmatch`, because `$` also matches before a trailing newline, and require an `NSRegularExpression` match to cover the whole string for the same reason.
 
 ## Packages
 
@@ -59,13 +62,13 @@ Invalid UTF-8 and lone surrogates produce `MARKDOWN_INVALID_TEXT` with a one-uni
 
 ## C ABI
 
-The generated [gsx.h](../../crates/gsx-ffi/include/gsx.h) defines the ABI. `gsx_parse`, `gsx_serialize`, `gsx_project` and `gsx_targets` return an opaque output handle. Read its borrowed bytes with `gsx_output_json`, then release the handle with `gsx_output_free`. A binding failure returns null and an error handle; read `gsx_error_message` and release it with `gsx_error_free`. Parsing failures remain JSON results. Operation dispatch catches Rust panics; pointer validity remains the caller's responsibility.
+The generated [gsx.h](../../crates/gsx-ffi/include/gsx.h) defines the ABI. `gsx_parse`, `gsx_serialize`, `gsx_project` and `gsx_targets` return an opaque output handle. Read its borrowed bytes with `gsx_output_json`, then release the handle with `gsx_output_free`. A binding failure returns null and an error handle; read `gsx_error_message` and release it with `gsx_error_free`. Parsing failures remain JSON results. Operation dispatch catches Rust panics; pointer validity remains the caller's responsibility. `gsx_is_media_id` applies the core's media ID rule to UTF-8 bytes, and `GSX_MEDIA_ID_MAX_BYTES`, `GSX_MEDIA_GROUP_MIN` and `GSX_MEDIA_GROUP_MAX` mirror the core constants under a compile-time equality check. cbindgen emits no string constants, so `cargo xtask header` writes `GSX_MEDIA_ID_PATTERN` from `document::MEDIA_ID_PATTERN`, and `cargo xtask header --check` rejects a stale value. Callers that cannot read macros, such as `ctypes`, read the same values from `gsx_media_id_max_bytes`, `gsx_media_group_min`, `gsx_media_group_max` and `gsx_media_id_pattern`; like `gsx_version`, each takes no arguments and needs no struct layout shared with the caller, and the pattern is a static NUL-terminated string.
 
-Optional C limits use negative values for absence. Null string pointers mean absent strings. For `facts.items`, a null pointer with zero length means no selection fact; a non-null pointer with zero length means an explicitly empty selection. `gsx_version` identifies the linked build.
+Optional C limits use negative values for absence. Null string pointers mean absent strings. For `facts.items`, a null pointer with zero length means no selection fact; a non-null pointer with zero length means an explicitly empty selection. An item ID outside the core's media ID rule is a binding error on every binding, with the message from `wire::refused_item`, so every generated `media:` reference matches the grammar consumers rewrite. `gsx_version` identifies the linked build.
 
 ## Wasm boundary
 
-The [raw Wasm exports](../../crates/gsx-wasm/src/lib.rs) receive UTF-8 in a reusable buffer and facts as plain values. `input(capacity)` grows the buffer as needed and retains its largest size. Pass the number of bytes actually written; do not retain the pointer across calls.
+The [raw Wasm exports](../../crates/gsx-wasm/src/lib.rs) receive UTF-8 in a reusable buffer and facts as plain values. `input(capacity)` grows the buffer as needed and retains its largest size. Pass the number of bytes actually written; do not retain the pointer across calls. `isMediaId(len)` applies the media ID rule to the buffer; `mediaIdMaxBytes`, `mediaIdPattern`, `mediaGroupMin` and `mediaGroupMax` return the constants that `load()` copies onto its object.
 
 | Value | Encoding |
 | --- | --- |

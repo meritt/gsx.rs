@@ -1,4 +1,4 @@
-use gsx_core::document::Media;
+use gsx_core::document::{self, Media};
 use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement};
 use gsx_core::{targets, wire};
 use std::cell::RefCell;
@@ -93,6 +93,9 @@ pub fn project(
         };
         items.push(MediaFact { id, format, alt: alt.as_deref(), spoiler: flags & 1 != 0, inline: flags & 2 != 0 });
     }
+    if let Some(error) = wire::refused_item(&items) {
+        return Err(JsError::new(&error));
+    }
     let facts = Facts {
         media: match kind {
             0 => None,
@@ -133,6 +136,33 @@ pub fn project(
 #[wasm_bindgen]
 pub fn targets() -> String {
     wire::targets()
+}
+
+#[wasm_bindgen(js_name = isMediaId)]
+pub fn is_media_id(len: usize) -> bool {
+    INPUT.with_borrow(|buffer| {
+        buffer.get(..len).is_some_and(|id| std::str::from_utf8(id).is_ok_and(document::is_media_id))
+    })
+}
+
+#[wasm_bindgen(js_name = mediaIdMaxBytes)]
+pub fn media_id_max_bytes() -> usize {
+    document::MEDIA_ID_MAX_BYTES
+}
+
+#[wasm_bindgen(js_name = mediaIdPattern)]
+pub fn media_id_pattern() -> String {
+    document::MEDIA_ID_PATTERN.to_owned()
+}
+
+#[wasm_bindgen(js_name = mediaGroupMin)]
+pub fn media_group_min() -> usize {
+    document::MEDIA_GROUP_MIN
+}
+
+#[wasm_bindgen(js_name = mediaGroupMax)]
+pub fn media_group_max() -> usize {
+    document::MEDIA_GROUP_MAX
 }
 
 #[wasm_bindgen(js_name = invalidText)]

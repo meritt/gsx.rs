@@ -236,6 +236,14 @@ export const load = (() => {
       );
     }
 
+    function isMediaId(id) {
+      if (typeof id !== 'string') {
+        throw new TypeError('id must be a string');
+      }
+
+      return call(() => wasm.isMediaId(pass(id)));
+    }
+
     let listed;
 
     return {
@@ -246,6 +254,7 @@ export const load = (() => {
       project: (text, target, facts, media) => unwrap(projectJSON(text, target, facts, media), 'projection'),
       projectJSON,
       targets: () => (listed ??= Object.freeze(JSON.parse(call(() => wasm.targets())).targets.map(Object.freeze))),
+      isMediaId,
     };
   }
 
@@ -296,6 +305,17 @@ export const load = (() => {
       throw new VersionError(found);
     }
 
-    return Object.freeze({ ...bind(instance, instantiate), VERSION, ParseError, VersionError });
+    const { wasm } = instance;
+
+    return Object.freeze({
+      ...bind(instance, instantiate),
+      VERSION,
+      MEDIA_ID_MAX_BYTES: wasm.mediaIdMaxBytes(),
+      MEDIA_ID_PATTERN: wasm.mediaIdPattern(),
+      MEDIA_GROUP_MIN: wasm.mediaGroupMin(),
+      MEDIA_GROUP_MAX: wasm.mediaGroupMax(),
+      ParseError,
+      VersionError,
+    });
   };
 })();

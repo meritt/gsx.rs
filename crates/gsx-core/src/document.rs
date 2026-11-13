@@ -6,11 +6,17 @@ mod tree;
 use std::borrow::Cow;
 use std::fmt;
 
+pub use self::convert::is_media_id;
 pub use crate::source::{Limit, Point};
 pub use crate::syntax::Align;
 
 use crate::source::{self, LineIndex};
 use crate::syntax;
+
+pub const MEDIA_ID_MAX_BYTES: usize = 128;
+pub const MEDIA_ID_PATTERN: &str = r"^[A-Za-z0-9][A-Za-z0-9._:\-]{0,127}$";
+pub const MEDIA_GROUP_MIN: usize = 2;
+pub const MEDIA_GROUP_MAX: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Media<'a> {
@@ -288,4 +294,14 @@ pub fn parse(input: &str, media: &[Media]) -> Result<Document, Error> {
     let (children, diagnostics) = convert::convert(&root, &prefixes, &text, &lines, media);
     let markers = markers::collect(&events, text.as_bytes(), &lines);
     Ok(Document { text, input, lines, children, markers, diagnostics })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_id_pattern_quantifier_follows_the_byte_limit() {
+        assert!(MEDIA_ID_PATTERN.ends_with(&format!("]{{0,{}}}$", MEDIA_ID_MAX_BYTES - 1)), "{MEDIA_ID_PATTERN}");
+    }
 }

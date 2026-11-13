@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 
 import gsx
@@ -21,15 +22,47 @@ FACTS = {
 }
 
 
+def media_rule(case):
+    if "mediaRule" in case:
+        rule = {
+            "mediaIdMaxBytes": gsx.MEDIA_ID_MAX_BYTES,
+            "mediaGroupMin": gsx.MEDIA_GROUP_MIN,
+            "mediaGroupMax": gsx.MEDIA_GROUP_MAX,
+            "mediaIdPattern": gsx.MEDIA_ID_PATTERN,
+        }
+        return json.dumps(rule, separators=(",", ":"))
+    valid = gsx.is_media_id(case["mediaId"])
+    if (re.fullmatch(gsx.MEDIA_ID_PATTERN, case["mediaId"]) is not None) != valid:
+        raise AssertionError("MEDIA_ID_PATTERN and is_media_id differ for " + repr(case["mediaId"]))
+    return json.dumps(valid)
+
+
 def main(out, files):
     names = [target.name for target in gsx.targets()]
     if "x-plain" not in names:
         raise AssertionError("targets() lists " + repr(names))
+    if gsx.is_media_id("a" + chr(0xD800)) or gsx.is_media_id(chr(0xD83D) + chr(0xDE00)):
+        raise AssertionError("is_media_id accepts surrogates")
+    try:
+        gsx.is_media_id(b"a")
+        raise AssertionError("is_media_id accepts bytes")
+    except TypeError:
+        pass
+    try:
+        items = (gsx.MediaFact('x"/><img src="media:evil', "image"),)
+        gsx.project_json("", "telegram-html-rich", gsx.Facts(items=items))
+        raise AssertionError("project_json accepts an item ID outside the media ID rule")
+    except gsx.InternalError as error:
+        if str(error) != "item 0 id is not a media ID":
+            raise
     lines = []
     for path in files:
         with open(path, encoding="utf-8") as handle:
             cases = [json.loads(line) for line in handle.read().split("\n")[1:] if line]
         for case in cases:
+            if "mediaRule" in case or "mediaId" in case:
+                lines.append(media_rule(case))
+                continue
             markdown = case["markdown"]
             media = [gsx.Media(item["id"], item.get("cover")) for item in case["media"]]
             target = case.get("target")

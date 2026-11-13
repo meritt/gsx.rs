@@ -16,10 +16,55 @@ if (names.length === 0 || !Object.isFrozen(gsx.targets()[0])) {
   throw new Error(`targets() lists ${names}`);
 }
 
+if (gsx.isMediaId('a\ud800') || gsx.isMediaId('\udc00a')) {
+  throw new Error('isMediaId accepts a lone surrogate');
+}
+
+try {
+  gsx.isMediaId(1);
+  throw new Error('isMediaId accepts a number');
+} catch (error) {
+  if (!(error instanceof TypeError)) throw error;
+}
+
+try {
+  gsx.projectJSON('', 'telegram-html-rich', { items: [{ id: 'x"/><img src="media:evil', format: 'image' }] });
+  throw new Error('projectJSON accepts an item ID outside the media ID rule');
+} catch (error) {
+  if (error.message !== 'item 0 id is not a media ID') throw error;
+}
+
+const patterns = ['', 'u', 'v'].map((flags) => new RegExp(gsx.MEDIA_ID_PATTERN, flags));
+
+function mediaRule({ mediaRule, mediaId }) {
+  if (mediaRule) {
+    return JSON.stringify({
+      mediaIdMaxBytes: gsx.MEDIA_ID_MAX_BYTES,
+      mediaGroupMin: gsx.MEDIA_GROUP_MIN,
+      mediaGroupMax: gsx.MEDIA_GROUP_MAX,
+      mediaIdPattern: gsx.MEDIA_ID_PATTERN,
+    });
+  }
+
+  const valid = gsx.isMediaId(mediaId);
+
+  if (patterns.some((pattern) => pattern.test(mediaId) !== valid)) {
+    throw new Error(`MEDIA_ID_PATTERN and isMediaId differ for ${JSON.stringify(mediaId)}`);
+  }
+
+  return JSON.stringify(valid);
+}
+
 for (const file of files) {
   const cases = readFileSync(file, 'utf8').split('\n').slice(1).filter(Boolean).map(JSON.parse);
 
-  for (const { markdown, media, target, facts } of cases) {
+  for (const record of cases) {
+    if ('mediaRule' in record || 'mediaId' in record) {
+      lines.push(mediaRule(record));
+      continue;
+    }
+
+    const { markdown, media, target, facts } = record;
     const json = target ? gsx.projectJSON(markdown, target, facts, media) : gsx.parseJSON(markdown, media);
     const wire = JSON.parse(json);
 

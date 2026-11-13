@@ -1,7 +1,22 @@
 use gsx_core::document::{Limit, Media};
-use gsx_core::project::{Facts, MediaKind};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind};
 use gsx_core::targets::{TARGETS, target};
-use gsx_core::wire::{invalid_text, parse, project, serialize, targets};
+use gsx_core::wire::{invalid_text, parse, project, refused_item, serialize, targets};
+
+#[test]
+fn refuses_item_ids_outside_the_media_id_rule() {
+    let item = |id| MediaFact { id, format: Format::Image, alt: None, spoiler: false, inline: false };
+    assert_eq!(refused_item(&[]), None);
+    assert_eq!(refused_item(&[item("a"), item("b.c:d-e_f")]), None);
+    assert_eq!(
+        refused_item(&[item("a"), item("x\"/><img src=\"media:evil")]).as_deref(),
+        Some("item 1 id is not a media ID")
+    );
+    assert_eq!(refused_item(&[item(""), item("-a")]).as_deref(), Some("item 0 id is not a media ID"));
+    let long = "a".repeat(129);
+    assert_eq!(refused_item(&[item(&long[1..])]), None);
+    assert_eq!(refused_item(&[item(&long)]).as_deref(), Some("item 0 id is not a media ID"));
+}
 
 #[test]
 fn runs_inputs_at_the_depth_limits_within_a_thread_stack() {

@@ -5,8 +5,8 @@ use crate::document::{
     Range, Severity,
 };
 use crate::project::{
-    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Part, Projection, Slot, Target,
-    Truncated,
+    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, MediaFact, Offsets, Part, Projection,
+    Slot, Target, Truncated,
 };
 use crate::targets::TARGETS;
 
@@ -124,6 +124,11 @@ fn decode(input: &[u8]) -> Result<&str, String> {
         };
         invalid_text(offset, surrogate)
     })
+}
+
+pub fn refused_item(items: &[MediaFact]) -> Option<String> {
+    let index = items.iter().position(|item| !document::is_media_id(item.id))?;
+    Some(format!("item {index} id is not a media ID"))
 }
 
 pub fn invalid_text(offset: u32, code_point: Option<u32>) -> String {

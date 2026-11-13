@@ -3,7 +3,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::document::tree::{self, Prefix, decode_string};
 use crate::document::{
-    Code, Details, Diagnostic, Kind, Layout, Media, Node, Provenance, Range, Scheme, Severity, time,
+    Code, Details, Diagnostic, Kind, Layout, MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, MEDIA_ID_MAX_BYTES, Media, Node,
+    Provenance, Range, Scheme, Severity, time,
 };
 use crate::source::LineIndex;
 use crate::syntax::{self, whitespace};
@@ -64,9 +65,9 @@ impl Context<'_> {
     }
 }
 
-fn is_media_id(id: &str) -> bool {
+pub fn is_media_id(id: &str) -> bool {
     let bytes = id.as_bytes();
-    (1..=128).contains(&bytes.len())
+    (1..=MEDIA_ID_MAX_BYTES).contains(&bytes.len())
         && bytes[0].is_ascii_alphanumeric()
         && bytes[1..].iter().all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(byte))
 }
@@ -86,7 +87,7 @@ fn parse_media(raw: &str) -> Option<Kind> {
         _ => return None,
     };
     let ids: Vec<String> = ids.split(',').map(Into::into).collect();
-    if !(2..=64).contains(&ids.len()) || !ids.iter().all(|id| is_media_id(id)) {
+    if !(MEDIA_GROUP_MIN..=MEDIA_GROUP_MAX).contains(&ids.len()) || !ids.iter().all(|id| is_media_id(id)) {
         return None;
     }
     Some(Kind::MediaGroup { ids, layout })
