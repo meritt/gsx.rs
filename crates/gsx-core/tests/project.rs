@@ -627,6 +627,18 @@ fn thread_parts_cut_a_long_word_by_graphemes() {
 }
 
 #[test]
+fn thread_parts_cut_where_normalization_composes_across_a_label() {
+    let tail = format!("{} z", "y".repeat(270));
+    let projection = thread("x-plain", &format!("e[\u{301}x](https://a.example) {tail}"));
+    let texts: Vec<_> = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+    assert_eq!(texts, ["\u{e9}x (https://a.example/)", tail.as_str()]);
+    let long = "x".repeat(400);
+    let label = format!("e[\u{301}{long}](https://a.example) tail");
+    assert_eq!(thread("x-plain", &label).parts.len(), thread("x-plain", &label.replace("e[\u{301}", "[")).parts.len());
+    assert!(thread("x-plain", &format!("e*\u{301}* a*\u{301}* {long}")).parts.len() > 1);
+}
+
+#[test]
 fn thread_parts_split_link_labels_that_exceed_a_part() {
     for name in ["x-plain", "mastodon-plain", "threads-entities"] {
         for label in ["word ".repeat(120), "y".repeat(600)] {
@@ -644,6 +656,19 @@ fn thread_parts_split_link_labels_that_exceed_a_part() {
     let joined: String = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
     assert!(projection.changes.iter().all(|change| change.reason != "text_truncated"), "{joined:?}");
     assert!(joined.matches("word").count() == 94 && joined.contains("(https://a.example.com/)"), "{joined:?}");
+}
+
+#[test]
+fn threads_map_singleton_decompositions_linearly() {
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let threaded = |times: usize| {
+        let document = parse(&"\u{2126}*\u{2126}*".repeat(times), &[]).unwrap();
+        best(|| {
+            project(&document, target("x-plain").unwrap(), &facts);
+        })
+    };
+    let (short, long) = (threaded(60), threaded(240));
+    assert!(scales(short, long, 10), "{short:?} for 60, {long:?} for 4x");
 }
 
 #[test]

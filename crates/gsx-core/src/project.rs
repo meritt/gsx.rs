@@ -484,10 +484,11 @@ fn render(
     let (text, links, prefixes) = match target.normalization {
         Normalization::None => (written.text, written.links, written.prefixes),
         Normalization::Nfc => {
-            nfc_offsets(&written.text, anchors.iter_mut().map(|anchor| &mut anchor.at));
-            nfc_offsets(&written.text, origins.iter_mut().flat_map(|(span, _)| [&mut span.start, &mut span.end]));
-            nfc_offsets(&written.text, groups.iter_mut().flat_map(|span| [&mut span.start, &mut span.end]));
-            let (text, links) = normalized(&written.text, &written.links);
+            let (text, links) = (&written.text, &written.links);
+            nfc_offsets(text, links, &mut anchors.iter_mut().map(|anchor| &mut anchor.at));
+            nfc_offsets(text, links, &mut origins.iter_mut().flat_map(|(span, _)| [&mut span.start, &mut span.end]));
+            nfc_offsets(text, links, &mut groups.iter_mut().flat_map(|span| [&mut span.start, &mut span.end]));
+            let (text, links) = normalized(text, links);
             (text, links, vec![])
         }
     };
@@ -556,13 +557,57 @@ fn without_sigils(
     out
 }
 
-fn nfc_offsets<'o>(text: &str, offsets: impl Iterator<Item = &'o mut usize>) {
+fn nfc_offsets(text: &str, links: &[Span<usize>], offsets: &mut dyn Iterator<Item = &mut usize>) {
+    let mut edges = links.iter().flat_map(|link| [link.start, link.end]).peekable();
     let (mut from, mut to) = (0, 0);
+    let mut held: Option<(usize, usize)> = None;
     for offset in offsets {
-        to += nfc::nfc(&text[from..*offset]).len();
-        from = *offset;
-        *offset = to;
+        let at = *offset;
+        while let Some(edge) = edges.next_if(|&edge| edge <= at) {
+            to += nfc::nfc(&text[from..edge]).len();
+            from = edge;
+            held = None;
+        }
+        let next = text[at..].chars().next();
+        if let Some((last, mapped)) = held
+            && next.is_some_and(|next| !nfc::opens(next))
+            && !text[last..at].chars().any(nfc::opens)
+        {
+            *offset = mapped;
+            held = Some((at, mapped));
+            continue;
+        }
+        let piece = nfc::nfc(&text[from..at]);
+        match next {
+            Some(next) if at > from && !nfc::boundary(piece.chars().next_back(), next) => {
+                let cluster = piece.char_indices().rev().find(|&(_, char)| nfc::starter(char));
+                *offset = to + cluster.map_or(0, |(index, _)| index);
+                held = Some((at, *offset));
+                if let Some((start, length)) = nfc_boundary_before(text, from, at) {
+                    from = start;
+                    to += length;
+                }
+            }
+            _ => {
+                to += piece.len();
+                from = at;
+                held = None;
+                *offset = to;
+            }
+        }
     }
+}
+
+fn nfc_boundary_before(text: &str, from: usize, at: usize) -> Option<(usize, usize)> {
+    text[from..at]
+        .char_indices()
+        .rev()
+        .take_while(|&(index, _)| index > 0)
+        .filter(|&(_, char)| nfc::opens(char))
+        .find_map(|(index, char)| {
+            let prefix = nfc::nfc(&text[from..from + index]);
+            nfc::boundary(prefix.chars().next_back(), char).then(|| (from + index, prefix.len()))
+        })
 }
 
 fn normalized(text: &str, links: &[Span<usize>]) -> (String, Vec<Span<usize>>) {
