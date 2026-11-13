@@ -25,6 +25,8 @@ Rust serializes and projects an existing document. Other bindings accept source 
 
 Signatures and types: [TypeScript](../../packages/npm/src/gsx.d.ts), [Swift](../../packages/swift/Sources/GSX/GSX.swift), [Python](../../packages/python/src/gsx/__init__.py).
 
+Swift nests every public type in the `GSX` enum, which shares the module's name: client code writes `GSX.Document`, `GSX.Measurement`, `GSX.Unit` or `GSX.Layout`, and Foundation or SwiftUI types of the same names remain unambiguous. `GSX.targets` is a throwing property: a failed call or decode throws instead of trapping.
+
 ## Packages
 
 | Package | Runtime and artifact |

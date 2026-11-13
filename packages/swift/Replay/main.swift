@@ -8,9 +8,9 @@ struct Case: Decodable {
     }
 
     struct Given: Decodable {
-        let media: MediaKind?
+        let media: GSX.MediaKind?
         let mediaCount: Int?
-        let placement: Placement?
+        let placement: GSX.Placement?
         let title: String?
         let targetUrl: String?
         let maxCharacters: UInt32?
@@ -19,9 +19,9 @@ struct Case: Decodable {
         let descriptionLimit: UInt32?
         let hashtagLimit: UInt32?
         let spoilerText: String?
-        let overflow: Overflow?
+        let overflow: GSX.Overflow?
         let entitiesAllowed: Bool?
-        let items: [MediaFact]?
+        let items: [GSX.MediaFact]?
     }
 
     let markdown: String
@@ -30,7 +30,8 @@ struct Case: Decodable {
     let facts: Given?
 }
 
-guard GSX.targets.contains(where: { $0.name == "x-plain" }) else { fatalError("targets: \(GSX.targets)") }
+let targets = try GSX.targets
+guard targets.contains(where: { $0.name == "x-plain" }) else { fatalError("targets: \(targets)") }
 
 let arguments = CommandLine.arguments.dropFirst()
 guard let out = arguments.first, arguments.count > 1 else {
@@ -48,9 +49,9 @@ for file in arguments.dropFirst() {
             if !line.contains(#""target":"#) { lines.append("-") }
             continue
         }
-        let media = input.media.map { Media(id: $0.id, cover: $0.cover) }
+        let media = input.media.map { GSX.Media(id: $0.id, cover: $0.cover) }
         let given = input.facts
-        let facts = Facts(
+        let facts = GSX.Facts(
             media: given?.media,
             mediaCount: given?.mediaCount ?? 0,
             placement: given?.placement,
@@ -76,7 +77,7 @@ for file in arguments.dropFirst() {
                 _ = try GSX.parse(input.markdown, media: media)
                 guard json.hasPrefix(#"{"document":"#) else { fatalError("parse returned a document for \(json)") }
             }
-        } catch let error as ParseError {
+        } catch let error as GSX.ParseError {
             guard json.hasPrefix(#"{"error":{"code":"\#(error.code.rawValue)""#) else { fatalError("\(error) for \(json)") }
         }
         lines.append(json)
@@ -87,7 +88,7 @@ for file in arguments.dropFirst() {
                 guard serialized.hasPrefix(#"{"serialized":"#) else { fatalError("serialize returned for \(serialized)") }
                 let wire = try JSONDecoder().decode([String: String].self, from: Data(serialized.utf8))
                 guard wire["serialized"] == typed else { fatalError("serialize differs for \(serialized)") }
-            } catch let error as ParseError {
+            } catch let error as GSX.ParseError {
                 guard serialized.hasPrefix(#"{"error":{"code":"\#(error.code.rawValue)""#) else {
                     fatalError("\(error) for \(serialized)")
                 }

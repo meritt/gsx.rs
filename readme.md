@@ -76,7 +76,7 @@ console.log(projection.fields[0]);
 import GSX
 
 let text = "Hello **world**."
-let facts = Facts(entitiesAllowed: true)
+let facts = GSX.Facts(entitiesAllowed: true)
 
 let projection = try GSX.project(text, target: "telegram-entities", facts: facts)
 
