@@ -6,7 +6,7 @@ use crate::syntax::state::{Name as StateName, State};
 use crate::syntax::subtokenize::Subresult;
 use crate::syntax::tokenizer::{Label, LabelKind, LabelStart, Tokenizer};
 use crate::syntax::util::{
-    constant::RESOURCE_DESTINATION_BALANCE_MAX,
+    constant::{LINK_REFERENCE_SIZE_MAX, RESOURCE_DESTINATION_BALANCE_MAX},
     normalize_identifier::normalize_identifier,
     skip,
     slice::{Position, Slice},
@@ -44,10 +44,15 @@ pub fn after(tokenizer: &mut Tokenizer) -> State {
     let indices =
         (tokenizer.events[start.start.1].point.index, tokenizer.events[tokenizer.tokenize_state.end].point.index);
 
-    let mut id = normalize_identifier(Slice::from_indices(tokenizer.parse_state.bytes, indices.0, indices.1).as_str());
+    let fits = indices.1 - indices.0 <= LINK_REFERENCE_SIZE_MAX;
+    let mut id = if fits {
+        normalize_identifier(Slice::from_indices(tokenizer.parse_state.bytes, indices.0, indices.1).as_str())
+    } else {
+        String::new()
+    };
 
     if start.kind == LabelKind::GfmFootnote {
-        if tokenizer.parse_state.gfm_footnote_definitions.contains(&id) {
+        if fits && tokenizer.parse_state.gfm_footnote_definitions.contains(&id) {
             return State::Retry(StateName::LabelEndOk);
         }
 
@@ -58,7 +63,7 @@ pub fn after(tokenizer: &mut Tokenizer) -> State {
         id = new_id;
     }
 
-    let defined = tokenizer.parse_state.definitions.contains(&id);
+    let defined = fits && tokenizer.parse_state.definitions.contains(&id);
 
     match tokenizer.current {
         Some(b'(') => {

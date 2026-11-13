@@ -118,7 +118,7 @@ pub fn domain_inside(tokenizer: &mut Tokenizer) -> State {
                 State::Next(StateName::GfmAutolinkLiteralDomainAfter),
                 State::Next(StateName::GfmAutolinkLiteralDomainAtPunctuation),
             );
-            State::Retry(StateName::GfmAutolinkLiteralTrail)
+            trail_start(tokenizer)
         }
         Some(b'-' | 0x80..=0xBF) => {
             tokenizer.consume();
@@ -187,7 +187,7 @@ pub fn path_inside(tokenizer: &mut Tokenizer) -> State {
                     StateName::GfmAutolinkLiteralPathAfter
                 };
             tokenizer.check(State::Next(next), State::Next(StateName::GfmAutolinkLiteralPathAtPunctuation));
-            State::Retry(StateName::GfmAutolinkLiteralTrail)
+            trail_start(tokenizer)
         }
         _ => {
             if tokenizer.current.is_none()
@@ -217,6 +217,22 @@ pub fn path_after(tokenizer: &mut Tokenizer) -> State {
     State::Ok
 }
 
+fn trail_start(tokenizer: &mut Tokenizer) -> State {
+    let index = tokenizer.point.index;
+    let (start, end, ok) = tokenizer.tokenize_state.autolink_trail;
+    if (start..end).contains(&index) {
+        return if ok { State::Ok } else { State::Nok };
+    }
+    tokenizer.tokenize_state.autolink_trail = (index, index, false);
+    State::Retry(StateName::GfmAutolinkLiteralTrail)
+}
+
+fn trail_end(tokenizer: &mut Tokenizer, ok: bool) -> State {
+    let trail = &mut tokenizer.tokenize_state.autolink_trail;
+    (trail.1, trail.2) = (tokenizer.point.index, ok);
+    if ok { State::Ok } else { State::Nok }
+}
+
 pub fn trail(tokenizer: &mut Tokenizer) -> State {
     match tokenizer.current {
         Some(b'!' | b'"' | b'\'' | b')' | b'*' | b',' | b'.' | b':' | b';' | b'?' | b'_' | b'~') => {
@@ -227,26 +243,22 @@ pub fn trail(tokenizer: &mut Tokenizer) -> State {
             tokenizer.consume();
             State::Next(StateName::GfmAutolinkLiteralTrailCharRefStart)
         }
-        Some(b'<') => State::Ok,
+        Some(b'<') => trail_end(tokenizer, true),
         Some(b']') => {
             tokenizer.consume();
             State::Next(StateName::GfmAutolinkLiteralTrailBracketAfter)
         }
         _ => {
-            if tokenizer.current.is_none()
-                || kind_after_index(tokenizer.parse_state.bytes, tokenizer.point.index) == CharacterKind::Whitespace
-            {
-                State::Ok
-            } else {
-                State::Nok
-            }
+            let ok = tokenizer.current.is_none()
+                || kind_after_index(tokenizer.parse_state.bytes, tokenizer.point.index) == CharacterKind::Whitespace;
+            trail_end(tokenizer, ok)
         }
     }
 }
 
 pub fn trail_bracket_after(tokenizer: &mut Tokenizer) -> State {
     if matches!(tokenizer.current, None | Some(b'\t' | b'\n' | b' ' | b'(' | b'[')) {
-        State::Ok
+        trail_end(tokenizer, true)
     } else {
         State::Retry(StateName::GfmAutolinkLiteralTrail)
     }
@@ -256,7 +268,7 @@ pub fn trail_char_ref_start(tokenizer: &mut Tokenizer) -> State {
     if matches!(tokenizer.current, Some(b'A'..=b'Z' | b'a'..=b'z')) {
         State::Retry(StateName::GfmAutolinkLiteralTrailCharRefInside)
     } else {
-        State::Nok
+        trail_end(tokenizer, false)
     }
 }
 
@@ -270,7 +282,7 @@ pub fn trail_char_ref_inside(tokenizer: &mut Tokenizer) -> State {
             tokenizer.consume();
             State::Next(StateName::GfmAutolinkLiteralTrail)
         }
-        _ => State::Nok,
+        _ => trail_end(tokenizer, false),
     }
 }
 

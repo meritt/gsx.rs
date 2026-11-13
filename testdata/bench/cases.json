@@ -50,6 +50,13 @@
     { "id": "quote-paragraphs", "group": "budget", "source": { "repeat": "> a\n\n", "times": 8191 } },
     { "id": "setext-headings", "group": "budget", "source": { "repeat": "a\n=\n", "times": 8191 } },
     { "id": "nested-list-items", "group": "budget", "source": { "repeat": "- a\n  - b\n", "times": 4096 } },
+    { "id": "html-block-opens", "group": "budget", "source": { "repeat": "<a>\n\n", "times": 8191 } },
+    { "id": "media-directive-line", "group": "budget", "source": { "repeat": "::media{id=\"x\"}", "times": 17476 } },
+    {
+      "id": "time-label-opens",
+      "group": "budget",
+      "source": { "concat": [{ "repeat": "::time[", "times": 4096 }, { "repeat": "a", "times": 233472 }] }
+    },
 
     { "id": "html-comment-opens", "group": "unbounded", "source": { "concat": ["</", { "repeat": "<!--", "times": 16384 }] } },
     {

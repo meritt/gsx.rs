@@ -147,6 +147,7 @@ pub struct TokenizeState<'a> {
     pub gfm_table_columns: usize,
 
     pub scan_start: usize,
+    pub autolink_trail: (usize, usize, bool),
     pub html_text_unclosed: [usize; 4],
     pub raw_text_runs: HashMap<usize, usize>,
     pub raw_text_scanned: usize,
@@ -236,6 +237,7 @@ impl<'a> Tokenizer<'a> {
                 gfm_table_pipe_data: vec![],
                 gfm_table_columns: 0,
                 scan_start: 0,
+                autolink_trail: (0, 0, false),
                 html_text_unclosed: [usize::MAX; 4],
                 raw_text_runs: HashMap::new(),
                 raw_text_scanned: usize::MAX,

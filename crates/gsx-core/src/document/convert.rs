@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::{HashMap, HashSet};
 
 use crate::document::tree::{self, Prefix, decode_string};
@@ -15,6 +15,7 @@ struct Context<'a> {
     prefixes: &'a [Prefix],
     diagnostics: RefCell<Vec<Diagnostic>>,
     placed: HashMap<usize, Kind>,
+    closings: OnceCell<Vec<[u32; 2]>>,
 }
 
 impl Context<'_> {
@@ -61,7 +62,8 @@ impl Context<'_> {
     }
 
     fn malformed(&self, start: usize) -> (usize, usize) {
-        (start, time::reserved_end(self.text.as_bytes(), start))
+        let bytes = self.text.as_bytes();
+        (start, time::reserved_end(bytes, self.closings.get_or_init(|| time::closing_ends(bytes)), start))
     }
 }
 
@@ -135,16 +137,23 @@ fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
     let known: HashSet<&str> = media.iter().map(|item| item.id).collect();
     let covers: HashSet<&str> = media.iter().filter_map(|item| item.cover).collect();
     let mut seen: HashSet<String> = HashSet::new();
+    let paired: Vec<(usize, usize)> = pair_html(&root.children, text)
+        .into_iter()
+        .filter(|&(child, end)| end > child.end)
+        .map(|(child, end)| (child.end, end))
+        .collect();
     let mut candidates = vec![];
     collect_candidates(root, bytes, &mut candidates);
     candidates.sort_by_key(|candidate| candidate.start);
+    let (mut line_start, mut scanned) = (0, 0);
     for candidate in candidates {
         let (start, end) = (candidate.start, candidate.end);
         let Some(parsed) = parse_media(&text[start..end]) else {
             context.diagnostic(Code::MediaDirectiveInvalid, Severity::Error, Details::None, start, end);
             continue;
         };
-        let line_start = text[..start].rfind('\n').map_or(0, |at| at + 1);
+        line_start = text[scanned..start].rfind('\n').map_or(line_start, |at| scanned + at + 1);
+        scanned = start;
         let prefix_ok = start - line_start <= 3 && bytes[line_start..start].iter().all(|byte| *byte == b' ');
         let context_ok = match candidate.node {
             Some((tree::Kind::Root, siblings, index)) => {
@@ -155,7 +164,9 @@ fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
                     .is_none_or(|node| is_media(node.kind) || context.line(start) - context.line(node.end) >= 2);
                 let next_ok =
                     next.is_none_or(|node| is_media(node.kind) || context.line(node.start) - context.line(end) >= 2);
-                prefix_ok && previous_ok && next_ok
+                let after = paired.partition_point(|&(from, _)| from <= start);
+                let unpaired = after == 0 || paired[after - 1].1 <= start;
+                prefix_ok && previous_ok && next_ok && unpaired
             }
             _ => false,
         };
@@ -433,6 +444,7 @@ fn literalized<'n>(items: Vec<Item<'n>>, context: &Context) -> Vec<Item<'n>> {
     let mut ahead = Ahead::default();
     let mut pending = items;
     let mut result = vec![];
+    let mut unfit = HashSet::new();
     let mut index = 0;
     while index < pending.len() {
         let item = pending[index].clone();
@@ -451,23 +463,25 @@ fn literalized<'n>(items: Vec<Item<'n>>, context: &Context) -> Vec<Item<'n>> {
                 at = next;
                 continue;
             }
-            let mut last = index + 1;
-            while last < pending.len() && pending[last].end() < end {
-                last += 1;
-            }
+            let last = index + 1 + pending[index + 1..].partition_point(|item| item.end() < end);
             let Some(tail) = pending.get(last) else {
                 at = next;
                 continue;
             };
-            if tail.text().is_none() && tail.end() != end {
+            if (tail.text().is_none() && tail.end() != end) || unfit.contains(&(last, end)) {
                 at = next;
                 continue;
             }
             let start = at + base;
             let prefix = (start > node_start).then(|| fragment(context, &item, value, node_start, start));
+            if matches!(prefix, Some(None)) {
+                at = next;
+                continue;
+            }
             let suffix =
                 (tail.end() > end).then(|| fragment(context, tail, tail.text().unwrap_or_default(), end, tail.end()));
-            if matches!(prefix, Some(None)) || matches!(suffix, Some(None)) {
+            if matches!(suffix, Some(None)) {
+                unfit.insert((last, end));
                 at = next;
                 continue;
             }
@@ -695,23 +709,26 @@ fn pair_html<'n>(children: &'n [tree::Node], text: &str) -> Vec<(&'n tree::Node,
     if !children.iter().any(|child| child.kind == tree::Kind::Html) {
         return children.iter().map(|child| (child, child.end)).collect();
     }
-    let mut used = vec![false; children.len()];
+    let mut nearest: HashMap<String, usize> = HashMap::new();
+    let mut close = vec![None; children.len()];
+    for (index, child) in children.iter().enumerate().rev() {
+        if let Some(name) = html_tag(child, text, true) {
+            nearest.insert(name, index);
+        } else if let Some(name) = html_tag(child, text, false) {
+            close[index] = nearest.get(&name).copied();
+        }
+    }
     let mut out = vec![];
     let mut index = 0;
     while index < children.len() {
         let child = &children[index];
-        if let Some(name) = html_tag(child, text, false) {
-            let close = (index + 1..children.len())
-                .find(|&at| !used[at] && html_tag(&children[at], text, true).as_deref() == Some(name.as_str()));
-            if let Some(close) = close {
-                used[close] = true;
-                out.push((child, children[close].end));
-                index = close + 1;
-                continue;
-            }
+        if let Some(close) = close[index] {
+            out.push((child, children[close].end));
+            index = close + 1;
+        } else {
+            out.push((child, child.end));
+            index += 1;
         }
-        out.push((child, child.end));
-        index += 1;
     }
     out
 }
@@ -783,7 +800,14 @@ pub(super) fn convert(
     lines: &LineIndex,
     media: &[Media],
 ) -> (Vec<Node>, Vec<Diagnostic>) {
-    let mut context = Context { text, lines, prefixes, diagnostics: RefCell::default(), placed: HashMap::new() };
+    let mut context = Context {
+        text,
+        lines,
+        prefixes,
+        diagnostics: RefCell::default(),
+        placed: HashMap::new(),
+        closings: OnceCell::new(),
+    };
     resolve_media(root, media, &mut context);
     let children = convert_children(root, &context);
     (children, context.diagnostics.into_inner())

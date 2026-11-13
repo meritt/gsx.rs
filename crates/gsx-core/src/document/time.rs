@@ -147,40 +147,45 @@ pub(super) fn reserved_offset(raw: &str) -> Option<usize> {
     None
 }
 
-fn closing_end(bytes: &[u8], start: usize, close: u8) -> usize {
-    let mut quote = 0;
-    let mut index = start;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if byte == b'\n' {
-            return index;
-        }
-        if byte == b'\\' {
-            index += 1;
-        } else if quote != 0 {
-            if byte == quote {
-                quote = 0;
+pub(super) fn closing_ends(bytes: &[u8]) -> Vec<[u32; 2]> {
+    let len = bytes.len() as u32;
+    let mut ends = vec![[len; 2]; bytes.len() + 2];
+    let (mut next, mut after) = ([len; 2], [len; 2]);
+    for (index, &byte) in bytes.iter().enumerate().rev() {
+        let at = index as u32;
+        let quoted = match byte {
+            b'\n' => [at; 2],
+            b'\\' => after,
+            b'"' => [at, next[1]],
+            b'\'' => [next[0], at],
+            _ => next,
+        };
+        ends[index] = match byte {
+            b'\n' => [at; 2],
+            b'\\' => ends[index + 2],
+            b'"' | b'\'' => {
+                let exit = next[usize::from(byte == b'\'')];
+                if exit < len && bytes[exit as usize] != b'\n' { ends[exit as usize + 1] } else { [exit; 2] }
             }
-        } else if byte == b'"' || byte == b'\'' {
-            quote = byte;
-        } else if byte == close {
-            return index + 1;
-        }
-        index += 1;
+            b']' => [at + 1, ends[index + 1][1]],
+            b'}' => [ends[index + 1][0], at + 1],
+            _ => ends[index + 1],
+        };
+        (next, after) = (quoted, next);
     }
-    bytes.len()
+    ends
 }
 
-pub(super) fn reserved_end(bytes: &[u8], start: usize) -> usize {
+pub(super) fn reserved_end(bytes: &[u8], ends: &[[u32; 2]], start: usize) -> usize {
     let mut end = start + 6;
     if bytes.get(end) == Some(&b'[') {
-        end = closing_end(bytes, end + 1, b']');
+        end = ends[end + 1][0] as usize;
         if bytes.get(end.wrapping_sub(1)) != Some(&b']') {
             return end;
         }
     }
     if bytes.get(end) == Some(&b'{') {
-        return closing_end(bytes, end + 1, b'}');
+        return ends[end + 1][1] as usize;
     }
     end
 }

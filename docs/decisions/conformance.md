@@ -12,7 +12,7 @@
 | Media | `::media{id="photo"}` |
 | Media group | `::media{ids="a,b" layout="collage"}` or `layout="slideshow"` |
 
-Headings, lists, task items, quotes, code, tables and hard breaks retain their structural nodes. Raw HTML, image syntax, reference syntax, footnotes and unsupported directives remain literal text. Math spans bind like inline code but produce literal text in the document. Backslash escapes preserve literal provenance; character references produce authored text.
+Headings, lists, task items, quotes, code, tables and hard breaks retain their structural nodes. Raw HTML, image syntax, reference syntax, footnotes and unsupported directives remain literal text. An HTML node consisting of one opening tag pairs with the next unpaired sibling that is a closing tag of the same ASCII case-insensitive name, across blank lines between blocks; the pair and everything between them become one literal text node. Math spans bind like inline code but produce literal text in the document. Backslash escapes preserve literal provenance; character references produce authored text.
 
 Explicit links and angle autolinks accept only absolute HTTP(S) URLs with a host and without credentials. Destinations pass through the WHATWG `url` parser, including IDNA and percent-encoding, and use its serialized URL. Projection-generated link destinations use the same policy. A refused syntactic link becomes literal text with `LINK_LITERALIZED`; bare URL and mention detection belongs to the projection.
 
@@ -30,7 +30,7 @@ Media directives occupy top-level blocks, separated from non-media blocks by a b
 
 CRLF and CR normalize to LF. Source ranges still address the original input. A leading BOM is skipped but remains counted in offsets. All range conventions are defined in [bindings.md](bindings.md#wire-format).
 
-The tokenizer bounds link-destination parentheses at 32 levels (`LK08`). A task checkbox needs content on its line or a continuation and opens only a paragraph (`K05`, `K09`, `K11`). The paired delimiters `~`, `=`, `+`, `|` are excluded from punctuation when computing `*` and `_` flanking (`A08`, `A09`). Table spoiler handling runs inside the table grammar.
+The tokenizer bounds link-destination parentheses at 32 levels (`LK08`). Link text longer than 999 bytes matches no definition as a shortcut or collapsed reference, the same bound definitions and full references have. A task checkbox needs content on its line or a continuation and opens only a paragraph (`K05`, `K09`, `K11`). The paired delimiters `~`, `=`, `+`, `|` are excluded from punctuation when computing `*` and `_` flanking (`A08`, `A09`). Table spoiler handling runs inside the table grammar.
 
 | Boundary case | Resolution |
 | --- | --- |
@@ -39,6 +39,7 @@ The tokenizer bounds link-destination parentheses at 32 levels (`LK08`). A task 
 | Math span overlapping emphasis | Math binds first, regardless of opener order |
 | Escaped paired delimiter | The escape affects one character only |
 | Task checkbox content | The first paragraph's range ends at its own content, excluding the next block |
+| Media directive between paired HTML blocks (`A31`) | `MEDIA_REFERENCE_CONTEXT_UNSUPPORTED`; the directive stays inside the literal text |
 
 Corpus `sources` retain the `known:` and `parser:` case identifiers for these resolutions. Every gsx extension directive opens with `::`, inline ones included: a text directive starts at two colons not preceded by an unescaped colon, so a single colon is ordinary text. Otherwise directive grammar follows the cases pinned for micromark-extension-directive 4.0.0 (`D01`, `D03`, `D04`); `W04` pins BOM handling.
 
