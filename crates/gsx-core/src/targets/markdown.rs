@@ -90,7 +90,7 @@ pub(super) static SLACK_FORM: MarkdownForm = MarkdownForm {
     neutralised: &[LineStart::Heading, LineStart::Ordered, LineStart::Setext],
     html: true,
     datetime: "<!date^$unix^{date_short} {time}|$label>",
-    separators: "^|",
+    separators: "^|\n",
     quote_depth: None,
     url_labels: true,
 };

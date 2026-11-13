@@ -1,7 +1,7 @@
-use super::{media, underlined, wrapper};
+use super::{closing_bidi, label, language, media, underlined, wrapper};
 use crate::document::{Kind, Node};
 use crate::project::links::{self, bluesky::visible};
-use crate::project::{CELL, Class, Context, DATE_LABEL, Feature, QUOTE, RULE, Renderer, Style, When, href, marker};
+use crate::project::{CELL, Class, Context, Feature, QUOTE, RULE, Renderer, Style, When, date_refusal, href, marker};
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
 
@@ -48,10 +48,12 @@ fn block(context: &mut Context, node: &Node) {
             if context.inside(Style::Blockquote) {
                 context.report_when(Feature::Blockquote, Some(node.range), Some(When::Code));
             }
-            if meta.is_some() {
+            let language = language(lang.as_deref());
+            if meta.is_some() || lang.is_some() && language.is_empty() {
                 context.report_when(Feature::CodeBlock, Some(node.range), Some(When::Info));
             }
-            context.styled(style, lang.clone(), Feature::CodeBlock, node, |context| {
+            let info = (!language.is_empty()).then(|| language.to_owned());
+            context.styled(style, info, Feature::CodeBlock, node, |context| {
                 context.writer().verbatim(true);
                 context.leaf(node, value);
                 context.writer().verbatim(false);
@@ -129,16 +131,6 @@ fn contains_entity(nodes: &[Node]) -> bool {
     })
 }
 
-fn label(nodes: &[Node], out: &mut String) {
-    for node in nodes {
-        match &node.kind {
-            Kind::Text { value } | Kind::InlineCode { value } => out.push_str(value),
-            Kind::Break => out.push('\n'),
-            _ => label(&node.children, out),
-        }
-    }
-}
-
 pub fn inline(context: &mut Context, nodes: &[Node]) {
     for node in nodes {
         if context.done() {
@@ -199,9 +191,11 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                     context.writer().link(&href);
                     continue;
                 }
+                let mark = context.writer().mark();
                 context.within_link(|context| inline(context, &node.children));
+                let closing = closing_bidi(context.writer().since(mark));
                 context.writer().source(node.range);
-                context.writer().push(" (");
+                context.writer().push(&format!("{closing} ("));
                 context.writer().link(&href);
                 context.writer().push(")");
             }
@@ -215,12 +209,8 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                 label(&node.children, &mut text);
                 let when = if context.nested() || contains_entity(&node.children) {
                     Some(When::Nested)
-                } else if text.encode_utf16().count() > DATE_LABEL {
-                    Some(When::Overflow)
-                } else if !(0..=i64::from(i32::MAX)).contains(unix) {
-                    Some(When::Refused)
                 } else {
-                    None
+                    date_refusal(&text, *unix)
                 };
                 match when {
                     Some(when) => {

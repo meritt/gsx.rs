@@ -1,4 +1,4 @@
-use super::{media, underlined, wrapper};
+use super::{closing_bidi, language, media, underlined, wrapper};
 use crate::document::{Align, Kind, Node, Provenance};
 use crate::project::links::accepted;
 use crate::project::{
@@ -187,7 +187,8 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
         match &node.kind {
             Kind::Text { value } => {
                 let literal = node.provenance == Provenance::Literal;
-                context.leaf_with(node, value, |piece, _| text(form, piece, literal));
+                let live = form.owned && !context.linked();
+                context.leaf_with(node, value, |piece, _| text(form, piece, literal, live));
             }
             Kind::InlineCode { value } => {
                 let shown = code(form, context.rendered(node, value), false);
@@ -210,12 +211,14 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                     if let Some(label) = accepted(&label) {
                         let bare = !context.contains_cut(node) && label == href;
                         context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
+                        let mark = context.writer().mark();
                         if !bare {
                             inline_at(context, &node.children, cell);
                         }
+                        let closing = closing_bidi(context.writer().since(mark));
                         context.writer().source(node.range);
                         let shown = raw(href, cell);
-                        context.writer().push(&if bare { shown } else { format!(" ({shown})") });
+                        context.writer().push(&if bare { shown } else { format!("{closing} ({shown})") });
                         continue;
                     }
                 }
@@ -225,7 +228,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                     .unwrap_or_default();
                 context.writer().source(node.range);
                 context.writer().push(&format!("{underline}["));
-                inline_at(context, &node.children, cell);
+                context.within_link(|context| inline_at(context, &node.children, cell));
                 context.writer().source(node.range);
                 context.writer().push(&format!("]({}){underline}", raw(destination(&href), cell)));
             }
@@ -338,8 +341,10 @@ fn flat(context: &mut Context, nodes: &[Node], cell: bool) {
                 if bare {
                     context.writer().push(&code(form, &href, cell));
                 } else {
+                    let mark = context.writer().mark();
                     flat(context, &node.children, cell);
-                    context.writer().push(&format!(" ({})", code(form, &href, cell)));
+                    let closing = closing_bidi(context.writer().since(mark));
+                    context.writer().push(&format!("{closing} ({})", code(form, &href, cell)));
                 }
             }
             kind => {
@@ -351,14 +356,6 @@ fn flat(context: &mut Context, nodes: &[Node], cell: bool) {
             }
         }
     }
-}
-
-pub fn language(lang: Option<&str>) -> &str {
-    lang.filter(|lang| {
-        (1..=32).contains(&lang.len())
-            && lang.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'+' | b'.' | b'-'))
-    })
-    .unwrap_or("")
 }
 
 fn longest_run(value: &str) -> usize {
@@ -415,8 +412,8 @@ fn escape(out: &mut String, value: &str, set: &str) {
     }
 }
 
-fn spans(out: &mut String, line: &str, form: &MarkdownForm) {
-    if !form.owned {
+fn spans(out: &mut String, line: &str, form: &MarkdownForm, live: bool) {
+    if !live {
         escape(out, line, form.escaped);
         return;
     }
@@ -429,7 +426,7 @@ fn spans(out: &mut String, line: &str, form: &MarkdownForm) {
     escape(out, &line[cursor..], form.escaped);
 }
 
-fn text(form: &MarkdownForm, value: &str, literal: bool) -> String {
+fn text(form: &MarkdownForm, value: &str, literal: bool, live: bool) -> String {
     let mut out = String::with_capacity(value.len() + value.len() / 4 + 2);
     for (index, line) in value.split('\n').enumerate() {
         if index > 0 {
@@ -439,9 +436,9 @@ fn text(form: &MarkdownForm, value: &str, literal: bool) -> String {
             escape(&mut out, line, form.escaped);
         } else if form.neutralised.contains(&LineStart::Ordered) && escaped_ordered(line) {
             out.push('\\');
-            spans(&mut out, &line[1..], form);
+            spans(&mut out, &line[1..], form, live);
         } else {
-            spans(&mut out, line, form);
+            spans(&mut out, line, form, live);
         }
     }
     out
@@ -499,11 +496,10 @@ pub fn owned(line: &str) -> Vec<(usize, usize)> {
     let mut at = 0;
     while at < line.len() {
         let rest = &line[at..];
-        match url(rest).or_else(|| mail.then(|| email(rest)).flatten()).or_else(|| name(rest)) {
-            Some(length) => {
-                let kept = rest[..length].trim_end_matches('\\').len();
-                if kept > 0 {
-                    found.push((at, at + kept));
+        match span(rest, mail) {
+            Some((length, start, end)) => {
+                if end > start {
+                    found.push((at + start, at + end));
                 }
                 at += length;
             }
@@ -513,14 +509,24 @@ pub fn owned(line: &str) -> Vec<(usize, usize)> {
     found
 }
 
+fn span(rest: &str, mail: bool) -> Option<(usize, usize, usize)> {
+    if let Some(length) = url(rest) {
+        return Some((length, 0, rest[..length].trim_end_matches('\\').len()));
+    }
+    let length = mail.then(|| email(rest)).flatten().or_else(|| name(rest))?;
+    let span = &rest[..length];
+    let body = span.strip_prefix(['@', '#', '$']).unwrap_or(span);
+    let start = if body.starts_with('_') { length - body.trim_start_matches('_').len() } else { 0 };
+    Some((length, start, span.trim_end_matches('_').len()))
+}
+
 fn url(rest: &str) -> Option<usize> {
     let scheme = ["https://", "http://"].into_iter().find(|scheme| rest.starts_with(scheme))?.len();
-    let body: usize = rest[scheme..]
+    let (count, body) = rest[scheme..]
         .chars()
-        .take_while(|&char| !space(char) && !matches!(char, '<' | '>' | '(' | ')'))
-        .map(char::len_utf8)
-        .sum();
-    (body > 0).then_some(scheme + body)
+        .take_while(|&char| !space(char) && !matches!(char, '<' | '>' | '(' | ')' | '[' | ']' | '`'))
+        .fold((0, 0), |(count, body), char| (count + 1, body + char.len_utf8()));
+    (count > 1).then_some(scheme + body)
 }
 
 fn email(rest: &str) -> Option<usize> {
@@ -581,5 +587,6 @@ mod tests {
         assert_eq!(spans("@\\ x\\"), Vec::<&str>::new());
         assert_eq!(spans("#a\\\\"), ["#a"]);
         assert_eq!(spans("x@y"), ["@y"]);
+        assert_eq!(spans("@__a_ x_y@a.bc https://_ https://ab]`"), ["a", "x_y@a.bc", "https://ab"]);
     }
 }

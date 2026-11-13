@@ -27,6 +27,58 @@ fn telegram_closes_entities_around_inline_code() {
 }
 
 #[test]
+fn telegram_time_applies_the_date_entity_bounds() {
+    let long = "a".repeat(128);
+    let cases = [
+        ("::time[x]{unix=\"0\"}".to_owned(), "<tg-time unix=\"0\">x</tg-time>".to_owned(), None),
+        ("::time[x]{unix=\"2147483647\"}".to_owned(), "<tg-time unix=\"2147483647\">x</tg-time>".to_owned(), None),
+        ("::time[x]{unix=\"-1\"}".to_owned(), "x".to_owned(), Some("datetime_out_of_range")),
+        ("::time[x]{unix=\"2147483648\"}".to_owned(), "x".to_owned(), Some("datetime_out_of_range")),
+        ("::time[x]{unix=\"9007199254740991\"}".to_owned(), "x".to_owned(), Some("datetime_out_of_range")),
+        (
+            format!("::time[{}]{{unix=\"1\"}}", &long[1..]),
+            format!("<tg-time unix=\"1\">{}</tg-time>", &long[1..]),
+            None,
+        ),
+        (format!("::time[{long}]{{unix=\"1\"}}"), long.clone(), Some("datetime_label_too_long")),
+    ];
+    for (name, paragraph) in [("telegram-html", false), ("telegram-html-rich", true)] {
+        for (markdown, expected, reason) in &cases {
+            let projection = run(name, markdown);
+            let expected = if paragraph { format!("<p>{expected}</p>") } else { expected.clone() };
+            assert_eq!(text(&projection), expected, "{name}: {markdown}");
+            let expected: Vec<_> = reason.iter().map(|reason| ("datetime", "unwrapped", *reason)).collect();
+            assert_eq!(changes(&projection), expected, "{name}: {markdown}");
+        }
+    }
+}
+
+#[test]
+fn code_language_follows_the_markdown_language_rule() {
+    let hostile = "```\"><script>alert(1)</script>&amp;\u{202E}\nx\n```";
+    let telegram = run("telegram-html", hostile);
+    assert_eq!(text(&telegram), "<pre>x</pre>");
+    assert_eq!(changes(&telegram), [("code_block", "omitted", "code_block_info_omitted")]);
+    let rich = run("telegram-html-rich", hostile);
+    assert_eq!(text(&rich), "<pre>x</pre>");
+    assert_eq!(changes(&rich), [("code_block", "omitted", "code_block_info_omitted")]);
+    let kept = run("telegram-html", "```c++\nx\n```");
+    assert_eq!(text(&kept), "<pre><code class=\"language-c++\">x</code></pre>");
+    assert_eq!(changes(&kept), []);
+    let facts = Facts { entities_allowed: true, ..Facts::default() };
+    let entities = target("telegram-entities").unwrap();
+    for (markdown, value, reasons) in
+        [(hostile, None, vec!["code_block_info_omitted"]), ("```c++\nx\n```", Some("c++"), vec![])]
+    {
+        let projection = project(&parse(markdown, &[]).unwrap(), entities, &facts);
+        let field = projection.field(FieldName::Text).unwrap();
+        assert_eq!(field.text, "x");
+        assert_eq!(field.entities.iter().map(|entity| entity.value.as_deref()).collect::<Vec<_>>(), [value]);
+        assert_eq!(projection.changes.iter().map(|change| change.reason).collect::<Vec<_>>(), reasons);
+    }
+}
+
+#[test]
 fn telegram_drops_entities_left_empty_by_a_code_split() {
     let telegram = run("telegram-html", "[`b`](https://example.com)");
     assert_eq!(text(&telegram), "<code>b</code>");

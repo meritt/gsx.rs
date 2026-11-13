@@ -1,9 +1,9 @@
-use super::{media, underlined, wrapper};
+use super::{label, language, media, underlined, wrapper};
 use crate::document::{Align, Kind, Layout, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
     CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Slot, Truncated,
-    When, blank, href, marker, placed, references, shortened,
+    When, blank, date_refusal, href, marker, placed, references, shortened,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks: render, inline: render_inline };
@@ -278,12 +278,14 @@ impl Html {
             context.report(Feature::Blockquote, node.range);
             self.close_segment(context);
         }
-        if meta || (lang.is_some() && !self.form.code_info) {
+        let language = language(lang);
+        if meta || (lang.is_some() && (language.is_empty() || !self.form.code_info)) {
             context.report_when(Feature::CodeBlock, Some(node.range), Some(When::Info));
         }
-        let open = match lang.filter(|_| self.form.code_info) {
-            Some(lang) => format!("<pre><code class=\"language-{}\">", attribute(lang)),
-            None => "<pre>".to_owned(),
+        let open = if self.form.code_info && !language.is_empty() {
+            format!("<pre><code class=\"language-{}\">", attribute(language))
+        } else {
+            "<pre>".to_owned()
         };
         let close = if open.len() > "<pre>".len() { "</code></pre>" } else { "</pre>" };
         context.writer().raw(&open);
@@ -314,7 +316,18 @@ impl Html {
                 }
                 Kind::Datetime { unix, .. } => {
                     let open = self.form.tag(Feature::Datetime).map(|tag| format!("<{tag} unix=\"{unix}\">"));
-                    self.element_or_fallback(context, node, Feature::Datetime, open);
+                    let refusal = open.as_ref().and_then(|_| {
+                        let mut text = String::new();
+                        label(&node.children, &mut text);
+                        date_refusal(&text, *unix)
+                    });
+                    match refusal {
+                        Some(when) => {
+                            context.report_when(Feature::Datetime, Some(node.range), Some(when));
+                            self.inline(context, &node.children);
+                        }
+                        None => self.element_or_fallback(context, node, Feature::Datetime, open),
+                    }
                 }
                 kind => match wrapper(kind) {
                     Some(feature) => {

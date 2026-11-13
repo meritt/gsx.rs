@@ -29,6 +29,11 @@ const THREADED_TEXT: Rule = Rule {
     ..TEXT
 };
 
+const DATE_BOUNDS: [Condition; 2] = [
+    Condition { when: When::Overflow, class: Unwrapped, reason: "datetime_label_too_long" },
+    Condition { when: When::Refused, class: Unwrapped, reason: "datetime_out_of_range" },
+];
+
 struct Rules {
     heading: Rule,
     blockquote: Rule,

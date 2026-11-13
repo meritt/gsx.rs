@@ -2,7 +2,7 @@ use super::limits::{
     Alt, CodePoints, Fact, Graphemes, Limit, Links, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
 };
 use super::plain::BODY;
-use super::{DEFAULT, LINK, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
+use super::{DATE_BOUNDS, DEFAULT, LINK, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
@@ -177,8 +177,8 @@ pub static TELEGRAM: Target = entities(
             conditions: &[
                 CAPPED,
                 Condition { when: When::Nested, class: Unwrapped, reason: "entity_cannot_contain_entity" },
-                Condition { when: When::Overflow, class: Unwrapped, reason: "datetime_label_too_long" },
-                Condition { when: When::Refused, class: Unwrapped, reason: "datetime_out_of_range" },
+                DATE_BOUNDS[0],
+                DATE_BOUNDS[1],
             ],
         },
         ..DEFAULT

@@ -1,6 +1,6 @@
 use super::limits::{CodePoints, Limit, Post, Reel, Story, Text, With, Without, limit};
 use super::plain::BODY;
-use super::{TEXT, rule};
+use super::{DATE_BOUNDS, DEFAULT, TEXT, rule};
 use crate::forms::html::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
@@ -113,7 +113,7 @@ pub static TELEGRAM: Target = Target {
             entity(Feature::Spoiler, &[]),
             entity(Feature::Link, &[NESTED, INVISIBLE]),
             LINK_TITLE,
-            entity(Feature::Datetime, &[NESTED]),
+            entity(Feature::Datetime, &[NESTED, DATE_BOUNDS[0], DATE_BOUNDS[1]]),
             TEXT,
         ],
         &TELEGRAM_FORM,
@@ -173,6 +173,7 @@ pub static TELEGRAM_RICH: Target = Target {
             },
             rule(Feature::Link, Omitted, "link_label_invisible"),
             LINK_TITLE,
+            Rule { conditions: &DATE_BOUNDS, ..DEFAULT.datetime },
             RICH_TEXT,
         ],
         &RICH_FORM,

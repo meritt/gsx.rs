@@ -160,7 +160,17 @@ pub enum Style {
     Mention,
 }
 
-pub const DATE_LABEL: usize = 127;
+const DATE_LABEL: usize = 127;
+
+pub fn date_refusal(label: &str, unix: i64) -> Option<When> {
+    if label.encode_utf16().count() > DATE_LABEL {
+        Some(When::Overflow)
+    } else if !(0..=i64::from(i32::MAX)).contains(&unix) {
+        Some(When::Refused)
+    } else {
+        None
+    }
+}
 
 impl Style {
     pub const fn name(self) -> &'static str {
