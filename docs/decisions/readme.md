@@ -9,4 +9,5 @@ Current `gsx/1` contracts and design rationale, implemented by `gsx-core` and sh
 | [Serialization](serialize.md) | Canonical form and round-trip behavior |
 | [Projection](projection.md) | Facts, fields, changes, media and threads |
 | [Measurement](measure.md) | Counting units, field limits and limit policy |
+| [Platforms](platforms.md) | API versions, primary sources and assumed limits behind each target |
 | [Bindings](bindings.md) | Package API, wire format, offsets and C ownership |

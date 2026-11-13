@@ -37,7 +37,7 @@ Defaults describe the selected publishing surface; they do not discover account 
 
 ## Field limits
 
-The following are the configured limits of this release. Semicolon-separated fields, units and maxima correspond in order; `+` means simultaneous limits. Unless stated otherwise, limits measure payload text and apply in every placement. GIF alt follows image limits.
+The following are the configured limits of this release. Semicolon-separated fields, units and maxima correspond in order; `+` means simultaneous limits. Unless stated otherwise, limits measure payload text and apply in every placement. GIF alt follows image limits. The [platform record](platforms.md) names the API version and primary source behind each limit and marks the limits that are assumptions.
 
 | Target | Field and context | Unit | Maximum |
 | --- | --- | --- | --- |
