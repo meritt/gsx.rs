@@ -12,6 +12,7 @@ pub struct Entity {
     pub style: Style,
     pub range: Range,
     pub value: Option<String>,
+    pub format: Option<&'static str>,
 }
 
 pub struct Finished {
@@ -65,7 +66,7 @@ fn detected(written: &Written, out: &mut Vec<Styled>) {
             Autolink::Tag { tag, .. } => (Style::Tag, tag),
             Autolink::Mention { handle, .. } => (Style::Mention, handle),
         };
-        out.push(Styled { style, value: Some(value), span: range, source: None, decoration: false });
+        out.push(Styled { style, value: Some(value), format: None, span: range, source: None, decoration: false });
     }
 }
 
@@ -178,6 +179,7 @@ pub fn offsets(form: &EntityForm, text: &str, styled: &[Styled]) -> Vec<Entity> 
             style: entity.style,
             range: Range { start: offset(entity.span.start), end: offset(entity.span.end) },
             value: entity.value.clone(),
+            format: entity.format,
         })
         .collect()
 }

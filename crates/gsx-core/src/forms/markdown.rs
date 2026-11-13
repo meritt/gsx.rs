@@ -1,8 +1,8 @@
 use super::{closing_bidi, language, media, underlined, wrapper};
-use crate::document::{Align, Kind, Node, Provenance};
+use crate::document::{Align, Kind, Node, Provenance, TimeFormat};
 use crate::project::links::accepted;
 use crate::project::{
-    CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, RULE, Renderer, Style, When, href,
+    CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, RULE, Renderer, Style, When, href, time_format,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
@@ -232,7 +232,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                 context.writer().source(node.range);
                 context.writer().push(&format!("]({}){underline}", raw(destination(&href), cell)));
             }
-            Kind::Datetime { unix, .. } => datetime(context, node, *unix, cell),
+            Kind::Datetime { unix, format, .. } => datetime(context, node, *unix, *format, cell),
             kind => match wrapper(kind) {
                 Some(Feature::Underline) if let Some(delimiter) = form.delimiter(Feature::Underline) => {
                     context.writer().source(node.range);
@@ -258,9 +258,10 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
     }
 }
 
-fn datetime(context: &mut Context, node: &Node, unix: i64, cell: bool) {
+fn datetime(context: &mut Context, node: &Node, unix: i64, format: Option<TimeFormat>, cell: bool) {
     let form = form(context);
-    let template = form.datetime.replace("$unix", &unix.to_string());
+    let format = time_format(form.time_formats, format).unwrap_or(form.time_format);
+    let template = form.datetime.replace("$unix", &unix.to_string()).replace("$format", format);
     let Some((before, after)) = template.split_once("$label") else {
         if !node.children.is_empty() {
             context.report(Feature::Datetime, node.range);

@@ -54,6 +54,27 @@ func quoted(_ text: String) -> String {
     return out + "\""
 }
 
+func timeFormats(_ nodes: [GSX.Node]) -> [String?] {
+    nodes.flatMap { node -> [String?] in
+        var own: [String?] = []
+        if case .datetime(_, _, let format) = node.kind { own = [format?.rawValue] }
+        return own + timeFormats(node.children)
+    }
+}
+
+func wireTimeFormats(_ nodes: [Any]) -> [String?] {
+    nodes.flatMap { item -> [String?] in
+        guard let node = item as? [String: Any] else { return [] }
+        let own: [String?] = node["type"] as? String == "datetime" ? [node["format"] as? String] : []
+        return own + wireTimeFormats(node["children"] as? [Any] ?? [])
+    }
+}
+
+func wire(_ json: String, _ key: String) -> [String: Any] {
+    let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+    return object?[key] as? [String: Any] ?? [:]
+}
+
 func array<T>(_ items: [T], _ each: (T) -> String) -> String {
     "[" + items.map(each).joined(separator: ",") + "]"
 }
@@ -182,9 +203,18 @@ for file in arguments.dropFirst() {
                 guard projection.diagnostics == (try GSX.parse(input.markdown, media: media)).diagnostics else {
                     fatalError("project diagnostics differ from parse for \(json)")
                 }
+                let fields = wire(json, "projection")["fields"] as? [[String: Any]] ?? []
+                let formats = fields.flatMap { ($0["entities"] as? [[String: Any]] ?? []).map { $0["format"] as? String } }
+                guard projection.fields.flatMap({ $0.entities.map(\.format) }) == formats else {
+                    fatalError("entity formats differ for \(json)")
+                }
             } else {
-                _ = try GSX.parse(input.markdown, media: media)
+                let document = try GSX.parse(input.markdown, media: media)
                 guard json.hasPrefix(#"{"document":"#) else { fatalError("parse returned a document for \(json)") }
+                let children = wire(json, "document")["children"] as? [Any] ?? []
+                guard timeFormats(document.children) == wireTimeFormats(children) else {
+                    fatalError("datetime formats differ for \(json)")
+                }
             }
         } catch let error as GSX.ParseError {
             guard json.hasPrefix(#"{"error":{"code":"\#(error.code.rawValue)""#) else { fatalError("\(error) for \(json)") }

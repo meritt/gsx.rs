@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use crate::document::{
     self, Align, Code, Details, Diagnostic, Document, Error, Kind, Layout, Marker, MarkerKind, Media, Node, Provenance,
-    Range, Severity,
+    Range, Severity, TimeFormat,
 };
 use crate::measure::{Fact, Limit, Maximum, Placement};
 use crate::project::{
@@ -378,11 +378,13 @@ impl Out {
                 self.key("title");
                 self.optional(title.as_deref());
             }
-            Kind::Datetime { datetime, unix } => {
+            Kind::Datetime { datetime, unix, format } => {
                 self.key("datetime");
                 self.optional(datetime.as_deref());
                 self.key("unix");
                 self.number(unix);
+                self.key("format");
+                self.optional(format.map(TimeFormat::as_str));
             }
             Kind::MediaReference { id } => {
                 self.key("mediaId");
@@ -450,13 +452,17 @@ impl Out {
         self.list(links, |out, range| out.range(*range));
         self.key("entities");
         self.list(entities, |out, entity| {
-            let Entity { style, range, value } = entity;
+            let Entity { style, range, value, format } = entity;
             out.raw("{\"style\":");
             out.string(style.name());
             out.key("range");
             out.range(*range);
             out.key("value");
             out.optional(value.as_deref());
+            if let Some(format) = format {
+                out.key("format");
+                out.string(format);
+            }
             out.0.push('}');
         });
         self.0.push('}');

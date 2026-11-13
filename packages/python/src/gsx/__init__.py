@@ -147,6 +147,7 @@ class Node:
     title: Optional[str] = None
     datetime: Optional[str] = None
     unix: Optional[int] = None
+    format: Optional[str] = None
     media_id: Optional[str] = None
     media_ids: Optional[List[str]] = None
     layout: Optional[str] = None
@@ -324,6 +325,7 @@ class Entity:
     style: str
     range: Range
     value: Optional[str]
+    format: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -665,7 +667,10 @@ def _fields(fields: list) -> List[Field]:
             item["name"],
             item["text"],
             [Range(*link) for link in item["links"]],
-            [Entity(entity["style"], Range(*entity["range"]), entity["value"]) for entity in item["entities"]],
+            [
+                Entity(entity["style"], Range(*entity["range"]), entity["value"], entity.get("format"))
+                for entity in item["entities"]
+            ],
         )
         for item in fields
     ]

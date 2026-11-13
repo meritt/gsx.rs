@@ -8,11 +8,13 @@
 | --- | --- |
 | Emphasis, strong, strikethrough | `*text*`, `**text**`, `~~text~~` |
 | Underline, highlight, spoiler | `++text++`, `==text==`, `\|\|text\|\|` |
-| Date and time | `::time[Launch]{datetime="2026-11-08T12:00:00Z"}` or `::time[Launch]{unix="1794139200"}` |
+| Date and time | `::time[Launch]{datetime="2026-11-08T12:00:00Z"}` or `::time[Launch]{unix="1794139200"}`, optionally with `format="relative"` |
 | Media | `::media{id="photo"}` |
 | Media group | `::media{ids="a,b" layout="collage"}` or `layout="slideshow"` |
 
 Headings, lists, task items, quotes, code, tables and hard breaks retain their structural nodes. Raw HTML, image syntax, reference syntax, footnotes and unsupported directives remain literal text. An HTML node consisting of one opening tag pairs with the next unpaired sibling that is a closing tag of the same ASCII case-insensitive name, across blank lines between blocks; the pair and everything between them become one literal text node. Math spans bind like inline code but produce literal text in the document. Backslash escapes preserve literal provenance; character references produce authored text.
+
+A time directive has a visible label, exactly one `datetime` or `unix` attribute and at most one `format` attribute, in either order. `format` names how the reader sees the time: `time`, `time-seconds`, `date-short`, `date`, `datetime-short`, `datetime`, `full` or `relative`, compared case-sensitively. Any other attribute, a repeated attribute or another `format` value leaves the directive literal with `DATETIME_INVALID`. The document node carries `format`, `null` when absent; the serializer writes it after the time attribute. [Projection](projection.md#fields-and-rendering) maps the names to platform syntax.
 
 Explicit links and angle autolinks accept only absolute HTTP(S) URLs with a host and without credentials. Destinations pass through the WHATWG `url` parser, including IDNA and percent-encoding, and use its serialized URL. Projection-generated link destinations use the same policy. A refused syntactic link becomes literal text with `LINK_LITERALIZED`; bare URL and mention detection belongs to the projection.
 

@@ -48,7 +48,7 @@ Linux wheels are built in their PyPA images. musl builds disable `crt-static` so
 
 [`schema/gsx-1.schema.json`](../../schema/gsx-1.schema.json) defines the JSON written by [`wire.rs`](../../crates/gsx-core/src/wire.rs). Results are `{document: ...}`, `{serialized: ...}`, `{projection: ...}`, `{targets: ...}` or `{error: ...}`. Keys use camelCase; ranges are half-open `[start, end)` pairs. A projection always includes `diagnostics`, written by the same writer as `document.diagnostics` and byte-identical to it, so a caller deciding whether to publish needs no separate parse. Rejected input gives the same `{error: ...}` from `project` as from `parse`. Rust `project::project` takes a parsed `Document` and leaves its diagnostics there.
 
-A node carries `type`, `range` and its kind-specific fields, using `null` for absent nullable values. `provenance` appears only as `"literal"`, `gapBefore` only when set, and `children` only when non-empty. Exhaustive Rust matches enforce model-to-wire coverage; [schema tests](../../crates/gsx-core/tests/schema.rs) validate the separate schema against corpus results.
+A node carries `type`, `range` and its kind-specific fields, using `null` for absent nullable values, such as a datetime's `format`. An entity carries `style`, `range` and `value`; a Telegram `date` entity adds `format` only when its source has one. `provenance` appears only as `"literal"`, `gapBefore` only when set, and `children` only when non-empty. Exhaustive Rust matches enforce model-to-wire coverage; [schema tests](../../crates/gsx-core/tests/schema.rs) validate the separate schema against corpus results.
 
 | Range | Coordinate system |
 | --- | --- |

@@ -44,6 +44,7 @@ impl Prefix {
 pub struct Styled {
     pub style: Style,
     pub value: Option<String>,
+    pub format: Option<&'static str>,
     pub span: Span<usize>,
     pub source: Option<(Feature, Range)>,
     pub decoration: bool,
@@ -238,14 +239,21 @@ impl Writer {
         &self.out.text[mark..]
     }
 
-    pub fn style(&mut self, style: Style, value: Option<String>, mark: usize, source: Option<(Feature, Range)>) {
+    pub fn style(
+        &mut self,
+        style: Style,
+        value: Option<String>,
+        format: Option<&'static str>,
+        mark: usize,
+        source: Option<(Feature, Range)>,
+    ) {
         let span = mark..self.out.text.len();
-        self.out.styled.push(Styled { style, value, span, source, decoration: false });
+        self.out.styled.push(Styled { style, value, format, span, source, decoration: false });
     }
 
     pub fn decorate(&mut self, style: Style, mark: usize) {
         let span = mark..self.out.text.len();
-        self.out.styled.push(Styled { style, value: None, span, source: None, decoration: true });
+        self.out.styled.push(Styled { style, value: None, format: None, span, source: None, decoration: true });
     }
 
     pub fn origin(&mut self, start: usize, range: Range) {

@@ -15,7 +15,7 @@ extension GSX {
         enum CodingKeys: String, CodingKey {
             case type, range, provenance, gapBefore, children
             case depth, ordered, start, spread, checked, lang, meta, value, align, url, source, title, datetime, unix
-            case mediaId, mediaIds, layout
+            case format, mediaId, mediaIds, layout
         }
 
         public init(from decoder: any Decoder) throws {
@@ -48,7 +48,8 @@ extension GSX {
                 case "inlineCode": .inlineCode(value: try value(.value))
                 case "break": .break
                 case "link": .link(url: try value(.url), source: try value(.source), title: try optional(.title))
-                case "datetime": .datetime(datetime: try optional(.datetime), unix: try value(.unix))
+                case "datetime":
+                    .datetime(datetime: try optional(.datetime), unix: try value(.unix), format: try optional(.format))
                 case "mediaReference": .mediaReference(id: try value(.mediaId))
                 case "mediaGroup": .mediaGroup(ids: try value(.mediaIds), layout: try value(.layout))
                 case let type:
@@ -79,9 +80,18 @@ extension GSX {
         case inlineCode(value: String)
         case `break`
         case link(url: String, source: String, title: String?)
-        case datetime(datetime: String?, unix: Int64)
+        case datetime(datetime: String?, unix: Int64, format: TimeFormat?)
         case mediaReference(id: String)
         case mediaGroup(ids: [String], layout: Layout)
+    }
+
+    public enum TimeFormat: String, Sendable, Hashable, Decodable {
+        case time
+        case timeSeconds = "time-seconds"
+        case dateShort = "date-short"
+        case date
+        case datetimeShort = "datetime-short"
+        case datetime, full, relative
     }
 
     public enum Provenance: String, Sendable, Hashable, Decodable {

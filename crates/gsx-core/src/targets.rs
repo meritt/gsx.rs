@@ -1,5 +1,5 @@
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
-use crate::project::{Class, Condition, Feature, Rule, Target, When};
+use crate::project::{Class, Condition, Feature, Rule, Target, TimeFormats, When};
 
 const fn rule(feature: Feature, class: Class, reason: &'static str) -> Rule {
     Rule { feature, class, reason, conditions: &[] }
@@ -28,6 +28,8 @@ const THREADED_TEXT: Rule = Rule {
     ],
     ..TEXT
 };
+
+const TELEGRAM_TIME_FORMATS: TimeFormats = &["t", "T", "d", "D", "dt", "Dt", "wDt", "r"];
 
 const DATE_BOUNDS: [Condition; 2] = [
     Condition { when: When::Overflow, class: Unwrapped, reason: "datetime_label_too_long" },

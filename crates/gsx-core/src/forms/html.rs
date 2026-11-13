@@ -3,7 +3,7 @@ use crate::document::{Align, Kind, Layout, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
     CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Slot, Truncated,
-    When, blank, date_refusal, href, marker, placed, references, shortened,
+    When, blank, date_refusal, href, marker, placed, references, shortened, time_format,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks: render, inline: render_inline };
@@ -314,12 +314,16 @@ impl Html {
                     let open = format!("<a href=\"{}\">", attribute(&href(url)));
                     self.element(context, node, Feature::Link, open);
                 }
-                Kind::Datetime { unix, .. } => {
-                    let open = self.form.tag(Feature::Datetime).map(|tag| format!("<{tag} unix=\"{unix}\">"));
+                Kind::Datetime { unix, format, .. } => {
+                    let format = time_format(self.form.time_formats, *format);
+                    let open = self.form.tag(Feature::Datetime).map(|tag| match format {
+                        Some(format) => format!("<{tag} unix=\"{unix}\" format=\"{format}\">"),
+                        None => format!("<{tag} unix=\"{unix}\">"),
+                    });
                     let refusal = open.as_ref().and_then(|_| {
                         let mut text = String::new();
                         label(&node.children, &mut text);
-                        date_refusal(&text, *unix)
+                        date_refusal(&text, *unix, format.is_some())
                     });
                     match refusal {
                         Some(when) => {

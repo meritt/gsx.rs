@@ -166,7 +166,7 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                             {
                                 context.writer().decorate(underline, mark);
                             }
-                            context.writer().style(style, Some(href), mark, Some((Feature::Link, node.range)));
+                            context.writer().style(style, Some(href), None, mark, Some((Feature::Link, node.range)));
                         }
                         Some(_) => context.report_when(Feature::Link, Some(node.range), Some(When::LabelInvisible)),
                         None => context.report(Feature::Link, node.range),
@@ -199,27 +199,28 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                 context.writer().link(&href);
                 context.writer().push(")");
             }
-            Kind::Datetime { unix, .. } => {
+            Kind::Datetime { unix, format, .. } => {
                 let Some(style) = context.native(Feature::Datetime) else {
                     context.report(Feature::Datetime, node.range);
                     inline(context, &node.children);
                     continue;
                 };
+                let format = context.time_format(*format);
                 let mut text = String::new();
                 label(&node.children, &mut text);
                 let when = if context.nested() || contains_entity(&node.children) {
                     Some(When::Nested)
                 } else {
-                    date_refusal(&text, *unix)
+                    date_refusal(&text, *unix, format.is_some())
                 };
-                match when {
-                    Some(when) => {
-                        context.report_when(Feature::Datetime, Some(node.range), Some(when));
+                if let Some(when) = when {
+                    context.report_when(Feature::Datetime, Some(node.range), Some(when));
+                    inline(context, &node.children);
+                } else {
+                    let value = Some(unix.to_string());
+                    context.formatted(style, value, format, Feature::Datetime, node, |context| {
                         inline(context, &node.children);
-                    }
-                    None => context.styled(style, Some(unix.to_string()), Feature::Datetime, node, |context| {
-                        inline(context, &node.children);
-                    }),
+                    });
                 }
             }
             kind => match wrapper(kind) {

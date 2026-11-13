@@ -425,7 +425,7 @@ impl Inline<'_, '_> {
             Kind::InlineCode { value } => self.code(value),
             Kind::Break => self.out.push_str("\\\n"),
             Kind::Link { url: _, source, title } => self.link(node, source, title.as_deref()),
-            Kind::Datetime { datetime, unix } => {
+            Kind::Datetime { datetime, unix, format } => {
                 self.out.push_str("::time[");
                 self.nodes(&node.children, Some(']'), false, None);
                 if let Some(datetime) = datetime {
@@ -434,6 +434,10 @@ impl Inline<'_, '_> {
                 } else {
                     self.out.push_str("]{unix=\"");
                     self.out.push_str(&unix.to_string());
+                }
+                if let Some(format) = format {
+                    self.out.push_str("\" format=\"");
+                    self.out.push_str(format.as_str());
                 }
                 self.out.push_str("\"}");
             }

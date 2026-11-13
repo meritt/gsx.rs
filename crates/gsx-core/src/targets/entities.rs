@@ -2,7 +2,7 @@ use super::limits::{
     Alt, CodePoints, Fact, Graphemes, Limit, Links, Story, Text, ThreadsWeighted, Utf8Bytes, limit, resolved,
 };
 use super::plain::BODY;
-use super::{DATE_BOUNDS, DEFAULT, LINK, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
+use super::{DATE_BOUNDS, DEFAULT, LINK, Rules, SPOILERS_PER_POST, TELEGRAM_TIME_FORMATS, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
@@ -40,6 +40,7 @@ static BLUESKY_FORM: EntityForm = EntityForm {
     links: None,
     trim: false,
     styled_suffix: true,
+    time_formats: &[],
 };
 
 pub static BLUESKY: Target = entities(
@@ -65,6 +66,7 @@ static THREADS_FORM: EntityForm = EntityForm {
     links: Some(5),
     trim: false,
     styled_suffix: false,
+    time_formats: &[],
 };
 
 const THREADS_LINK: [Condition; 3] = [
@@ -122,6 +124,7 @@ static TELEGRAM_FORM: EntityForm = EntityForm {
     links: None,
     trim: true,
     styled_suffix: true,
+    time_formats: TELEGRAM_TIME_FORMATS,
 };
 
 const CAPPED: Condition = Condition { when: When::Capped, class: Unwrapped, reason: "entity_limit" };

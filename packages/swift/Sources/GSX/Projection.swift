@@ -214,6 +214,7 @@ extension GSX {
         /// A range of the field text in the target's `offsets` unit.
         public let range: Range<Int>
         public let value: String?
+        public let format: String?
     }
 
     public enum Unit: String, Sendable, Hashable, Decodable {

@@ -37,9 +37,19 @@ export type Node =
   | (NodeBase & { type: 'table'; align: Align[] })
   | (NodeBase & { type: 'text' | 'inlineCode'; value: string })
   | (NodeBase & { type: 'link'; url: string; source: string; title: string | null })
-  | (NodeBase & { type: 'datetime'; datetime: string | null; unix: number })
+  | (NodeBase & { type: 'datetime'; datetime: string | null; unix: number; format: TimeFormat | null })
   | (NodeBase & { type: 'mediaReference'; mediaId: string })
   | (NodeBase & { type: 'mediaGroup'; mediaIds: string[]; layout: Layout });
+
+export type TimeFormat =
+  | 'time'
+  | 'time-seconds'
+  | 'date-short'
+  | 'date'
+  | 'datetime-short'
+  | 'datetime'
+  | 'full'
+  | 'relative';
 
 export type Layout = 'collage' | 'slideshow';
 
@@ -208,6 +218,7 @@ export interface Entity {
   style: Style;
   range: Range;
   value: string | null;
+  format?: 't' | 'T' | 'd' | 'D' | 'dt' | 'Dt' | 'wDt' | 'r';
 }
 
 export interface Field {

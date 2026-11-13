@@ -51,6 +51,48 @@ impl Layout {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TimeFormat {
+    Time,
+    TimeSeconds,
+    DateShort,
+    Date,
+    DatetimeShort,
+    Datetime,
+    Full,
+    Relative,
+}
+
+impl TimeFormat {
+    pub const ALL: [TimeFormat; 8] = [
+        TimeFormat::Time,
+        TimeFormat::TimeSeconds,
+        TimeFormat::DateShort,
+        TimeFormat::Date,
+        TimeFormat::DatetimeShort,
+        TimeFormat::Datetime,
+        TimeFormat::Full,
+        TimeFormat::Relative,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            TimeFormat::Time => "time",
+            TimeFormat::TimeSeconds => "time-seconds",
+            TimeFormat::DateShort => "date-short",
+            TimeFormat::Date => "date",
+            TimeFormat::DatetimeShort => "datetime-short",
+            TimeFormat::Datetime => "datetime",
+            TimeFormat::Full => "full",
+            TimeFormat::Relative => "relative",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<TimeFormat> {
+        TimeFormat::ALL.into_iter().find(|format| format.as_str() == value)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
     Paragraph,
@@ -73,7 +115,7 @@ pub enum Kind {
     InlineCode { value: String },
     Break,
     Link { url: String, source: String, title: Option<String> },
-    Datetime { datetime: Option<String>, unix: i64 },
+    Datetime { datetime: Option<String>, unix: i64, format: Option<TimeFormat> },
     MediaReference { id: String },
     MediaGroup { ids: Vec<String>, layout: Layout },
 }

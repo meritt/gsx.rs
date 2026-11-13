@@ -1,6 +1,6 @@
 use super::limits::{CodePoints, Limit, Post, Reel, Story, Text, With, Without, limit};
 use super::plain::BODY;
-use super::{DATE_BOUNDS, DEFAULT, TEXT, rule};
+use super::{DATE_BOUNDS, DEFAULT, TELEGRAM_TIME_FORMATS, TEXT, rule};
 use crate::document::Layout;
 use crate::forms::html::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
@@ -79,6 +79,7 @@ static TELEGRAM_FORM: HtmlForm = HtmlForm {
     code_info: true,
     empty_removed: true,
     trim: true,
+    time_formats: TELEGRAM_TIME_FORMATS,
 };
 
 const NESTED: Condition = Condition { when: When::Nested, class: Unwrapped, reason: "entity_cannot_contain_entity" };
@@ -150,6 +151,7 @@ static RICH_FORM: HtmlForm = HtmlForm {
     code_info: true,
     empty_removed: false,
     trim: false,
+    time_formats: TELEGRAM_TIME_FORMATS,
 };
 
 pub static TELEGRAM_RICH: Target = Target {
@@ -204,6 +206,7 @@ static MAX_FORM: HtmlForm = HtmlForm {
     code_info: false,
     empty_removed: false,
     trim: false,
+    time_formats: &[],
 };
 
 pub static MAX: Target = html(

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::Write as _;
 
-use crate::document::{Layout, MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, Node};
+use crate::document::{Layout, MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, Node, TimeFormat};
 
 use super::Context;
 use super::change::{Class, Feature, FieldName};
@@ -178,9 +178,11 @@ pub enum Style {
 }
 
 const DATE_LABEL: usize = 127;
+const FORMATTED_DATE_LABEL: usize = 31;
 
-pub fn date_refusal(label: &str, unix: i64) -> Option<When> {
-    if label.encode_utf16().count() > DATE_LABEL {
+pub fn date_refusal(label: &str, unix: i64, formatted: bool) -> Option<When> {
+    let maximum = if formatted { FORMATTED_DATE_LABEL } else { DATE_LABEL };
+    if label.encode_utf16().count() > maximum {
         Some(When::Overflow)
     } else if !(0..=i64::from(i32::MAX)).contains(&unix) {
         Some(When::Refused)
@@ -226,6 +228,17 @@ pub struct EntityForm {
     pub links: Option<usize>,
     pub trim: bool,
     pub styled_suffix: bool,
+    pub time_formats: TimeFormats,
+}
+
+pub type TimeFormats = &'static [&'static str];
+
+pub fn time_format(formats: TimeFormats, format: Option<TimeFormat>) -> Option<&'static str> {
+    format.and_then(|format| formats.get(format as usize).copied())
+}
+
+fn describe_time_formats(formats: TimeFormats) -> String {
+    join(TimeFormat::ALL.iter().zip(formats).map(|(format, native)| format!("{}={}", format.as_str(), quoted(native))))
 }
 
 impl EntityForm {
@@ -261,6 +274,7 @@ pub struct HtmlForm {
     pub code_info: bool,
     pub empty_removed: bool,
     pub trim: bool,
+    pub time_formats: TimeFormats,
 }
 
 impl HtmlForm {
@@ -289,6 +303,8 @@ pub struct MarkdownForm {
     pub neutralised: &'static [LineStart],
     pub html: bool,
     pub datetime: &'static str,
+    pub time_format: &'static str,
+    pub time_formats: TimeFormats,
     pub separators: &'static str,
     pub quote_depth: Option<u32>,
     pub url_labels: bool,
@@ -316,12 +332,15 @@ impl MarkdownForm {
         let _ = writeln!(
             out,
             "  delimiters {delimiters}\n  native {}\n  escaped {}\n  owned {}\n  neutralised {neutralised}\n  html {}\n  \
-             datetime {}\n  separators {}\n  quote_depth {quote_depth}\n  url_labels {}",
+             datetime {}\n  time_format {}\n  time_formats {}\n  separators {}\n  quote_depth {quote_depth}\n  \
+             url_labels {}",
             join(self.native.iter().map(|feature| feature.name())),
             quoted(self.escaped),
             self.owned,
             self.html,
             quoted(self.datetime),
+            quoted(self.time_format),
+            describe_time_formats(self.time_formats),
             quoted(self.separators),
             self.url_labels,
         );
@@ -478,7 +497,7 @@ impl Form {
                 let _ = writeln!(
                     out,
                     "  offsets {offsets}\n  styles {styles}\n  heading {}\n  gated {}\n  code_splits {}\n  detection \
-                     {detection}\n  cap {}\n  links {}\n  trim {}\n  styled_suffix {}",
+                     {detection}\n  cap {}\n  links {}\n  trim {}\n  styled_suffix {}\n  time_formats {}",
                     form.heading.map_or("none", Style::name),
                     form.gated,
                     form.code_splits,
@@ -486,6 +505,7 @@ impl Form {
                     optional(form.links),
                     form.trim,
                     form.styled_suffix,
+                    describe_time_formats(form.time_formats),
                 );
             }
             Form::Html(form) => {
@@ -508,7 +528,7 @@ impl Form {
                     out,
                     "  blocks {blocks}\n  structure {structure}\n  tags {tags}\n  exclusive {}\n  groups {groups}\n  \
                      code_contained {}\n  quote_nests {}\n  quote_contains_code {}\n  code_info {}\n  empty_removed {}\n  \
-                     trim {}",
+                     trim {}\n  time_formats {}",
                     join(form.exclusive.iter().map(|feature| feature.name())),
                     form.code_contained,
                     form.quote_nests,
@@ -516,6 +536,7 @@ impl Form {
                     form.code_info,
                     form.empty_removed,
                     form.trim,
+                    describe_time_formats(form.time_formats),
                 );
             }
             Form::Markdown(form) => form.describe(out),

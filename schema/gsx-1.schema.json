@@ -180,6 +180,10 @@
         "value": {
           "description": "The URL of a link, the tag of a tag, the handle of a mention (to resolve to a DID), the language of a pre, the UNIX time of a date in decimal; null otherwise.",
           "$ref": "#/$defs/nullableString"
+        },
+        "format": {
+          "description": "The Telegram format letters of a date whose source has a format; absent otherwise.",
+          "enum": ["t", "T", "d", "D", "dt", "Dt", "wDt", "r"]
         }
       },
       "required": ["style", "range", "value"],
@@ -713,9 +717,16 @@
       "properties": {
         "type": { "const": "datetime" },
         "datetime": { "$ref": "#/$defs/nullableString" },
-        "unix": { "type": "integer" }
+        "unix": { "type": "integer" },
+        "format": {
+          "description": "The authored display format; null when absent.",
+          "oneOf": [{ "$ref": "#/$defs/timeFormat" }, { "type": "null" }]
+        }
       },
-      "required": ["datetime", "unix"]
+      "required": ["datetime", "unix", "format"]
+    },
+    "timeFormat": {
+      "enum": ["time", "time-seconds", "date-short", "date", "datetime-short", "datetime", "full", "relative"]
     },
     "mediaReferenceNode": {
       "type": "object",

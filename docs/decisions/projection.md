@@ -73,9 +73,24 @@ Form configuration lives in [`project/table.rs`](../../crates/gsx-core/src/proje
 - Threads appends `targetUrl` after a blank line or replaces a blank body, reporting `textual_fallback` `target_url_as_text`. It uses the serialized HTTP(S) URL from the [shared URL policy](conformance.md#syntax) and never cuts it. Fitting reserves the URL plus an ellipsis and blank line for a nonblank body. Refused URLs report `omitted` `target_url_refused`; URLs that cannot fit report `omitted` `target_url_omitted`. A replaced blank body retains media changes only.
 - Blank output contains only whitespace or default-ignorable Unicode characters. Required empty fields report a blocking change.
 
+A datetime renders natively on Telegram (`tg-time` on both HTML targets, the `date` entity on `telegram-entities`), Discord (`<t:…>`, blocks included) and Slack (`<!date^…|label>`, blocks included); elsewhere its label remains text. Its `format` selects the platform's display format from the target table, and the source name is never echoed. Without `format`, Telegram writes no format, Discord uses `f` and Slack `{date_short} {time}`. Other targets ignore `format`.
+
+| `format` | Telegram | Discord | Slack |
+| --- | --- | --- | --- |
+| `time` | `t` | `t` | `{time}` |
+| `time-seconds` | `T` | `T` | `{time_secs}` |
+| `date-short` | `d` | `d` | `{date_num}` |
+| `date` | `D` | `D` | `{date}` |
+| `datetime-short` | `dt` | `s` | `{date_num} {time}` |
+| `datetime` | `Dt` | `f` | `{date} {time}` |
+| `full` | `wDt` | `F` | `{date_long} {time}` |
+| `relative` | `r` | `R` | `{ago}` |
+
+Telegram HTML writes the letters as `<tg-time unix="…" format="…">`. A Telegram `date` entity carries them in an optional `format` key, present only when the source has a format; entities without it are unchanged.
+
 ### Entities and caps
 
-Telegram supports `pre`, `blockquote` and `date` entities when enabled. Code blocks split surrounding entities; quotes cannot nest (`unwrapped` `blockquote_cannot_nest`), and code splits a quote (`unwrapped` `code_block_cannot_be_quoted`). A date's `value` is the decimal UNIX time. Its label remains text with an `unwrapped` change inside another entity or when containing a link, code or date (`entity_cannot_contain_entity`), above 127 UTF-16 units (`datetime_label_too_long`), or outside UNIX times 0 through 2³¹ − 1 (`datetime_out_of_range`). Telegram HTML and rich HTML apply the same label length and time bounds to `tg-time` with the same reasons, because Telegram converts the tag to the same date entity. The projection has no clock and does not validate time-relative provider restrictions.
+Telegram supports `pre`, `blockquote` and `date` entities when enabled. Code blocks split surrounding entities; quotes cannot nest (`unwrapped` `blockquote_cannot_nest`), and code splits a quote (`unwrapped` `code_block_cannot_be_quoted`). A date's `value` is the decimal UNIX time. Its label remains text with an `unwrapped` change inside another entity or when containing a link, code or date (`entity_cannot_contain_entity`), above 127 UTF-16 units, 31 with a format (`datetime_label_too_long`), or outside UNIX times 0 through 2³¹ − 1 (`datetime_out_of_range`). Telegram HTML and rich HTML apply the same label length and time bounds to `tg-time` with the same reasons, because Telegram converts the tag to the same date entity. The projection has no clock and does not validate time-relative provider restrictions.
 
 `pre` stores the language and omits the remaining code info string (`omitted` `code_block_info_omitted`); its lines carry no list indentation. A code language written anywhere (Markdown fence, HTML `language-` class, `pre` value) is 1 to 32 ASCII letters, digits, `_`, `+`, `.` or `-`; any other language is omitted with the same change, so every target carries the same languages. Quote entities contain their own list markers without an enclosing quote prefix. Telegram ranges exclude trailing whitespace; quote ranges also exclude leading whitespace. Without `entitiesAllowed`, styles report `unwrapped` `entities_unavailable` and quotes retain their prefixes with `textual_fallback` `blockquote_as_text`. Repeated nesting of the same entity style produces one range.
 

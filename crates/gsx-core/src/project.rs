@@ -13,7 +13,7 @@ mod thread;
 use std::collections::HashMap;
 use std::ops::Range as Span;
 
-use crate::document::{Document, Kind, Node, Provenance, Range};
+use crate::document::{Document, Kind, Node, Provenance, Range, TimeFormat};
 use crate::measure::{self, Fact};
 
 pub use crate::measure::{MediaKind, Placement, Unit};
@@ -28,7 +28,7 @@ pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
     BlocksForm, Ceiling, Condition, Detection, EntityForm, Escape, FieldSpec, Form, Group, HtmlBlocks, HtmlForm,
     LineStart, MarkdownForm, Media, MediaShape, Normalization, Offsets, Renderer, Rule, Search, Source, SpoilerMode,
-    Spoilers, Structure, Style, Target, Truncation, Unplaced, When, date_refusal,
+    Spoilers, Structure, Style, Target, TimeFormats, Truncation, Unplaced, When, date_refusal, time_format,
 };
 
 use layout::Styled;
@@ -165,6 +165,10 @@ impl<'a> Context<'a> {
         self.open_form().and_then(|form| form.style(feature))
     }
 
+    pub fn time_format(&self, format: Option<TimeFormat>) -> Option<&'static str> {
+        self.open_form().and_then(|form| table::time_format(form.time_formats, format))
+    }
+
     pub fn heading(&self) -> Option<Style> {
         self.open_form().and_then(|form| form.heading)
     }
@@ -177,10 +181,22 @@ impl<'a> Context<'a> {
         node: &Node,
         draw: impl FnOnce(&mut Self),
     ) {
+        self.formatted(style, value, None, feature, node, draw);
+    }
+
+    pub fn formatted(
+        &mut self,
+        style: Style,
+        value: Option<String>,
+        format: Option<&'static str>,
+        feature: Feature,
+        node: &Node,
+        draw: impl FnOnce(&mut Self),
+    ) {
         let mark = self.writer.mark();
         self.within(style, draw);
         if !self.open.contains(&style) {
-            self.writer.style(style, value, mark, Some((feature, node.range)));
+            self.writer.style(style, value, format, mark, Some((feature, node.range)));
         }
     }
 

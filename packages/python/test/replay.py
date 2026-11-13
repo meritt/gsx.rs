@@ -68,6 +68,28 @@ def listing():
     return json.dumps({"targets": [target(item) for item in gsx.targets()]}, separators=(",", ":"), ensure_ascii=False)
 
 
+def time_formats(nodes):
+    found = []
+    for node in nodes:
+        if isinstance(node, dict):
+            if node["type"] == "datetime":
+                found.append(node["format"])
+            found += time_formats(node.get("children", []))
+        else:
+            if node.type == "datetime":
+                found.append(node.format)
+            found += time_formats(node.children)
+    return found
+
+
+def entity_formats(fields):
+    return [
+        entity.get("format") if isinstance(entity, dict) else entity.format
+        for field in fields
+        for entity in (field["entities"] if isinstance(field, dict) else field.entities)
+    ]
+
+
 def main(out, files):
     names = [target.name for target in gsx.targets()]
     if "x-plain" not in names:
@@ -119,10 +141,14 @@ def main(out, files):
                         raise AssertionError("project returned a projection for " + raw)
                     if projection.diagnostics != gsx.parse(markdown, media).diagnostics:
                         raise AssertionError("project diagnostics differ from parse for " + raw)
+                    if entity_formats(projection.fields) != entity_formats(wire["projection"]["fields"]):
+                        raise AssertionError("entity formats differ for " + raw)
                 else:
-                    gsx.parse(markdown, media)
+                    document = gsx.parse(markdown, media)
                     if "document" not in wire:
                         raise AssertionError("parse returned a document for " + raw)
+                    if time_formats(document.children) != time_formats(wire["document"]["children"]):
+                        raise AssertionError("datetime formats differ for " + raw)
             except gsx.ParseError as error:
                 if error.code != wire.get("error", {}).get("code"):
                     raise

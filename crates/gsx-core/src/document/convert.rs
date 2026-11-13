@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use crate::document::tree::{self, Prefix, decode_string};
 use crate::document::{
     Code, Details, Diagnostic, Kind, Layout, MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, MEDIA_ID_MAX_BYTES, Media, Node,
-    Provenance, Range, Scheme, Severity, time,
+    Provenance, Range, Scheme, Severity, TimeFormat, time,
 };
 use crate::source::LineIndex;
 use crate::syntax::{self, whitespace};
@@ -572,17 +572,28 @@ enum Converted {
 
 fn time_node(node: &tree::Node, context: &Context) -> Converted {
     let refused = |code| Converted::One(context.refused(code, (node.start, node.end), node.start, node.end), false);
-    let [attribute] = node.extra().attributes.as_slice() else {
-        return refused(Code::DatetimeInvalid);
+    let (attribute, format) = match node.extra().attributes.as_slice() {
+        [attribute] => (attribute, None),
+        [attribute, format] | [format, attribute] if !format.shortcut && format.name == "format" => {
+            (attribute, Some(format))
+        }
+        _ => return refused(Code::DatetimeInvalid),
     };
     if attribute.shortcut || !matches!(attribute.name.as_str(), "datetime" | "unix") {
         return refused(Code::DatetimeInvalid);
     }
+    let format = match format {
+        None => None,
+        Some(format) => match format.value.as_deref().and_then(TimeFormat::parse) {
+            Some(format) => Some(format),
+            None => return refused(Code::DatetimeInvalid),
+        },
+    };
     let value = attribute.value.clone().unwrap_or_default();
     let kind = if attribute.name == "unix" {
-        time::unix(&value).map(|unix| Kind::Datetime { datetime: None, unix })
+        time::unix(&value).map(|unix| Kind::Datetime { datetime: None, unix, format })
     } else {
-        time::absolute(&value).map(|unix| Kind::Datetime { datetime: Some(value), unix })
+        time::absolute(&value).map(|unix| Kind::Datetime { datetime: Some(value), unix, format })
     };
     match kind {
         Ok(kind) => Converted::One(context.node(kind, node.start, node.end), true),
