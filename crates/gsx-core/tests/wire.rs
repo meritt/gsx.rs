@@ -57,21 +57,43 @@ fn runs_inputs_at_the_depth_limits_within_a_thread_stack() {
     let link =
         format!("[{}![a](https://e.com/i){}](https://e.com)", "**".repeat(inlines - 2), "**".repeat(inlines - 2));
     let directives = format!("{}a{}", "::x[**".repeat(inlines / 2), "**]".repeat(inlines / 2));
+    let wraps = [
+        ("*", "*"),
+        ("~~", "~~"),
+        ("++", "++"),
+        ("==", "=="),
+        ("||", "||"),
+        ("::time[", "]{unix=\"1785423600\" format=\"relative\"}"),
+        ("[", "](https://e.com)"),
+        ("**", "**"),
+    ];
+    let kinds = (0..inlines).rev().fold("$x^2$".to_owned(), |text, level| {
+        let (open, close) = wraps[level % wraps.len()];
+        format!("{open}a {text} b{close}")
+    });
     let inputs = [
         format!("{}{link}", "> ".repeat(containers)),
         format!("{}{directives}", "> ".repeat(containers)),
         format!("{lists}{}- {inline}\n", "  ".repeat(containers - 1)),
         format!("{mixed}{}- > {inline}\n", "    ".repeat(containers / 2)),
+        format!("{}{kinds}", "> - ".repeat(containers / 2)),
+        format!("{}```math\nx^2\n```\n", "> - ".repeat(containers / 2)),
     ];
+    let threaded = Facts { overflow: Overflow::Thread, entities_allowed: true, ..Facts::default() };
     let stack = if cfg!(debug_assertions) { 1 << 20 } else { 128 << 10 };
     std::thread::Builder::new()
         .stack_size(stack)
         .spawn(move || {
+            let kinds = parse(inputs[4].as_bytes(), &[]);
+            assert!(kinds.contains("\"type\":\"math\"") && kinds.contains("\"format\":\"relative\""), "{kinds}");
+            assert!(parse(inputs[5].as_bytes(), &[]).contains("\"lang\":\"math\""), "{}", inputs[5]);
             for input in &inputs {
                 assert!(!parse(input.as_bytes(), &[]).contains("\"error\""), "{input}");
                 assert!(serialize(input.as_bytes(), &[]).contains("\"serialized\""), "{input}");
-                for target in TARGETS {
-                    assert!(project(input.as_bytes(), &[], target, &Facts::default()).contains("\"projection\""));
+                for (target, facts) in
+                    TARGETS.iter().flat_map(|target| [(target, Facts::default()), (target, threaded)])
+                {
+                    assert!(project(input.as_bytes(), &[], target, &facts).contains("\"projection\""), "{input}");
                 }
             }
         })

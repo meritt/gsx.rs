@@ -1,6 +1,7 @@
 #![no_main]
 
-use gsx_core::document::{Media, parse};
+use gsx_core::document::{Document, Kind, Media, Node, Provenance, parse};
+use gsx_core::serialize::serialize;
 use gsx_core::wire;
 use libfuzzer_sys::fuzz_target;
 use serde_json::Value;
@@ -9,6 +10,45 @@ const MEDIA: &[Media<'static>] = &[Media { id: "a", cover: None }, Media { id: "
 
 fn json(out: &str) -> Value {
     serde_json::from_str(out).unwrap_or_else(|error| panic!("wire output is not JSON ({error}): {out}"))
+}
+
+fn merged(nodes: &[Node]) -> Vec<Node> {
+    let mut out: Vec<Node> = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        if let (Some(last), Kind::Text { value }) = (out.last_mut(), &node.kind)
+            && node.provenance == Provenance::Authored
+            && last.provenance == Provenance::Authored
+            && let Kind::Text { value: previous } = &mut last.kind
+        {
+            previous.push_str(value);
+            continue;
+        }
+        out.push(node.clone());
+    }
+    out
+}
+
+fn same(expected: &[Node], actual: &[Node]) -> bool {
+    let (expected, actual) = (merged(expected), merged(actual));
+    expected.len() == actual.len()
+        && expected.iter().zip(&actual).all(|(expected, actual)| {
+            expected.kind == actual.kind
+                && expected.provenance == actual.provenance
+                && expected.gap_before == actual.gap_before
+                && same(&expected.children, &actual.children)
+        })
+}
+
+fn round_trip(document: &Document, wired: &Value) {
+    let serialized = serialize(document);
+    assert_eq!(wired["serialized"].as_str(), Some(serialized.as_str()), "wire serializes another text");
+    let reparsed = parse(&serialized, MEDIA)
+        .unwrap_or_else(|error| panic!("serialized output is rejected ({error:?}): {serialized:?}"));
+    assert!(
+        same(document.children(), reparsed.children()),
+        "serialized output reparses to another document: {serialized:?}"
+    );
+    assert_eq!(serialize(&reparsed), serialized, "serializing the reparsed document is not idempotent");
 }
 
 fuzz_target!(|data: &[u8]| {
@@ -40,6 +80,7 @@ fuzz_target!(|data: &[u8]| {
                     .all(|diagnostic| diagnostic.range.start <= diagnostic.range.end && diagnostic.range.end <= units)
             );
             assert!(wired.get("document").is_some(), "wire reports an error for an accepted document");
+            round_trip(&first, &serialized);
         }
         (Err(first), Err(second)) => {
             assert_eq!(first, second);

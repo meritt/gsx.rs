@@ -1,10 +1,12 @@
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
-use gsx_core::document::{Document, parse};
+use gsx_core::document::{Details, Document, Error, Limit, parse};
 use gsx_core::project::{
     Block, Boundary, Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Part,
     Placement, Projection, Style, Target, Unit, project, project_with,
 };
+use gsx_core::serialize::serialize;
 use gsx_core::targets::{TARGETS, target};
 
 fn run(name: &str, markdown: &str, facts: &Facts) -> Projection {
@@ -16,16 +18,26 @@ fn text(projection: &Projection, name: FieldName) -> &str {
     &projection.field(name).unwrap().text
 }
 
-fn fastest(document: &Document, target: &'static Target) -> std::time::Duration {
-    let options = Options { search: None, maximum: Some(500) };
+fn best(run: impl Fn()) -> Duration {
     (0..2)
         .map(|_| {
-            let started = std::time::Instant::now();
-            project_with(document, target, &Facts::default(), &options);
+            let started = Instant::now();
+            run();
             started.elapsed()
         })
         .min()
         .unwrap()
+}
+
+fn scales(short: Duration, long: Duration, factor: u32) -> bool {
+    long < short.max(Duration::from_millis(2)) * factor
+}
+
+fn fastest(document: &Document, target: &'static Target) -> Duration {
+    let options = Options { search: None, maximum: Some(500) };
+    best(|| {
+        project_with(document, target, &Facts::default(), &options);
+    })
 }
 
 #[test]
@@ -36,8 +48,7 @@ fn whitespace_free_runs_project_linearly() {
         let large = parse(&pattern.repeat(4 * times), &[]).unwrap();
         for target in TARGETS {
             let (short, long) = (fastest(&small, target), fastest(&large, target));
-            let floor = short.max(std::time::Duration::from_millis(2));
-            assert!(long < floor * 10, "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
+            assert!(scales(short, long, 10), "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
         }
     }
 }
@@ -46,14 +57,7 @@ fn whitespace_free_runs_project_linearly() {
 fn threads_split_linearly() {
     let threaded = |document: &Document, target: &'static Target| {
         let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
-        (0..2)
-            .map(|_| {
-                let started = std::time::Instant::now();
-                assert!(project(document, target, &facts).parts.len() > 1, "{} did not split", target.name);
-                started.elapsed()
-            })
-            .min()
-            .unwrap()
+        best(|| assert!(project(document, target, &facts).parts.len() > 1, "{} did not split", target.name))
     };
     for pattern in ["word ", "x", "One sentence here. "] {
         let times = 20_000 / pattern.len();
@@ -61,8 +65,7 @@ fn threads_split_linearly() {
         let large = parse(&pattern.repeat(4 * times), &[]).unwrap();
         for target in TARGETS.iter().filter(|target| target.threads()) {
             let (short, long) = (threaded(&small, target), threaded(&large, target));
-            let floor = short.max(std::time::Duration::from_millis(2));
-            assert!(long < floor * 10, "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
+            assert!(scales(short, long, 10), "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
         }
     }
 }
@@ -72,15 +75,10 @@ fn threads_of_tiny_parts_split_linearly() {
     let threaded = |document: &Document, target: &'static Target, maximum: usize| {
         let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
         let options = Options { search: None, maximum: Some(maximum) };
-        (0..2)
-            .map(|_| {
-                let started = std::time::Instant::now();
-                let parts = project_with(document, target, &facts, &options).parts.len();
-                assert!(parts > 50, "{} split into {parts} parts", target.name);
-                started.elapsed()
-            })
-            .min()
-            .unwrap()
+        best(|| {
+            let parts = project_with(document, target, &facts, &options).parts.len();
+            assert!(parts > 50, "{} split into {parts} parts", target.name);
+        })
     };
     for (pattern, maximum) in [("word ", 1), ("x", 1), ("*a* https://example.com/c ", 30)] {
         let times = 1_600 / pattern.len();
@@ -88,8 +86,7 @@ fn threads_of_tiny_parts_split_linearly() {
         let large = parse(&pattern.repeat(8 * times), &[]).unwrap();
         for target in TARGETS.iter().filter(|target| target.threads()) {
             let (short, long) = (threaded(&small, target, maximum), threaded(&large, target, maximum));
-            let floor = short.max(std::time::Duration::from_millis(2));
-            assert!(long < floor * 16, "{} {pattern:?}: {short:?} for {times}, {long:?} for 8x", target.name);
+            assert!(scales(short, long, 16), "{} {pattern:?}: {short:?} for {times}, {long:?} for 8x", target.name);
         }
     }
 }
@@ -101,18 +98,10 @@ fn threads_cut_a_giant_word_linearly() {
     let (small, large) = (document(16_000), document(128_000));
     for target in TARGETS.iter().filter(|target| target.threads()) {
         let fastest = |document: &Document| {
-            (0..2)
-                .map(|_| {
-                    let started = std::time::Instant::now();
-                    assert!(project(document, target, &facts).parts.len() > 1, "{} did not split", target.name);
-                    started.elapsed()
-                })
-                .min()
-                .unwrap()
+            best(|| assert!(project(document, target, &facts).parts.len() > 1, "{} did not split", target.name))
         };
         let (short, long) = (fastest(&small), fastest(&large));
-        let floor = short.max(std::time::Duration::from_millis(2));
-        assert!(long < floor * 16, "{}: {short:?} for 16000, {long:?} for 128000", target.name);
+        assert!(scales(short, long, 16), "{}: {short:?} for 16000, {long:?} for 128000", target.name);
     }
 }
 
@@ -124,19 +113,13 @@ fn threads_far_below_a_large_maximum_split_linearly() {
     let document = |times: usize| parse(&"word https://example.com/c ".repeat(times), &[]).unwrap();
     let (small, large) = (document(200), document(1_600));
     let fastest = |document: &Document| {
-        (0..2)
-            .map(|_| {
-                let started = std::time::Instant::now();
-                let parts = project_with(document, target, &facts, &options).parts.len();
-                assert!(parts > 50, "split into {parts} parts");
-                started.elapsed()
-            })
-            .min()
-            .unwrap()
+        best(|| {
+            let parts = project_with(document, target, &facts, &options).parts.len();
+            assert!(parts > 50, "split into {parts} parts");
+        })
     };
     let (short, long) = (fastest(&small), fastest(&large));
-    let floor = short.max(std::time::Duration::from_millis(2));
-    assert!(long < floor * 16, "{short:?} for 200, {long:?} for 1600");
+    assert!(scales(short, long, 16), "{short:?} for 200, {long:?} for 1600");
 }
 
 #[test]
@@ -146,19 +129,13 @@ fn capped_hashtags_project_linearly() {
     for name in ["instagram-plain", "youtube-plain"] {
         let target = target(name).unwrap();
         let fastest = |document: &Document| {
-            (0..2)
-                .map(|_| {
-                    let started = std::time::Instant::now();
-                    let projection = project(document, target, &Facts::default());
-                    assert!(projection.changes.iter().any(|change| change.feature == Feature::Hashtag));
-                    started.elapsed()
-                })
-                .min()
-                .unwrap()
+            best(|| {
+                let projection = project(document, target, &Facts::default());
+                assert!(projection.changes.iter().any(|change| change.feature == Feature::Hashtag));
+            })
         };
         let (short, long) = (fastest(&small), fastest(&large));
-        let floor = short.max(std::time::Duration::from_millis(2));
-        assert!(long < floor * 10, "{name}: {short:?} for 16 paragraphs, {long:?} for 64");
+        assert!(scales(short, long, 10), "{name}: {short:?} for 16 paragraphs, {long:?} for 64");
     }
 }
 
@@ -167,9 +144,9 @@ fn seconds_per_byte(markdown: &str, name: &str, facts: &Facts) -> f64 {
     let target = target(name).unwrap();
     let mut best = f64::MAX;
     for _ in 0..3 {
-        let start = std::time::Instant::now();
+        let start = Instant::now();
         let mut runs = 0_u32;
-        while runs == 0 || start.elapsed() < std::time::Duration::from_millis(5) {
+        while runs == 0 || start.elapsed() < Duration::from_millis(5) {
             let _ = project_with(&document, target, facts, &Options::default());
             runs += 1;
         }
@@ -809,4 +786,91 @@ fn markup_thread_keeps_no_media_alone_part_before_an_element_truncated_anyway() 
     let projection = project_with(&document, target("telegram-html").unwrap(), &facts, &options);
     assert_eq!(projection.parts, [] as [Part; 0]);
     assert_eq!(text(&projection, FieldName::Text), "– …");
+}
+
+#[test]
+fn projects_a_document_at_each_size_limit_through_every_target() {
+    type Shape = fn(usize) -> String;
+    let limited = |text: &str| match parse(text, &[]) {
+        Err(Error { details: Details::Limit(limit), .. }) => Some(limit),
+        _ => None,
+    };
+    let shapes: [(Limit, Shape, usize); 13] = [
+        (Limit::BlockDelimiters, |count| format!("a{}", "*".repeat(count)), 1024),
+        (Limit::BlockLabels, |count| "[a ".repeat(count), 4096),
+        (Limit::BlockLabelEnds, |count| "a]".repeat(count), 256),
+        (Limit::ContainerDepth, |count| format!("{}a", "> ".repeat(count)), 32),
+        (Limit::DocumentEscapes, |count| "\\*".repeat(count), 4096),
+        (Limit::DocumentHardBreaks, |count| "a  \n".repeat(count) + "a", 1024),
+        (Limit::DocumentLines, |count| "a\n".repeat(count), 16_383),
+        (Limit::DocumentListItems, |count| "- a\n".repeat(count), 8192),
+        (Limit::DocumentMathLiterals, |count| "$a=b$ ".repeat(count), 1024),
+        (Limit::DocumentPairedDelimiters, |count| "||a|| ".repeat(count), 1024),
+        (Limit::DocumentTableCells, |count| format!("| a | b |\n| - | - |\n{}", "| a | b |\n".repeat(count)), 4095),
+        (Limit::DocumentUnits, |count| "word ".repeat(count / 5) + &"a".repeat(count % 5), 262_144),
+        (Limit::InlineDepth, |count| format!("{0}a{0}", "**".repeat(count)), 16),
+    ];
+    let threaded = Facts { overflow: Overflow::Thread, entities_allowed: true, ..Facts::default() };
+    for (limit, shape, count) in shapes {
+        assert_eq!(limited(&shape(count + 1)), Some(limit), "{limit:?} one past the limit");
+        let document = parse(&shape(count), &[]).unwrap_or_else(|error| panic!("{limit:?} at the limit: {error:?}"));
+        serialize(&document);
+        for target in TARGETS {
+            for facts in [&Facts::default(), &threaded] {
+                project(&document, target, facts);
+            }
+        }
+    }
+}
+
+#[test]
+fn every_output_trims_blank_lines_around_the_content() {
+    let leads = ["\n", "\n\n\n", "  \n\t\n", "\r\n\r\n", "\u{a0}\n"];
+    let bodies = [
+        "One paragraph.",
+        "# Title\n\nFirst paragraph.\n\nSecond paragraph.",
+        "- one\n- two\n- three",
+        "> quoted\n> lines",
+        "Before.\n\n::media{id=\"m\"}\n\nAfter.",
+    ];
+    let items = [MediaFact { id: "m", format: Format::Image, alt: None, spoiler: false, inline: false }];
+    let listed = Facts { media: Some(MediaKind::Image), media_count: 1, items: Some(&items), ..Facts::default() };
+    let blank = |line: Option<&str>| line.is_none_or(|line| line.trim().is_empty());
+    let (mut checked, mut parts) = (0, 0);
+    for lead in leads {
+        for body in bodies {
+            let markdown = format!("{lead}{body}{lead}");
+            let document = parse(&markdown, &[]).unwrap();
+            for target in TARGETS {
+                for base in [Facts::default(), listed] {
+                    for overflow in [Overflow::Truncate, Overflow::Thread] {
+                        for maximum in [None, Some(12)] {
+                            let facts = Facts { overflow, ..base };
+                            let projection =
+                                project_with(&document, target, &facts, &Options { search: None, maximum });
+                            parts += projection.parts.len();
+                            let split = projection.parts.iter().flat_map(|part| &part.fields);
+                            let fields = projection.fields.iter().chain(split).map(|field| field.text.as_str());
+                            let blocks = projection.blocks.iter().filter_map(|block| match block {
+                                Block::Text(text) => Some(text.as_str()),
+                                _ => None,
+                            });
+                            for text in fields.chain(blocks).filter(|text| !text.is_empty()) {
+                                assert!(
+                                    !text.starts_with(['\n', '\r'])
+                                        && !text.ends_with(['\n', '\r'])
+                                        && !blank(text.lines().next())
+                                        && !blank(text.lines().last()),
+                                    "{} {overflow:?} {maximum:?} {markdown:?}: {text:?}",
+                                    target.name
+                                );
+                                checked += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(checked > 4000 && parts > 500, "{checked} outputs and {parts} thread parts checked");
 }

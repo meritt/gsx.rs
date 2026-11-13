@@ -1,4 +1,4 @@
-{"area":"targets/slack-markdown","cases":1784,"corpus":"gsx-corpus","facts":{},"schema":1,"target":"slack-markdown"}
+{"area":"targets/slack-markdown","cases":1736,"corpus":"gsx-corpus","facts":{},"schema":1,"target":"slack-markdown"}
 {"id":"5b86f9a386c1cf8b","expected":{"projection":{"fields":[{"name":"text","text":"```\na\ta\nὐ\ta\n```","links":[],"entities":[]}],"measurements":[{"field":"text","unit":"code-points","value":15,"maximum":12000}],"changes":[],"diagnostics":[],"media":[]}}}
 {"id":"572869e257c05a14","expected":{"projection":{"fields":[{"name":"text","text":"- foo\n\n  ```\n    bar\n  ```","links":[],"entities":[]}],"measurements":[{"field":"text","unit":"code-points","value":26,"maximum":12000}],"changes":[],"diagnostics":[],"media":[]}}}
 {"id":"87bbb9b249cca0b2","expected":{"projection":{"fields":[{"name":"text","text":"> ```\n>   foo\n> ```","links":[],"entities":[]}],"measurements":[{"field":"text","unit":"code-points","value":19,"maximum":12000}],"changes":[],"diagnostics":[],"media":[]}}}

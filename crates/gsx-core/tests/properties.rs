@@ -86,6 +86,15 @@ fn source_and_point_clamp_offsets_to_the_document() {
     assert_eq!(crlf.point(u32::MAX), crlf.end());
 }
 
+const LITERALS: &[&str] = &[
+    "a", " ", "[a]", "[b]", "[a][b]", "[", "]", "\\]", "\\[", "==", "||", "++", "<b>", "</b>", "<i>", "</i>", "*", "`",
+    "&amp;", "  \n", "\\\n", "\n", "\n> ", "\n- ", "\n  ", "\n1. ", "\n> - ",
+];
+
+fn literals() -> impl Strategy<Value = String> {
+    prop::collection::vec(prop::sample::select(LITERALS), 0..48).prop_map(|parts| parts.concat())
+}
+
 fn offset() -> impl Strategy<Value = u32> {
     prop_oneof![0u32..64, Just(u32::MAX), any::<u32>()]
 }
@@ -105,6 +114,11 @@ proptest! {
 
     #[test]
     fn markup_parses_deterministically_within_bounds(text in markup()) {
+        properties(&text)?;
+    }
+
+    #[test]
+    fn literals_across_inline_items_parse_within_bounds(text in literals()) {
         properties(&text)?;
     }
 

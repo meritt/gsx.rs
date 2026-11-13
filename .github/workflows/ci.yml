@@ -423,8 +423,9 @@ jobs:
 
       - name: Fuzz
         run: |
-          cargo "+$FUZZ_TOOLCHAIN" fuzz run parse -- -max_len=4096 -max_total_time=60
-          cargo "+$FUZZ_TOOLCHAIN" fuzz run project -- -max_total_time=60
+          mkdir -p fuzz/corpus/parse fuzz/corpus/project
+          cargo "+$FUZZ_TOOLCHAIN" fuzz run parse fuzz/corpus/parse fuzz/seeds/parse -- -dict=fuzz/gsx.dict -max_len=4096 -max_total_time=60
+          cargo "+$FUZZ_TOOLCHAIN" fuzz run project fuzz/corpus/project fuzz/seeds/project -- -dict=fuzz/gsx.dict -max_total_time=60
 
       - name: Save
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}

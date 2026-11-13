@@ -69,7 +69,7 @@ fn media_case(value: &Json) -> Option<Case> {
         (Json::Bool(true), _) => format!(
             "{{\"mediaIdMaxBytes\":{MEDIA_ID_MAX_BYTES},\"mediaGroupMin\":{MEDIA_GROUP_MIN},\
              \"mediaGroupMax\":{MEDIA_GROUP_MAX},\"mediaIdPattern\":{}}}",
-            json(&MEDIA_ID_PATTERN.encode_utf16().collect::<Vec<_>>())
+            json_text(MEDIA_ID_PATTERN)
         ),
         (_, Some(id)) => is_media_id(&id).to_string(),
         _ => return None,
@@ -113,12 +113,9 @@ pub fn media(out: &Path) -> Result {
         "{\"id\":\"targets\",\"targets\":true}".to_owned(),
     ];
     for (index, id) in samples.iter().enumerate() {
-        lines.push(format!(
-            "{{\"id\":\"media-id-{index}\",\"mediaId\":{}}}",
-            json(&id.encode_utf16().collect::<Vec<_>>())
-        ));
+        lines.push(format!("{{\"id\":\"media-id-{index}\",\"mediaId\":{}}}", json_text(id)));
     }
-    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+    write_lines(out, &lines)
 }
 
 pub fn sizes(out: &Path) -> Result {
@@ -148,17 +145,14 @@ pub fn sizes(out: &Path) -> Result {
              \"facts\":{{\"items\":[{{\"id\":\"not an id\",\"format\":\"image\",\"spoiler\":false,\"inline\":true}}]}}}}"
         ));
     }
-    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+    write_lines(out, &lines)
 }
 
 pub fn ceilings(out: &Path) -> Result {
     const MARKDOWN: &str = "Before the photo.\n\n::media{id=\"a\"}\n\nAfter the photo.";
     let units = FACT_MAX_UNITS;
     let string = |count: usize| json(&[vec![0x61; count - 2], vec![0xd83d, 0xde00]].concat());
-    let url = |count: usize| {
-        let url = format!("https://example.com/{}", "a".repeat(count - 20));
-        json(&url.encode_utf16().collect::<Vec<_>>())
-    };
+    let url = |count: usize| json_text(&format!("https://example.com/{}", "a".repeat(count - 20)));
     let item = |id: &str, alt: Option<&str>| match alt {
         Some(alt) => {
             format!("{{\"id\":\"{id}\",\"format\":\"image\",\"alt\":{alt},\"spoiler\":false,\"inline\":true}}")
@@ -184,7 +178,7 @@ pub fn ceilings(out: &Path) -> Result {
         "order".to_owned(),
         format!("\"title\":{over},\"items\":[{},{}]", item("a", Some(&over)), item("-b", None)),
     ));
-    let markdown = json(&MARKDOWN.encode_utf16().collect::<Vec<_>>());
+    let markdown = json_text(MARKDOWN);
     let mut lines = vec!["{\"corpus\":\"gsx-ceilings\"}".to_owned()];
     for target in TARGETS {
         for (name, facts) in &samples {
@@ -195,7 +189,7 @@ pub fn ceilings(out: &Path) -> Result {
             ));
         }
     }
-    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+    write_lines(out, &lines)
 }
 
 pub fn limits(out: &Path) -> Result {
@@ -209,7 +203,7 @@ pub fn limits(out: &Path) -> Result {
     const KEYS: [&str; 5] =
         ["maxCharacters", "charactersReservedPerUrl", "captionLimit", "descriptionLimit", "hashtagLimit"];
     const VARIANTS: [(&str, &str); 3] = [("truncate", "post"), ("thread", "post"), ("truncate", "story")];
-    let markdown = json(&MARKDOWN.encode_utf16().collect::<Vec<_>>());
+    let markdown = json_text(MARKDOWN);
     let mut lines = vec!["{\"corpus\":\"gsx-limits\"}".to_owned()];
     for target in TARGETS {
         let sets = KEYS.iter().map(|key| (*key, vec![*key])).chain([("all", KEYS.to_vec())]);
@@ -229,7 +223,7 @@ pub fn limits(out: &Path) -> Result {
             }
         }
     }
-    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+    write_lines(out, &lines)
 }
 
 pub fn regenerate(dir: &Path) -> Result {
@@ -243,7 +237,7 @@ pub fn regenerate(dir: &Path) -> Result {
             lines.push(with_expected(line, &outcome(&value, &NULL, None, Operation::Parse, &place)?));
             inputs.insert(value.get("id").string().unwrap_or_default(), value);
         }
-        fs::write(&file, lines.join("\n") + "\n").map_err(at(file.display()))?;
+        write_lines(&file, &lines)?;
     }
     let targets = dir.join("targets");
     let mut files = fs::read_dir(&targets)
@@ -272,7 +266,7 @@ pub fn regenerate(dir: &Path) -> Result {
             };
             lines.push(with_expected(line, &outcome(input, facts, Some(target), Operation::Project, &place)?));
         }
-        fs::write(&file, lines.join("\n") + "\n").map_err(at(file.display()))?;
+        write_lines(&file, &lines)?;
     }
     Ok(())
 }
@@ -376,7 +370,7 @@ fn outcome(
         items: matches!(facts.get("items"), Json::Array(_)).then_some(&items[..]),
     };
     if let (Operation::Project, Some(refusal)) = (operation, wire::refused(&facts)) {
-        return Ok(format!("{{\"refused\":{}}}", json(&refusal.encode_utf16().collect::<Vec<_>>())));
+        return Ok(format!("{{\"refused\":{}}}", json_text(&refusal)));
     }
     Ok(match (String::from_utf16(units).ok(), operation, target) {
         (Some(text), Operation::Project, Some(target)) => wire::project(text.as_bytes(), &media, target, &facts),
@@ -463,13 +457,13 @@ pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> 
                 };
                 lines.push(format!(
                     "{{\"id\":{},{input},\"target\":\"{}\",\"facts\":{facts}}}",
-                    json(&id.encode_utf16().collect::<Vec<_>>()),
+                    json_text(id),
                     target.name
                 ));
             }
         }
     }
-    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+    write_lines(out, &lines)
 }
 
 fn items(ids: &[&[u16]]) -> String {
@@ -489,6 +483,14 @@ fn items(ids: &[&[u16]]) -> String {
         })
         .collect();
     items.join(",")
+}
+
+fn write_lines(out: &Path, lines: &[String]) -> Result {
+    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+}
+
+fn json_text(text: &str) -> String {
+    json(&text.encode_utf16().collect::<Vec<_>>())
 }
 
 fn json(units: &[u16]) -> String {

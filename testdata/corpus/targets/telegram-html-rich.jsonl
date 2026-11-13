@@ -1,4 +1,4 @@
-{"area":"targets/telegram-html-rich","cases":1787,"corpus":"gsx-corpus","facts":{},"schema":1,"target":"telegram-html-rich"}
+{"area":"targets/telegram-html-rich","cases":1740,"corpus":"gsx-corpus","facts":{},"schema":1,"target":"telegram-html-rich"}
 {"id":"5b86f9a386c1cf8b","expected":{"projection":{"fields":[{"name":"text","text":"<pre>a\ta\nὐ\ta</pre>","links":[],"entities":[]}],"measurements":[{"field":"text","unit":"code-points","value":7,"maximum":32768}],"changes":[],"diagnostics":[],"media":[]}}}
 {"id":"572869e257c05a14","expected":{"projection":{"fields":[{"name":"text","text":"<ul><li><p>foo</p><pre>  bar</pre></li></ul>","links":[],"entities":[]}],"measurements":[{"field":"text","unit":"code-points","value":9,"maximum":32768}],"changes":[],"diagnostics":[],"media":[]}}}
 {"id":"87bbb9b249cca0b2","expected":{"projection":{"fields":[{"name":"text","text":"<blockquote><pre>  foo</pre></blockquote>","links":[],"entities":[]}],"measurements":[{"field":"text","unit":"code-points","value":5,"maximum":32768}],"changes":[],"diagnostics":[],"media":[]}}}
