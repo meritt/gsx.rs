@@ -389,10 +389,15 @@ impl Rendered {
     }
 }
 
+const MARKERS: [(Unit, Feature); 2] = [(Unit::Hashtags, Feature::Hashtag), (Unit::Mentions, Feature::Mention)];
+
+type Spent = [usize; 2];
+
 fn render(
     target: &'static Target,
     facts: &Facts,
     field: FieldName,
+    spent: Spent,
     cut: Option<&Cut>,
     draw: impl FnOnce(&mut Context),
 ) -> Rendered {
@@ -448,25 +453,33 @@ fn render(
     };
     let mut rendered =
         Rendered { text, links, styled, changes: context.changes, anchors, alts: context.alts, prefixes, origins };
-    cap_markers(target, &resolved(facts), field, &mut rendered);
+    cap_markers(target, &resolved(facts), field, spent, &mut rendered);
     rendered
 }
 
-fn cap_markers(target: &'static Target, resolved: &[(Fact, u32)], field: FieldName, rendered: &mut Rendered) {
+fn cap_markers(
+    target: &'static Target,
+    resolved: &[(Fact, u32)],
+    field: FieldName,
+    spent: Spent,
+    rendered: &mut Rendered,
+) {
     let facts = measure::Facts { resolved, ..measure::Facts::default() };
-    for (unit, feature) in [(Unit::Hashtags, Feature::Hashtag), (Unit::Mentions, Feature::Mention)] {
+    for ((unit, feature), spent) in MARKERS.into_iter().zip(spent) {
         let cap = target.limits.iter().find(|limit| limit.field == field && limit.unit == unit);
         let Some(maximum) = cap.and_then(|limit| limit.maximum(&facts)) else {
             continue;
         };
         let markers = measure::markers(unit, &rendered.text);
-        let Some(dropped) = markers.get(maximum as usize..).filter(|dropped| !dropped.is_empty()) else {
+        let kept = (maximum as usize).saturating_sub(spent);
+        let Some(dropped) = markers.get(kept..).filter(|dropped| !dropped.is_empty()) else {
             continue;
         };
         rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links, &mut rendered.origins);
         rendered.prefixes.clear();
         let (class, reason) = target.rule(feature).outcome(None);
-        let truncated = Some(Truncated { unit, maximum, value: markers.len() as u32, exact: true });
+        let value = u32::try_from(spent + markers.len()).unwrap_or(u32::MAX);
+        let truncated = Some(Truncated { unit, maximum, value, exact: true });
         rendered.changes.push(Change { class, feature, reason, field, range: None, truncated, slot: None });
     }
 }
@@ -540,6 +553,7 @@ struct Request<'a, 'b> {
     spec: &'a FieldSpec,
     facts: &'a Facts<'b>,
     options: &'a Options,
+    spent: Spent,
 }
 
 fn resolved(facts: &Facts) -> Vec<(Fact, u32)> {
@@ -572,7 +586,8 @@ impl Request<'_, '_> {
         };
         let resolved = self.resolved();
         let facts = measure::Facts { urls: &urls, elided: &elided, resolved: &resolved };
-        measure::measure(unit, &text, &facts) as usize
+        let earlier = MARKERS.into_iter().zip(self.spent).find(|((marker, _), _)| *marker == unit);
+        measure::measure(unit, &text, &facts) as usize + earlier.map_or(0, |(_, spent)| spent)
     }
 
     fn change(&self, feature: Feature, range: Option<Range>, when: Option<When>) -> Change {
@@ -798,8 +813,8 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         .filter(|node| title.is_some() && explicit.is_none() && matches!(node.kind, Kind::Heading { .. }));
     let body = if leading.is_some() { &children[1..] } else { children };
     let math = target.form.math().is_some();
-    let draw_heading = |heading: &Node, field, cut: Option<&Cut>| {
-        let mut rendered = render(target, facts, field, cut, |context| {
+    let draw_heading = |heading: &Node, field, spent, cut: Option<&Cut>| {
+        let mut rendered = render(target, facts, field, spent, cut, |context| {
             context.report_when(Feature::Heading, Some(heading.range), Some(When::TitleSource));
             (target.renderer.inline)(context, &heading.children);
         });
@@ -808,16 +823,18 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         rendered.styled.clear();
         rendered
     };
-    let titled = leading.filter(|heading| !draw_heading(heading, FieldName::Title, None).text.is_empty());
+    let titled = leading.filter(|heading| !draw_heading(heading, FieldName::Title, [0; 2], None).text.is_empty());
     let removable = title.is_some() && titled.is_none() && explicit.is_none();
     let removed = removable
         && target.fields(facts).find(|spec| matches!(spec.source, Source::Title { .. })).is_some_and(|spec| {
-            let request = Request { target, spec, facts, options };
-            let blocks = render(target, facts, spec.name, None, |context| (target.renderer.blocks)(context, body));
+            let request = Request { target, spec, facts, options, spent: [0; 2] };
+            let blocks =
+                render(target, facts, spec.name, [0; 2], None, |context| (target.renderer.blocks)(context, body));
             request.fits(&Rendered::text(first_line(&blocks.unprefixed())))
         });
-    let draw_body = |field, cut: Option<&Cut>| {
-        let mut rendered = render(target, facts, field, cut, |context| (target.renderer.blocks)(context, body));
+    let draw_body = |field, spent, cut: Option<&Cut>| {
+        let spent = if removed { [0; 2] } else { spent };
+        let mut rendered = render(target, facts, field, spent, cut, |context| (target.renderer.blocks)(context, body));
         if removed {
             rendered.text = without_first_line(&rendered.text);
             rendered.links.clear();
@@ -837,15 +854,16 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     let mut alts = vec![];
     let mut derived = false;
     let mut threaded = None;
+    let mut spent: Spent = [0; 2];
     for spec in target.fields(facts) {
-        let request = Request { target, spec, facts, options };
+        let request = Request { target, spec, facts, options, spent };
         let fitted = match (spec.source, explicit, titled) {
             (Source::Body, ..) => {
                 if !derived && matches!(target_url, Some(None)) {
                     changes.push(request.change(Feature::TargetUrl, None, Some(When::Refused)));
                 }
                 let suffix = target_url.as_ref().and_then(Option::as_deref).filter(|_| !derived).filter(|url| {
-                    let blank = measure::blank(&target.form.visible(&draw_body(spec.name, None).text));
+                    let blank = measure::blank(&target.form.visible(&draw_body(spec.name, spent, None).text));
                     let least = if blank { (*url).to_owned() } else { format!("{ELLIPSIS}\n\n{url}") };
                     let fits = request.fits(&Rendered::text(least));
                     if !fits {
@@ -854,7 +872,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     fits
                 });
                 let full = (facts.overflow == Overflow::Thread && target.threads() && !derived)
-                    .then(|| draw_body(spec.name, None));
+                    .then(|| draw_body(spec.name, spent, None));
                 let split = full.as_ref().and_then(|full| thread::split(&request, full, suffix));
                 let mut fitted = match full.zip(split) {
                     Some((full, mut split)) => {
@@ -865,7 +883,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     None => request.fit(
                         || Outline::of_nodes(document, body, math),
                         !removed,
-                        |cut| appended(target, draw_body(spec.name, cut), suffix),
+                        |cut| appended(target, draw_body(spec.name, spent, cut), suffix),
                     ),
                 };
                 if suffix.is_some() {
@@ -881,11 +899,11 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             (Source::Title { .. }, None, Some(heading)) => request.fit(
                 || Outline::of_nodes(document, std::slice::from_ref(heading), math),
                 true,
-                |cut| draw_heading(heading, spec.name, cut),
+                |cut| draw_heading(heading, spec.name, spent, cut),
             ),
             (Source::Title { .. }, None, None) => {
                 let source = first_line(
-                    &render(target, facts, spec.name, None, |context| (target.renderer.blocks)(context, body))
+                    &render(target, facts, spec.name, spent, None, |context| (target.renderer.blocks)(context, body))
                         .unprefixed(),
                 );
                 let mut fitted = request.fit(
@@ -894,7 +912,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     |cut| Rendered::text(cut.map_or_else(|| source.clone(), |cut| cut.replacement.clone())),
                 );
                 if let Some(heading) = leading {
-                    fitted.rendered.changes.extend(draw_heading(heading, spec.name, None).changes);
+                    fitted.rendered.changes.extend(draw_heading(heading, spec.name, spent, None).changes);
                 }
                 if removed {
                     let range = body.first().map(|node| node.range);
@@ -910,6 +928,11 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         let over = |measured: &Measurement| measured.maximum.is_some_and(|maximum| measured.value > maximum);
         if measured.iter().any(|measured| measured.unit == Unit::Links && over(measured)) {
             rendered.changes.push(request.change(Feature::Link, None, Some(When::Overflow)));
+        }
+        for ((unit, _), spent) in MARKERS.into_iter().zip(&mut spent) {
+            if target.limits.iter().any(|limit| limit.field == spec.name && limit.unit == unit) {
+                *spent += measure::markers(unit, &rendered.text).len();
+            }
         }
         changes.append(&mut rendered.changes);
         alts.append(&mut rendered.alts);

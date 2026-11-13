@@ -122,6 +122,42 @@ fn youtube_explicit_title_over_limit_is_blocked() {
 }
 
 #[test]
+fn youtube_counts_hashtags_across_title_and_description() {
+    let tags = |prefix: &str, count: usize| (0..count).map(|i| format!("#{prefix}{i}")).collect::<Vec<_>>().join(" ");
+    let hashtags = |projection: &Projection, field| {
+        let measured = projection.measurements.iter().find(|m| m.field == field && m.unit == Unit::Hashtags).unwrap();
+        (measured.value, measured.maximum)
+    };
+    let title = tags("t", 10);
+    let facts = Facts { title: Some(&title), ..Facts::default() };
+    let projection = run("youtube-plain", &tags("d", 55), &facts);
+    assert_eq!(text(&projection, FieldName::Title), title);
+    let words = (50..55).map(|i| format!("d{i}")).collect::<Vec<_>>().join(" ");
+    assert_eq!(text(&projection, FieldName::Description), format!("{} {words}", tags("d", 50)));
+    assert_eq!(hashtags(&projection, FieldName::Title), (10, Some(60)));
+    assert_eq!(hashtags(&projection, FieldName::Description), (60, Some(60)));
+    let capped: Vec<_> = projection.changes.iter().filter(|change| change.feature == Feature::Hashtag).collect();
+    assert_eq!(capped.len(), 1);
+    assert_eq!(capped[0].field, FieldName::Description);
+    let truncated = capped[0].truncated.unwrap();
+    assert_eq!((truncated.unit, truncated.maximum, truncated.value), (Unit::Hashtags, 60, 65));
+
+    let projection = run("youtube-plain", &format!("{}\n\n{}", tags("t", 2), tags("d", 60)), &Facts::default());
+    assert_eq!(text(&projection, FieldName::Title), tags("t", 2));
+    assert_eq!(measure_markers(text(&projection, FieldName::Description)), 58);
+    assert_eq!(hashtags(&projection, FieldName::Description), (60, Some(60)));
+
+    let projection = run("youtube-plain", &format!("# {}\n\n{}", tags("t", 3), tags("d", 57)), &Facts::default());
+    assert_eq!(text(&projection, FieldName::Title), tags("t", 3));
+    assert_eq!(measure_markers(text(&projection, FieldName::Description)), 57);
+    assert!(projection.changes.iter().all(|change| change.feature != Feature::Hashtag));
+}
+
+fn measure_markers(text: &str) -> usize {
+    text.split_whitespace().filter(|word| word.starts_with('#')).count()
+}
+
+#[test]
 fn empty_document_is_blocked_once() {
     for target in TARGETS {
         let document = parse("", &[]).unwrap();

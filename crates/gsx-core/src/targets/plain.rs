@@ -138,7 +138,12 @@ pub static YOUTUBE: Target = text(
         field(FieldName::Title, Media::Any, Source::Title { fact: true }, true),
         field(FieldName::Description, Media::Any, Source::Body, false),
     ],
-    &[limit(Title, CodePoints, 100), limit(Description, Utf8Bytes, 5000), limit(Description, Hashtags, 60)],
+    &[
+        limit(Title, CodePoints, 100),
+        limit(Title, Hashtags, 60),
+        limit(Description, Utf8Bytes, 5000),
+        limit(Description, Hashtags, 60),
+    ],
 );
 
 pub static TIKTOK: Target = text(

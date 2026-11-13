@@ -37,6 +37,28 @@ fn at_most_one_limit_applies_to_a_field_unit_placement_and_media_kind() {
 }
 
 #[test]
+fn a_marker_count_shared_by_fields_has_one_maximum_and_scope() {
+    for target in TARGETS {
+        for unit in [Unit::Hashtags, Unit::Mentions, Unit::Links] {
+            let mut shared = target.limits.iter().filter(|limit| limit.unit == unit);
+            let Some(first) = shared.next() else { continue };
+            for limit in shared {
+                assert!(
+                    limit.field != first.field
+                        && (limit.maximum, limit.placements, limit.media, limit.rendering)
+                            == (first.maximum, first.placements, first.media, first.rendering),
+                    "{} lists {} for {} and {} with different scopes",
+                    target.name,
+                    unit.name(),
+                    first.field.name(),
+                    limit.field.name()
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn rewritten_text_keeps_recorded_offsets_valid() {
     for target in TARGETS {
         let name = target.name;

@@ -65,7 +65,7 @@ The following are the configured limits of this release. Semicolon-separated fie
 | `instagram-plain` | `text` | hashtags; mentions | `hashtagLimit`, default 5; 20 |
 | `vk-plain` | `text`; video `title`; video `alt`; image `alt` | code points | unlimited; 128; 5000; 2048 |
 | `youtube-plain` | `title`; `description` | code points; UTF-8 bytes | 100; 5000 |
-| `youtube-plain` | `description` | hashtags | 60 |
+| `youtube-plain` | `title` and `description` together | hashtags | 60 |
 | `tiktok-plain` | video `text`; photo-post `text`; photo-post `title` | UTF-16 code units | 2200; 4000; 90 |
 | `tiktok-plain` | `text` | mentions | unlimited |
 
