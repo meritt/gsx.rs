@@ -42,7 +42,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+          key: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'fuzz/Cargo.lock', '.github/workflows/ci.yml') }}
           restore-keys: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml') }}-
 
       - name: Setup
@@ -89,7 +89,9 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Audit
-        run: cargo deny --locked check
+        run: |
+          cargo deny --locked check
+          cargo deny --locked --manifest-path fuzz/Cargo.toml check
 
       - name: Secrets
         run: |
