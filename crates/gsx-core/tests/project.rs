@@ -614,6 +614,26 @@ fn thread_parts_cut_a_long_word_by_graphemes() {
 }
 
 #[test]
+fn thread_parts_split_link_labels_that_exceed_a_part() {
+    for name in ["x-plain", "mastodon-plain", "threads-entities"] {
+        for label in ["word ".repeat(120), "y".repeat(600)] {
+            let projection = thread(name, &format!("[{}](https://a.example) tail", label.trim_end()));
+            let joined: String = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+            let word = &label[..1];
+            assert_eq!(joined.matches(word).count(), label.matches(word).count(), "{name} {joined:?}");
+            assert!(joined.contains("https://a.example") && joined.ends_with("tail"), "{name} {joined:?}");
+        }
+    }
+    let markdown = format!("[{}word](https://a.example.com) tail", "word ".repeat(93));
+    let target_url = Some("https://www.threads.com/@gsx/post/C1");
+    let projection =
+        run("threads-entities", &markdown, &Facts { overflow: Overflow::Thread, target_url, ..Facts::default() });
+    let joined: String = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+    assert!(projection.changes.iter().all(|change| change.reason != "text_truncated"), "{joined:?}");
+    assert!(joined.matches("word").count() == 94 && joined.contains("(https://a.example.com/)"), "{joined:?}");
+}
+
+#[test]
 fn thread_parts_cover_text_rendered_differently_from_its_source() {
     let markdown = [r"Звёздочка \* и решётка \# стоят в середине довольно длинного предложения без точки"; 6].join(" ");
     let projection = thread("x-plain", &markdown);

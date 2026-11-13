@@ -298,6 +298,12 @@ impl<'a> Context<'a> {
         &mut self.writer
     }
 
+    pub fn group(&mut self, mark: usize) {
+        if self.thread {
+            self.writer.group(mark);
+        }
+    }
+
     pub fn done(&self) -> bool {
         self.done
     }
@@ -386,6 +392,7 @@ struct Rendered {
     alts: Vec<(usize, Option<String>)>,
     prefixes: Vec<Span<usize>>,
     origins: Vec<(Span<usize>, Range)>,
+    groups: Vec<Span<usize>>,
     uncapped: bool,
 }
 
@@ -400,6 +407,7 @@ impl Rendered {
             alts: vec![],
             prefixes: vec![],
             origins: vec![],
+            groups: vec![],
             uncapped: false,
         }
     }
@@ -472,11 +480,13 @@ fn render(
     };
     let mut anchors = context.anchors;
     let mut origins = written.origins;
+    let mut groups = written.groups;
     let (text, links, prefixes) = match target.normalization {
         Normalization::None => (written.text, written.links, written.prefixes),
         Normalization::Nfc => {
             nfc_offsets(&written.text, anchors.iter_mut().map(|anchor| &mut anchor.at));
             nfc_offsets(&written.text, origins.iter_mut().flat_map(|(span, _)| [&mut span.start, &mut span.end]));
+            nfc_offsets(&written.text, groups.iter_mut().flat_map(|span| [&mut span.start, &mut span.end]));
             let (text, links) = normalized(&written.text, &written.links);
             (text, links, vec![])
         }
@@ -490,6 +500,7 @@ fn render(
         alts: context.alts,
         prefixes,
         origins,
+        groups,
         uncapped: context.uncapped,
     };
     cap_markers(target, &resolved(facts), field, spent, &mut rendered);
@@ -514,7 +525,8 @@ fn cap_markers(
         let Some(dropped) = markers.get(kept..).filter(|dropped| !dropped.is_empty()) else {
             continue;
         };
-        rendered.text = without_sigils(&rendered.text, dropped, &mut rendered.links, &mut rendered.origins);
+        rendered.text =
+            without_sigils(&rendered.text, dropped, &mut rendered.links, &mut rendered.groups, &mut rendered.origins);
         rendered.prefixes.clear();
         let (class, reason) = target.rule(feature).outcome(None);
         let value = u32::try_from(spent + markers.len()).unwrap_or(u32::MAX);
@@ -527,6 +539,7 @@ fn without_sigils(
     text: &str,
     sigils: &[usize],
     links: &mut [Span<usize>],
+    groups: &mut [Span<usize>],
     origins: &mut [(Span<usize>, Range)],
 ) -> String {
     let mut out = String::with_capacity(text.len());
@@ -537,7 +550,7 @@ fn without_sigils(
     }
     out.push_str(&text[cursor..]);
     let shift = |offset: usize| offset - sigils.partition_point(|&at| at < offset);
-    for span in links.iter_mut().chain(origins.iter_mut().map(|(span, _)| span)) {
+    for span in links.iter_mut().chain(groups.iter_mut()).chain(origins.iter_mut().map(|(span, _)| span)) {
         *span = shift(span.start)..shift(span.end);
     }
     out

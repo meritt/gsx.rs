@@ -60,6 +60,8 @@ pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) ->
         }
     };
     let mut guarded = full.links.clone();
+    let alone = |group: &&Span<usize>| probe(group.start..group.end, group.start == 0);
+    guarded.extend(full.groups.iter().filter(alone).cloned());
     guarded.extend(full.styled.iter().filter(|styled| styled.value.is_some()).map(|styled| styled.span.clone()));
     let guarded = merged(guarded);
     let classes = breaks(&full.text, &guarded);
