@@ -38,7 +38,7 @@ fn pieces(styled: &Styled, prefixes: &[Span<usize>], suffix: Option<usize>, out:
 
 fn merged(spans: &[Span<usize>]) -> Vec<Span<usize>> {
     let mut sorted = spans.to_vec();
-    sorted.sort_by_key(|span| span.start);
+    crate::order::sort_by_key(&mut sorted, |span| span.start as u64);
     let mut out: Vec<Span<usize>> = vec![];
     for span in sorted {
         match out.last_mut() {
@@ -108,7 +108,7 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
     let mut breaks = written.prefixes.clone();
     if form.code_splits {
         breaks.extend(spans(code));
-        breaks.sort_by_key(|span| span.start);
+        crate::order::sort_by_key(&mut breaks, |span| span.start as u64);
     }
     let pre: Vec<Span<usize>> = spans(|style| style == Style::Pre).collect();
     let mut styled = vec![];
@@ -128,7 +128,9 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
         trim(&mut written.text, &mut styled, &mut written.origins);
         tighten(&written.text, &mut styled);
     }
-    styled.sort_by_key(|entity| (entity.span.start, std::cmp::Reverse(entity.span.end)));
+    crate::order::sort_by_key(&mut styled, |entity| {
+        crate::order::pair(entity.span.start, u32::MAX as usize - entity.span.end)
+    });
     let mut capped = vec![];
     if let Some(cap) = form.cap {
         let decorations = styled.iter().filter(|entity| entity.decoration).count();
@@ -155,7 +157,7 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
 
 pub fn offsets(form: &EntityForm, text: &str, styled: &[Styled]) -> Vec<Entity> {
     let mut positions: Vec<usize> = styled.iter().flat_map(|entity| [entity.span.start, entity.span.end]).collect();
-    positions.sort_unstable();
+    crate::order::sort_by_key(&mut positions, |&position| position as u64);
     positions.dedup();
     let (mut byte, mut unit) = (0, 0usize);
     let units: Vec<usize> = positions

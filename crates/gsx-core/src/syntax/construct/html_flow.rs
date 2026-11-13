@@ -48,7 +48,7 @@ pub fn open(tokenizer: &mut Tokenizer) -> State {
         Some(b'/') => {
             tokenizer.consume();
             tokenizer.tokenize_state.seen = true;
-            tokenizer.tokenize_state.start = tokenizer.point.index;
+            tokenizer.tokenize_state.start = tokenizer.point.index as usize;
             State::Next(StateName::HtmlFlowTagCloseStart)
         }
         Some(b'?') => {
@@ -58,7 +58,7 @@ pub fn open(tokenizer: &mut Tokenizer) -> State {
             State::Next(StateName::HtmlFlowContinuationDeclarationInside)
         }
         Some(b'A'..=b'Z' | b'a'..=b'z') => {
-            tokenizer.tokenize_state.start = tokenizer.point.index;
+            tokenizer.tokenize_state.start = tokenizer.point.index as usize;
             State::Retry(StateName::HtmlFlowTagName)
         }
         _ => State::Nok,
@@ -133,8 +133,11 @@ pub fn tag_name(tokenizer: &mut Tokenizer) -> State {
         None | Some(b'\t' | b'\n' | b' ' | b'/' | b'>') => {
             let closing_tag = tokenizer.tokenize_state.seen;
             let slash = matches!(tokenizer.current, Some(b'/'));
-            let slice =
-                Slice::from_indices(tokenizer.parse_state.bytes, tokenizer.tokenize_state.start, tokenizer.point.index);
+            let slice = Slice::from_indices(
+                tokenizer.parse_state.bytes,
+                tokenizer.tokenize_state.start,
+                tokenizer.point.index as usize,
+            );
             let name = slice.as_str().trim().to_ascii_lowercase();
             tokenizer.tokenize_state.seen = false;
             tokenizer.tokenize_state.start = 0;
@@ -398,7 +401,7 @@ pub fn continuation_raw_tag_open(tokenizer: &mut Tokenizer) -> State {
     match tokenizer.current {
         Some(b'/') => {
             tokenizer.consume();
-            tokenizer.tokenize_state.start = tokenizer.point.index;
+            tokenizer.tokenize_state.start = tokenizer.point.index as usize;
             State::Next(StateName::HtmlFlowContinuationRawEndTag)
         }
         _ => State::Retry(StateName::HtmlFlowContinuation),
@@ -408,8 +411,11 @@ pub fn continuation_raw_tag_open(tokenizer: &mut Tokenizer) -> State {
 pub fn continuation_raw_end_tag(tokenizer: &mut Tokenizer) -> State {
     match tokenizer.current {
         Some(b'>') => {
-            let slice =
-                Slice::from_indices(tokenizer.parse_state.bytes, tokenizer.tokenize_state.start, tokenizer.point.index);
+            let slice = Slice::from_indices(
+                tokenizer.parse_state.bytes,
+                tokenizer.tokenize_state.start,
+                tokenizer.point.index as usize,
+            );
             let name = slice.as_str().to_ascii_lowercase();
 
             tokenizer.tokenize_state.start = 0;
@@ -422,7 +428,7 @@ pub fn continuation_raw_end_tag(tokenizer: &mut Tokenizer) -> State {
             }
         }
         Some(b'A'..=b'Z' | b'a'..=b'z')
-            if tokenizer.point.index - tokenizer.tokenize_state.start < HTML_RAW_SIZE_MAX =>
+            if tokenizer.point.index as usize - tokenizer.tokenize_state.start < HTML_RAW_SIZE_MAX =>
         {
             tokenizer.consume();
             State::Next(StateName::HtmlFlowContinuationRawEndTag)

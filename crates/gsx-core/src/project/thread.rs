@@ -283,7 +283,7 @@ struct Slicer<'a> {
 impl<'a> Slicer<'a> {
     fn new(full: &'a Rendered) -> Self {
         let mut order: Vec<usize> = (0..full.styled.len()).collect();
-        order.sort_by_key(|&index| full.styled[index].span.start);
+        crate::order::sort_by_key(&mut order, |&index| full.styled[index].span.start as u64);
         Self { full, order, next: 0, active: vec![] }
     }
 
@@ -302,7 +302,7 @@ impl<'a> Slicer<'a> {
             self.next += 1;
         }
         self.active.retain(|&index| full.styled[index].span.end > span.start);
-        self.active.sort_unstable();
+        crate::order::sort_by_key(&mut self.active, |&index| index as u64);
         let styled = self
             .active
             .iter()
@@ -317,7 +317,7 @@ impl<'a> Slicer<'a> {
 }
 
 fn merged(mut spans: Vec<Span<usize>>) -> Vec<Span<usize>> {
-    spans.sort_by_key(|span| span.start);
+    crate::order::sort_by_key(&mut spans, |span| span.start as u64);
     let mut merged: Vec<Span<usize>> = vec![];
     for span in spans {
         match merged.last_mut() {

@@ -533,7 +533,7 @@ fn entities(value: &str) -> Vec<(usize, usize)> {
             ranges.push((at, end));
         }
     }
-    ranges.sort_unstable();
+    crate::order::sort_by_key(&mut ranges, |&(start, end)| crate::order::pair(start, end));
     let mut merged: Vec<(usize, usize)> = vec![];
     for (start, end) in ranges {
         match merged.last_mut() {

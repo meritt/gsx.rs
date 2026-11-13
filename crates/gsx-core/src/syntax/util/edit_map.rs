@@ -73,37 +73,39 @@ impl EditMap {
             self.edits.sort_unstable_by_key(|edit| (edit.at, edit.rank));
         }
 
-        let mut merged: Vec<Edit> = Vec::with_capacity(self.edits.len());
-        for mut edit in self.edits.drain(..) {
-            match merged.last_mut() {
-                Some(last) if last.at == edit.at => {
-                    last.remove += edit.remove;
-                    last.add.append(&mut edit.add);
-                }
-                _ => merged.push(edit),
+        self.edits.dedup_by(|edit, last| {
+            let same = last.at == edit.at;
+            if same {
+                last.remove += edit.remove;
+                last.add.append(&mut edit.add);
             }
-        }
+            same
+        });
 
-        let mut jumps = Vec::with_capacity(merged.len());
         let mut add_acc = 0;
         let mut remove_acc = 0;
-        for edit in &merged {
-            remove_acc += edit.remove;
-            add_acc += edit.add.len();
-            jumps.push((edit.at, remove_acc, add_acc));
-        }
+        let jumps: Vec<_> = self
+            .edits
+            .iter()
+            .map(|edit| {
+                remove_acc += edit.remove;
+                add_acc += edit.add.len();
+                (edit.at, remove_acc, add_acc)
+            })
+            .collect();
 
         shift_links(events, &jumps);
 
         let mut out = Vec::with_capacity(events.len() + add_acc - remove_acc);
         let mut cursor = 0;
-        for edit in &merged {
+        for edit in &self.edits {
             out.extend_from_slice(&events[cursor..edit.at]);
             out.extend_from_slice(&edit.add);
             cursor = edit.at + edit.remove;
         }
         out.extend_from_slice(&events[cursor..]);
         *events = out;
+        self.edits.clear();
     }
 
     fn add_impl(&mut self, at: usize, remove: usize, add: Vec<Event>, before: bool) {

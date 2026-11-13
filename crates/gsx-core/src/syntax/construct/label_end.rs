@@ -13,7 +13,7 @@ use crate::syntax::util::{
 };
 
 pub fn start(tokenizer: &mut Tokenizer) -> State {
-    let index = tokenizer.point.index;
+    let index = tokenizer.point.index as usize;
     if Some(b']') == tokenizer.current
         && tokenizer.spend(Limit::BlockLabelEnds, index, |_| index + 1)
         && !tokenizer.tokenize_state.label_starts.is_empty()
@@ -41,8 +41,10 @@ pub fn after(tokenizer: &mut Tokenizer) -> State {
     let start_index = tokenizer.tokenize_state.label_starts.len() - 1;
     let start = &tokenizer.tokenize_state.label_starts[start_index];
 
-    let indices =
-        (tokenizer.events[start.start.1].point.index, tokenizer.events[tokenizer.tokenize_state.end].point.index);
+    let indices = (
+        tokenizer.events[start.start.1].point.index as usize,
+        tokenizer.events[tokenizer.tokenize_state.end].point.index as usize,
+    );
 
     let fits = indices.1 - indices.0 <= LINK_REFERENCE_SIZE_MAX;
     let mut id = if fits {

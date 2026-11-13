@@ -174,6 +174,6 @@ pub fn autolinks(text: &str) -> Vec<Autolink> {
     let tags = tags(text, &links);
     let mentions = mentions(text, &links);
     let mut all: Vec<Autolink> = links.into_iter().chain(tags).chain(mentions).collect();
-    all.sort_by_key(|item| item.range().start);
+    crate::order::sort_by_key(&mut all, |item| item.range().start as u64);
     all
 }

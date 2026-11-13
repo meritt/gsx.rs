@@ -13,4 +13,6 @@ pub mod project;
 pub mod forms;
 pub mod targets;
 
+mod order;
+
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

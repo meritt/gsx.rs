@@ -258,23 +258,24 @@ impl Link {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Point {
-    pub line: usize,
-    pub column: usize,
-    pub index: usize,
-    pub vs: usize,
+    pub line: u32,
+    pub column: u32,
+    pub index: u32,
+    pub vs: u32,
 }
 
 impl Point {
     pub fn shift_to(&self, bytes: &[u8], index: usize) -> Point {
         let mut next = *self;
+        let index = index as u32;
         debug_assert!(index > next.index, "expected to shift forward");
 
         while next.index < index {
-            match bytes[next.index] {
+            match bytes[next.index as usize] {
                 b'\n' | b'\r' => unreachable!("cannot move past line endings"),
                 b'\t' => {
-                    let remainder = next.column % TAB_SIZE;
-                    let vs = if remainder == 0 { 0 } else { TAB_SIZE - remainder };
+                    let remainder = next.column % TAB_SIZE as u32;
+                    let vs = if remainder == 0 { 0 } else { TAB_SIZE as u32 - remainder };
                     next.index += 1;
                     next.column += 1 + vs;
                 }

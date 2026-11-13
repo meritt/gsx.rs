@@ -17,7 +17,7 @@ pub fn start(tokenizer: &mut Tokenizer) -> State {
 }
 
 pub fn open(tokenizer: &mut Tokenizer) -> State {
-    let index = tokenizer.point.index;
+    let index = tokenizer.point.index as usize;
     if tokenizer.current == Some(b'[') && tokenizer.spend(Limit::BlockLabels, index, |_| index + 1) {
         tokenizer.enter(Name::LabelMarker);
         tokenizer.consume();

@@ -34,10 +34,10 @@ pub struct Slice<'a> {
 
 impl<'a> Slice<'a> {
     pub fn from_position(bytes: &'a [u8], position: &Position) -> Slice<'a> {
-        let mut before = position.start.vs;
-        let mut after = position.end.vs;
-        let mut start = position.start.index;
-        let mut end = position.end.index;
+        let mut before = position.start.vs as usize;
+        let mut after = position.end.vs as usize;
+        let mut start = position.start.index as usize;
+        let mut end = position.end.index as usize;
 
         if before > 0 {
             before = TAB_SIZE - before;

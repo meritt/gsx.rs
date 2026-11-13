@@ -14,7 +14,7 @@ struct Context<'a> {
     lines: &'a LineIndex,
     prefixes: &'a [Prefix],
     diagnostics: RefCell<Vec<Diagnostic>>,
-    placed: HashMap<usize, Kind>,
+    placed: Vec<(usize, Kind)>,
     closings: OnceCell<Vec<[u32; 2]>>,
 }
 
@@ -134,8 +134,9 @@ fn collect_candidates<'n>(node: &'n tree::Node, bytes: &[u8], out: &mut Vec<Cand
 fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
     let text = context.text;
     let bytes = text.as_bytes();
-    let known: HashSet<&str> = media.iter().map(|item| item.id).collect();
-    let covers: HashSet<&str> = media.iter().filter_map(|item| item.cover).collect();
+    let known: HashMap<&str, usize> = media.iter().enumerate().map(|(at, item)| (item.id, at)).collect();
+    let covers: HashMap<&str, usize> =
+        media.iter().enumerate().filter_map(|(at, item)| Some((item.cover?, at))).collect();
     let mut seen: HashSet<String> = HashSet::new();
     let paired: Vec<(usize, usize)> = pair_html(&root.children, text)
         .into_iter()
@@ -144,7 +145,7 @@ fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
         .collect();
     let mut candidates = vec![];
     collect_candidates(root, bytes, &mut candidates);
-    candidates.sort_by_key(|candidate| candidate.start);
+    crate::order::sort_by_key(&mut candidates, |candidate| candidate.start as u64);
     let (mut line_start, mut scanned) = (0, 0);
     for candidate in candidates {
         let (start, end) = (candidate.start, candidate.end);
@@ -182,18 +183,21 @@ fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
         for (index, id) in ids.into_iter().enumerate() {
             let details =
                 || Details::Media { id: id.clone(), index: group.then(|| u32::try_from(index).unwrap_or(u32::MAX)) };
-            if !known.contains(id.as_str()) {
+            if !known.contains_key(id.as_str()) {
                 context.diagnostic(Code::MediaReferenceUnknown, Severity::Error, details(), start, end);
             }
             if seen.contains(&id) {
                 context.diagnostic(Code::MediaReferenceDuplicate, Severity::Error, details(), start, end);
             }
-            if covers.contains(id.as_str()) {
+            if covers.contains_key(id.as_str()) {
                 context.diagnostic(Code::MediaReferenceCover, Severity::Error, details(), start, end);
             }
             seen.insert(id);
         }
-        context.placed.insert(start, parsed);
+        match context.placed.last_mut() {
+            Some((at, kind)) if *at == start => *kind = parsed,
+            _ => context.placed.push((start, parsed)),
+        }
     }
 }
 
@@ -651,9 +655,9 @@ fn convert_node(node: &tree::Node, end: usize, context: &Context) -> Converted {
     let kind = match node.kind {
         T::MediaDirective => {
             return Converted::One(
-                match context.placed.get(&start) {
-                    Some(kind) => context.node(kind.clone(), start, end),
-                    None => context.literal(start, end, None),
+                match context.placed.binary_search_by_key(&start, |(at, _)| *at) {
+                    Ok(at) => context.node(context.placed[at].1.clone(), start, end),
+                    Err(_) => context.literal(start, end, None),
                 },
                 false,
             );
@@ -814,14 +818,8 @@ pub(super) fn convert(
     lines: &LineIndex,
     media: &[Media],
 ) -> (Vec<Node>, Vec<Diagnostic>) {
-    let mut context = Context {
-        text,
-        lines,
-        prefixes,
-        diagnostics: RefCell::default(),
-        placed: HashMap::new(),
-        closings: OnceCell::new(),
-    };
+    let mut context =
+        Context { text, lines, prefixes, diagnostics: RefCell::default(), placed: vec![], closings: OnceCell::new() };
     resolve_media(root, media, &mut context);
     let children = convert_children(root, &context);
     (children, context.diagnostics.into_inner())

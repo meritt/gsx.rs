@@ -157,11 +157,11 @@ impl<'a> Builder<'a> {
     }
 
     fn start(&self, index: usize) -> usize {
-        self.events[index].point.index
+        self.events[index].point.index as usize
     }
 
     fn end(&self, index: usize) -> usize {
-        self.events[self.exits[index]].point.index
+        self.events[self.exits[index]].point.index as usize
     }
 
     fn underline_like(&self, start: usize) -> bool {
@@ -180,7 +180,7 @@ impl<'a> Builder<'a> {
                 _ => break,
             }
         }
-        self.events[index].point.index
+        self.events[index].point.index as usize
     }
 
     fn find(&self, from: usize, to: usize, name: Name) -> Option<usize> {
@@ -204,9 +204,9 @@ impl<'a> Builder<'a> {
 
     fn chunk(&self, index: usize, out: &mut String) {
         let (start, end) = (&self.events[index].point, &self.events[self.exits[index]].point);
-        let (mut from, mut to) = (start.index, end.index);
+        let (mut from, mut to) = (start.index as usize, end.index as usize);
         if start.vs > 0 {
-            out.extend(std::iter::repeat_n(' ', TAB_SIZE - start.vs));
+            out.extend(std::iter::repeat_n(' ', TAB_SIZE - start.vs as usize));
             from += 1;
         }
         if end.vs > 0 {
@@ -214,7 +214,7 @@ impl<'a> Builder<'a> {
         }
         out.push_str(self.raw(from, to));
         if end.vs > 0 {
-            out.extend(std::iter::repeat_n(' ', TAB_SIZE - end.vs));
+            out.extend(std::iter::repeat_n(' ', TAB_SIZE - end.vs as usize));
         }
     }
 
@@ -333,7 +333,7 @@ impl<'a> Builder<'a> {
 
     fn rounded(&self, index: usize) -> usize {
         let point = &self.events[index].point;
-        point.index + usize::from(point.vs > 0)
+        point.index as usize + usize::from(point.vs > 0)
     }
 
     fn node(&self, index: usize, exit: usize) -> Option<Node> {
@@ -748,10 +748,10 @@ fn prefixes(events: &[Event], exits: &[usize], bytes: &[u8]) -> Vec<Prefix> {
             };
             if wanted.as_ref() == Some(&event.name) {
                 let (from, to) = (&event.point, &events[exits[index]].point);
-                let start = from.index + usize::from(from.vs > 0);
-                let end = to.index + usize::from(to.vs > 0);
-                let column = columns.at(from.index) + from.vs;
-                let width = columns.at(to.index) + to.vs - column;
+                let start = from.index as usize + usize::from(from.vs > 0);
+                let end = to.index as usize + usize::from(to.vs > 0);
+                let column = columns.at(from.index as usize) + from.vs as usize;
+                let width = columns.at(to.index as usize) + to.vs as usize - column;
                 match ranges.last_mut() {
                     Some(last) if last.1 >= start => {
                         last.1 = last.1.max(end);

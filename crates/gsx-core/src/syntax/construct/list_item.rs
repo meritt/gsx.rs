@@ -62,8 +62,8 @@ pub fn value(tokenizer: &mut Tokenizer) -> State {
 }
 
 fn value_is_one(tokenizer: &Tokenizer) -> bool {
-    let start = tokenizer.events[tokenizer.events.len() - 1].point.index;
-    let digits = &tokenizer.parse_state.bytes[start..tokenizer.point.index];
+    let start = tokenizer.events[tokenizer.events.len() - 1].point.index as usize;
+    let digits = &tokenizer.parse_state.bytes[start..tokenizer.point.index as usize];
     digits.last() == Some(&b'1') && digits[..digits.len() - 1].iter().all(|byte| *byte == b'0')
 }
 
@@ -190,7 +190,7 @@ pub fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
                 }
                 let end = end - 1;
                 let marker = skip::to(&tokenizer.events, index, &[Name::ListItemMarker]);
-                let marker = tokenizer.parse_state.bytes[tokenizer.events[marker].point.index];
+                let marker = tokenizer.parse_state.bytes[tokenizer.events[marker].point.index as usize];
                 let current = (marker, balance, index, end);
 
                 let mut list_index = lists_wip.len();

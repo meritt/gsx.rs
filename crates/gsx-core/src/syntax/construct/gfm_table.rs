@@ -9,7 +9,13 @@ mod spoiler;
 
 fn current(tokenizer: &Tokenizer) -> Option<u8> {
     match tokenizer.current {
-        Some(b'|') if tokenizer.tokenize_state.gfm_table_pipe_data.binary_search(&tokenizer.point.index).is_ok() => {
+        Some(b'|')
+            if tokenizer
+                .tokenize_state
+                .gfm_table_pipe_data
+                .binary_search(&(tokenizer.point.index as usize))
+                .is_ok() =>
+        {
             Some(b'A')
         }
         other => other,
@@ -22,7 +28,7 @@ fn line_end(bytes: &[u8], start: usize) -> usize {
 
 fn set_pipe_data(tokenizer: &mut Tokenizer, columns: Option<usize>, exact: bool) {
     let bytes = tokenizer.parse_state.bytes;
-    let start = tokenizer.point.index;
+    let start = tokenizer.point.index as usize;
     let end = line_end(bytes, start);
     let data = columns.map_or_else(Vec::new, |columns| spoiler::data_pipes(&bytes[start..end], columns, exact));
     tokenizer.tokenize_state.gfm_table_pipe_data = data.into_iter().map(|offset| start + offset).collect();
@@ -56,11 +62,11 @@ pub fn start(tokenizer: &mut Tokenizer) -> State {
 
 pub fn head_row_before(tokenizer: &mut Tokenizer) -> State {
     let bytes = tokenizer.parse_state.bytes;
-    let next = line_end(bytes, tokenizer.point.index) + 1;
+    let next = line_end(bytes, tokenizer.point.index as usize) + 1;
     if next > bytes.len() || !bytes[next..line_end(bytes, next)].contains(&b'-') {
         return State::Nok;
     }
-    let columns = next_delimiter_columns(bytes, tokenizer.point.index);
+    let columns = next_delimiter_columns(bytes, tokenizer.point.index as usize);
     set_pipe_data(tokenizer, columns, true);
     tokenizer.enter(Name::GfmTableHead);
     tokenizer.enter(Name::GfmTableRow);

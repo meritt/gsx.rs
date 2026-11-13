@@ -1112,7 +1112,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         changes.extend(attached.changes);
         measurements.extend(attached.measurements);
     }
-    changes.sort_by_key(|change| change.range.map(|range| range.start));
+    crate::order::sort_by_key(&mut changes, |change| change.range.map_or(0, |range| u64::from(range.start) + 1));
     let mut references = vec![];
     media(children, &mut references);
     let mut parts = vec![];

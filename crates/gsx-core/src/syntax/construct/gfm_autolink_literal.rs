@@ -14,7 +14,7 @@ pub fn protocol_start(tokenizer: &mut Tokenizer) -> State {
         tokenizer.enter(Name::GfmAutolinkLiteralProtocol);
         tokenizer.attempt(State::Next(StateName::GfmAutolinkLiteralProtocolAfter), State::Nok);
         tokenizer.attempt(State::Next(StateName::GfmAutolinkLiteralDomainInside), State::Nok);
-        tokenizer.tokenize_state.start = tokenizer.point.index;
+        tokenizer.tokenize_state.start = tokenizer.point.index as usize;
         State::Retry(StateName::GfmAutolinkLiteralProtocolPrefixInside)
     } else {
         State::Nok
@@ -28,13 +28,16 @@ pub fn protocol_after(tokenizer: &mut Tokenizer) -> State {
 
 pub fn protocol_prefix_inside(tokenizer: &mut Tokenizer) -> State {
     match tokenizer.current {
-        Some(b'A'..=b'Z' | b'a'..=b'z') if tokenizer.point.index - tokenizer.tokenize_state.start < 5 => {
+        Some(b'A'..=b'Z' | b'a'..=b'z') if tokenizer.point.index as usize - tokenizer.tokenize_state.start < 5 => {
             tokenizer.consume();
             State::Next(StateName::GfmAutolinkLiteralProtocolPrefixInside)
         }
         Some(b':') => {
-            let slice =
-                Slice::from_indices(tokenizer.parse_state.bytes, tokenizer.tokenize_state.start, tokenizer.point.index);
+            let slice = Slice::from_indices(
+                tokenizer.parse_state.bytes,
+                tokenizer.tokenize_state.start,
+                tokenizer.point.index as usize,
+            );
             let name = slice.as_str().to_ascii_lowercase();
 
             tokenizer.tokenize_state.start = 0;
@@ -126,7 +129,7 @@ pub fn domain_inside(tokenizer: &mut Tokenizer) -> State {
         }
         _ => {
             if tokenizer.current.is_some()
-                && kind_after_index(tokenizer.parse_state.bytes, tokenizer.point.index) == CharacterKind::Other
+                && kind_after_index(tokenizer.parse_state.bytes, tokenizer.point.index as usize) == CharacterKind::Other
             {
                 tokenizer.tokenize_state.seen = true;
                 tokenizer.consume();
@@ -191,7 +194,8 @@ pub fn path_inside(tokenizer: &mut Tokenizer) -> State {
         }
         _ => {
             if tokenizer.current.is_none()
-                || kind_after_index(tokenizer.parse_state.bytes, tokenizer.point.index) == CharacterKind::Whitespace
+                || kind_after_index(tokenizer.parse_state.bytes, tokenizer.point.index as usize)
+                    == CharacterKind::Whitespace
             {
                 State::Retry(StateName::GfmAutolinkLiteralPathAfter)
             } else {
@@ -218,7 +222,7 @@ pub fn path_after(tokenizer: &mut Tokenizer) -> State {
 }
 
 fn trail_start(tokenizer: &mut Tokenizer) -> State {
-    let index = tokenizer.point.index;
+    let index = tokenizer.point.index as usize;
     let (start, end, ok) = tokenizer.tokenize_state.autolink_trail;
     if (start..end).contains(&index) {
         return if ok { State::Ok } else { State::Nok };
@@ -229,7 +233,7 @@ fn trail_start(tokenizer: &mut Tokenizer) -> State {
 
 fn trail_end(tokenizer: &mut Tokenizer, ok: bool) -> State {
     let trail = &mut tokenizer.tokenize_state.autolink_trail;
-    (trail.1, trail.2) = (tokenizer.point.index, ok);
+    (trail.1, trail.2) = (tokenizer.point.index as usize, ok);
     if ok { State::Ok } else { State::Nok }
 }
 
@@ -250,7 +254,8 @@ pub fn trail(tokenizer: &mut Tokenizer) -> State {
         }
         _ => {
             let ok = tokenizer.current.is_none()
-                || kind_after_index(tokenizer.parse_state.bytes, tokenizer.point.index) == CharacterKind::Whitespace;
+                || kind_after_index(tokenizer.parse_state.bytes, tokenizer.point.index as usize)
+                    == CharacterKind::Whitespace;
             trail_end(tokenizer, ok)
         }
     }
@@ -309,7 +314,7 @@ pub fn resolve(tokenizer: &mut Tokenizer) {
                 let mut byte_index = 0;
                 let mut replace = Vec::new();
                 let mut point = tokenizer.events[index - 1].point;
-                let start_index = point.index;
+                let start_index = point.index as usize;
                 let mut min = 0;
 
                 while byte_index < bytes.len() {

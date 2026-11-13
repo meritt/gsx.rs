@@ -36,7 +36,7 @@ pub fn parse(value: &str) -> Result<Vec<Event>, Exceeded> {
     };
     let start = Point { line: 1, column: 1, index: 0, vs: 0 };
     let mut tokenizer = Tokenizer::new(start, &parse_state);
-    let state = tokenizer.push((0, 0), (parse_state.bytes.len(), 0), State::Next(StateName::DocumentStart));
+    let state = tokenizer.push((0, 0), (parse_state.bytes.len() as u32, 0), State::Next(StateName::DocumentStart));
     let mut result = tokenizer.flush(state, true);
     let mut events = tokenizer.events;
     loop {

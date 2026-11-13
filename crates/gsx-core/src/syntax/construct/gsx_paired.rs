@@ -32,7 +32,7 @@ pub fn second(tokenizer: &mut Tokenizer) -> State {
 
 pub fn after(tokenizer: &mut Tokenizer) -> State {
     tokenizer.exit(Name::GsxPairedSequenceTemporary);
-    let start = tokenizer.events[tokenizer.events.len() - 2].point.index;
+    let start = tokenizer.events[tokenizer.events.len() - 2].point.index as usize;
     let open = matches!(tokenizer.current, Some(byte) if !is_whitespace(byte));
     let close = tokenizer.tokenize_state.gsx_paired_close;
     tokenizer.tokenize_state.gsx_paired.push((start, open, close));
@@ -48,7 +48,7 @@ struct Sequence {
     end: Point,
     open: bool,
     close: bool,
-    scope: Option<usize>,
+    scope: usize,
 }
 
 #[derive(Default)]
@@ -66,8 +66,13 @@ fn slot(marker: u8) -> usize {
 }
 
 pub fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
-    let flags: HashMap<usize, (bool, bool)> =
-        tokenizer.tokenize_state.gsx_paired.iter().rev().map(|&(start, open, close)| (start, (open, close))).collect();
+    let flags: HashMap<usize, usize> = tokenizer
+        .tokenize_state
+        .gsx_paired
+        .iter()
+        .rev()
+        .map(|&(start, open, close)| (start, usize::from(open) | usize::from(close) << 1))
+        .collect();
     let mut sequences = vec![];
     let mut stack = vec![];
     let mut index = 0;
@@ -76,15 +81,15 @@ pub fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
         if event.name == Name::GsxPairedSequenceTemporary {
             if event.kind == Kind::Enter {
                 let exit = &tokenizer.events[index + 1];
-                let (open, close) = flags.get(&event.point.index).copied().unwrap_or((false, false));
+                let flags = flags.get(&(event.point.index as usize)).copied().unwrap_or(0);
                 sequences.push(Sequence {
                     enter: index,
-                    marker: tokenizer.parse_state.bytes[event.point.index],
+                    marker: tokenizer.parse_state.bytes[event.point.index as usize],
                     start: event.point,
                     end: exit.point,
-                    open,
-                    close,
-                    scope: stack.last().copied(),
+                    open: flags & 1 != 0,
+                    close: flags & 2 != 0,
+                    scope: stack.last().copied().unwrap_or(usize::MAX),
                 });
             }
         } else if event.kind == Kind::Enter {
@@ -96,7 +101,7 @@ pub fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
     }
 
     let mut pairs: Vec<(usize, usize)> = vec![];
-    let mut scopes: HashMap<Option<usize>, Scope> = HashMap::new();
+    let mut scopes: HashMap<usize, Scope> = HashMap::new();
     for (at, sequence) in sequences.iter().enumerate() {
         let scope = scopes.entry(sequence.scope).or_default();
         let kind = slot(sequence.marker);

@@ -157,11 +157,11 @@ pub struct TokenizeState<'a> {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug)]
 pub struct Tokenizer<'a> {
-    column_start: Vec<(usize, usize)>,
-    first_line: usize,
+    column_start: Vec<(u32, u32)>,
+    first_line: u32,
     line_start: Point,
     consumed: bool,
-    pushed_to: usize,
+    pushed_to: u32,
     attempts: Vec<Attempt>,
     pub current: Option<u8>,
     pub previous: Option<u8>,
@@ -290,7 +290,7 @@ impl<'a> Tokenizer<'a> {
     pub fn define_skip(&mut self, point: Point) {
         let info = (point.index, point.vs);
 
-        let at = point.line - self.first_line;
+        let at = (point.line - self.first_line) as usize;
 
         if at >= self.column_start.len() {
             self.column_start.push(info);
@@ -302,7 +302,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn account_for_potential_skip(&mut self) {
-        let at = self.point.line - self.first_line;
+        let at = (self.point.line - self.first_line) as usize;
 
         if self.point.column == 1 && at != self.column_start.len() {
             self.move_to(self.column_start[at]);
@@ -334,14 +334,14 @@ impl<'a> Tokenizer<'a> {
             return;
         }
         let bytes = self.parse_state.bytes;
-        let start = self.point.index;
-        let end = self.pushed_to.min(bytes.len());
+        let start = self.point.index as usize;
+        let end = (self.pushed_to as usize).min(bytes.len());
         let run = bytes.get(start..end).map_or(0, |rest| {
             rest.iter().position(|&byte| byte == b'\t' || byte == b'\n' || !keep(byte)).unwrap_or(rest.len())
         });
         if run > 0 {
-            self.point.index += run;
-            self.point.column += run;
+            self.point.index += run as u32;
+            self.point.column += run as u32;
             self.previous = Some(bytes[start + run - 1]);
         }
     }
@@ -362,7 +362,7 @@ impl<'a> Tokenizer<'a> {
                     self.point.line += 1;
                     self.point.column = 1;
 
-                    if self.point.line - self.first_line + 1 > self.column_start.len() {
+                    if (self.point.line - self.first_line + 1) as usize > self.column_start.len() {
                         self.column_start.push((self.point.index, self.point.vs));
                     }
 
@@ -376,7 +376,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn move_to(&mut self, to: (usize, usize)) {
+    fn move_to(&mut self, to: (u32, u32)) {
         let (to_index, to_vs) = to;
         while self.point.index < to_index || self.point.index == to_index && self.point.vs < to_vs {
             self.move_one();
@@ -451,7 +451,7 @@ impl<'a> Tokenizer<'a> {
         self.attempts.push(attempt);
     }
 
-    pub fn push(&mut self, from: (usize, usize), to: (usize, usize), state: State) -> State {
+    pub fn push(&mut self, from: (u32, u32), to: (u32, u32), state: State) -> State {
         push_impl(self, from, to, state, false)
     }
 
@@ -493,13 +493,7 @@ fn enter_impl(tokenizer: &mut Tokenizer, name: Name, link: Option<Link>) {
     tokenizer.events.push(Event { kind: Kind::Enter, name, point, link });
 }
 
-fn push_impl(
-    tokenizer: &mut Tokenizer,
-    from: (usize, usize),
-    to: (usize, usize),
-    mut state: State,
-    flush: bool,
-) -> State {
+fn push_impl(tokenizer: &mut Tokenizer, from: (u32, u32), to: (u32, u32), mut state: State, flush: bool) -> State {
     debug_assert!(
         from.0 > tokenizer.point.index || (from.0 == tokenizer.point.index && from.1 >= tokenizer.point.vs),
         "cannot move backwards"
@@ -559,12 +553,13 @@ fn push_impl(
 }
 
 fn byte_action(bytes: &[u8], point: &Point) -> ByteAction {
-    if point.index < bytes.len() {
-        let byte = bytes[point.index];
+    let index = point.index as usize;
+    if index < bytes.len() {
+        let byte = bytes[index];
 
         if byte == b'\t' {
-            let remainder = point.column % TAB_SIZE;
-            let vs = if remainder == 0 { 0 } else { TAB_SIZE - remainder };
+            let remainder = point.column % TAB_SIZE as u32;
+            let vs = if remainder == 0 { 0 } else { TAB_SIZE as u32 - remainder };
 
             if point.vs == 0 {
                 if vs == 0 { ByteAction::Normal(byte) } else { ByteAction::Insert(byte) }

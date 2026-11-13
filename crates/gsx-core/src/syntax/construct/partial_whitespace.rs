@@ -60,8 +60,8 @@ fn trim_data(tokenizer: &mut Tokenizer, exit_index: usize, trim_start: bool, tri
         if diff > 0 || slice.after > 0 {
             let exit_point = tokenizer.events[exit_index].point;
             let mut enter_point = exit_point;
-            enter_point.index -= diff;
-            enter_point.column -= diff;
+            enter_point.index -= diff as u32;
+            enter_point.column -= diff as u32;
             enter_point.vs = 0;
 
             tokenizer.map.add(
@@ -97,8 +97,8 @@ fn trim_data(tokenizer: &mut Tokenizer, exit_index: usize, trim_start: bool, tri
             let enter_point = tokenizer.events[exit_index - 1].point;
             let mut exit_point = enter_point;
             let skip = index + usize::from(slice.before > 0);
-            exit_point.index += skip;
-            exit_point.column += skip;
+            exit_point.index += skip as u32;
+            exit_point.column += skip as u32;
             exit_point.vs = 0;
 
             tokenizer.map.add(
