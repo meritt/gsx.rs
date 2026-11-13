@@ -1,5 +1,5 @@
 use super::{dropped, label, language, math_block, media, spelled, underlined, wrapper};
-use crate::document::{Align, Kind, Layout, Node, Range};
+use crate::document::{Align, Kind, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
     CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Slot, Truncated,
@@ -459,7 +459,10 @@ impl Html {
             self.counted.blocks_reported = true;
             context.report_when(Feature::Text, range, Some(When::Blocks));
         }
-        self.deepen(context, range, depth);
+        if depth > limits.depth && !self.counted.depth_reported {
+            self.counted.depth_reported = true;
+            context.report_when(Feature::Text, range, Some(When::Depth));
+        }
     }
 
     fn limit(&self) -> usize {
@@ -527,13 +530,11 @@ impl Html {
         if let Kind::MediaGroup { layout, .. } = node.kind
             && indices.len() > 1
         {
-            let formats = self.form.groups(layout);
-            let grouped = indices.iter().all(|&index| formats.contains(&self.media[index].format));
-            if grouped {
-                let name = match layout {
-                    Layout::Collage => "tg-collage",
-                    Layout::Slideshow => "tg-slideshow",
-                };
+            let group = self
+                .form
+                .group(layout)
+                .filter(|(_, formats)| indices.iter().all(|&index| formats.contains(&self.media[index].format)));
+            if let Some((name, _)) = group {
                 self.count(context, node.range, level);
                 let start = context.writer().mark();
                 context.writer().raw(&format!("<{name}>"));
@@ -594,8 +595,7 @@ impl Html {
             for (index, (item, alt)) in figure.alts.iter().enumerate() {
                 let Some(alt) = alt.as_deref().filter(|alt| !alt.trim().is_empty()) else { continue };
                 let prefix = if figure.group { format!("{}. ", index + 1) } else { String::new() };
-                let separator = "\n";
-                let overhead = cost(&format!("{separator}{prefix}"));
+                let overhead = cost(&format!("\n{prefix}"));
                 let room = remaining.saturating_sub(overhead);
                 let value = cost(alt);
                 let whole = before.is_some_and(|before| {
@@ -660,7 +660,6 @@ impl Html {
     }
 
     fn rich(&mut self, context: &mut Context, nodes: &[Node], level: usize) {
-        let mut first = true;
         let mut after = None;
         let mut carry = 0;
         if level == 1 {
@@ -669,7 +668,6 @@ impl Html {
                 .filter(|&index| !placed_ids.contains_key(self.media[index].id.as_str()))
                 .collect();
             for index in unplaced {
-                first = false;
                 self.single(context, index, None, level);
             }
         }
@@ -684,10 +682,7 @@ impl Html {
                 carry = gap;
                 continue;
             }
-            if !first {
-                context.gap(after, node, gap);
-            }
-            first = false;
+            context.gap(after, node, gap);
             carry = 0;
             after = Some(node.range.end);
             if let Some(indices) = indices {
@@ -695,13 +690,8 @@ impl Html {
                     context.report_when(Feature::Media, Some(node.range), Some(When::Cut));
                 }
                 self.place(context, node, &indices, level);
-            } else if matches!(
-                node.kind,
-                Kind::ThematicBreak | Kind::Blockquote | Kind::Code { .. } | Kind::List { .. } | Kind::Table { .. }
-            ) {
-                self.rich_block(context, node, level);
             } else {
-                self.paragraph(context, node, level);
+                self.rich_block(context, node, level);
             }
         }
     }
@@ -740,16 +730,6 @@ impl Html {
                 text.replace_range(end - trail..end, "");
                 text.replace_range(body..body + lead, "");
             });
-        }
-    }
-
-    fn deepen(&mut self, context: &mut Context, range: impl Into<Option<Range>>, depth: usize) {
-        if let Some(limits) = self.form.structure
-            && depth > limits.depth
-            && !self.counted.depth_reported
-        {
-            self.counted.depth_reported = true;
-            context.report_when(Feature::Text, range.into(), Some(When::Depth));
         }
     }
 
@@ -830,7 +810,7 @@ impl Html {
                 }
                 context.writer().raw("</table>");
             }
-            _ => {}
+            _ => self.paragraph(context, node, level),
         }
     }
 }

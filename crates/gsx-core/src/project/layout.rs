@@ -27,6 +27,11 @@ const fn escaped(set: &[u8]) -> u128 {
     mask
 }
 
+pub(super) fn within(span: &mut Span<usize>, kept: &Span<usize>) -> bool {
+    *span = span.start.clamp(kept.start, kept.end) - kept.start..span.end.clamp(kept.start, kept.end) - kept.start;
+    span.start < span.end
+}
+
 pub fn marker(ordered: bool, start: Option<u32>, index: usize, checked: Option<bool>) -> String {
     let task = match checked {
         None => "",
@@ -84,11 +89,7 @@ impl Written {
         }
         self.text.truncate(kept.end);
         self.text.replace_range(..kept.start, "");
-        let clamp = |span: &mut Span<usize>| {
-            *span =
-                span.start.clamp(kept.start, kept.end) - kept.start..span.end.clamp(kept.start, kept.end) - kept.start;
-            span.start < span.end
-        };
+        let clamp = |span: &mut Span<usize>| within(span, &kept);
         self.links.retain_mut(|span| clamp(span));
         self.styled.retain_mut(|styled| clamp(&mut styled.span));
         self.prefixes.retain_mut(|span| clamp(span));
@@ -267,7 +268,8 @@ impl Writer {
 
     pub fn lines(&self, mark: usize) -> Vec<Span<usize>> {
         let text = &self.out.text;
-        let mut prefixes = self.out.prefixes.iter().skip_while(|span| span.start < mark).peekable();
+        let first = self.out.prefixes.partition_point(|span| span.start < mark);
+        let mut prefixes = self.out.prefixes[first..].iter().peekable();
         let mut lines = vec![];
         let mut start = mark;
         loop {

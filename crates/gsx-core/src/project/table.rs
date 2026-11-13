@@ -258,25 +258,8 @@ impl EntityForm {
     }
 }
 
-const RICH_BLOCKS: [&str; 17] = [
-    "p",
-    "pre",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "table",
-    "tr",
-    "hr",
-    "img",
-    "video",
-    "audio",
-    "figure",
-    "figcaption",
-    "tg-collage",
-    "tg-slideshow",
-    "tg-math-block",
-];
+const RICH_BLOCKS: [&str; 14] =
+    ["p", "pre", "ul", "ol", "li", "blockquote", "table", "tr", "hr", "img", "video", "audio", "figure", "figcaption"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HtmlBlocks {
@@ -298,7 +281,7 @@ pub struct HtmlForm {
     pub structure: Option<Structure>,
     pub tags: &'static [(Feature, &'static str)],
     pub exclusive: &'static [Feature],
-    pub groups: &'static [(Layout, &'static [Format])],
+    pub groups: &'static [(Layout, &'static str, &'static [Format])],
     pub code_contained: bool,
     pub quote_nests: bool,
     pub quote_contains_code: bool,
@@ -320,8 +303,14 @@ impl HtmlForm {
         self.tags.iter().find(|(native, _)| *native == feature).map(|(_, tag)| *tag)
     }
 
-    pub fn groups(&self, layout: Layout) -> &'static [Format] {
-        self.groups.iter().find(|(native, _)| *native == layout).map_or(&[], |(_, formats)| formats)
+    pub fn group(&self, layout: Layout) -> Option<(&'static str, &'static [Format])> {
+        self.groups.iter().find(|(native, ..)| *native == layout).map(|&(_, tag, formats)| (tag, formats))
+    }
+
+    fn rich_block(&self, tag: &str) -> bool {
+        RICH_BLOCKS.contains(&tag)
+            || self.groups.iter().any(|(_, group, _)| *group == tag)
+            || self.math.is_some_and(|math| math.block == tag)
     }
 }
 
@@ -568,7 +557,7 @@ impl Form {
                     },
                 );
                 let tags = join(form.tags.iter().map(|(feature, tag)| format!("{}={tag}", feature.name())));
-                let groups = join(form.groups.iter().map(|(layout, formats)| {
+                let groups = join(form.groups.iter().map(|(layout, _, formats)| {
                     let formats: Vec<_> = formats.iter().map(|format| format.name()).collect();
                     format!("{}={}", layout.as_str(), formats.join("+"))
                 }));
@@ -621,7 +610,7 @@ impl Form {
             return Cow::Borrowed(text);
         };
         let mut out = String::with_capacity(text.len());
-        visible_parts(text, form.blocks == HtmlBlocks::Rich, usize::MAX, &mut |part| {
+        visible_parts(text, form, usize::MAX, &mut |part| {
             out.push_str(part);
             true
         });
@@ -630,13 +619,14 @@ impl Form {
 
     pub fn visible_blank(self, text: &str, blank: fn(&str) -> bool) -> bool {
         match self.html() {
-            Some(form) => visible_parts(text, form.blocks == HtmlBlocks::Rich, 256, &mut |part| blank(part)),
+            Some(form) => visible_parts(text, form, 256, &mut |part| blank(part)),
             None => blank(text),
         }
     }
 }
 
-fn visible_parts(text: &str, rich: bool, window: usize, emit: &mut dyn FnMut(&str) -> bool) -> bool {
+fn visible_parts(text: &str, form: &HtmlForm, window: usize, emit: &mut dyn FnMut(&str) -> bool) -> bool {
+    let rich = form.blocks == HtmlBlocks::Rich;
     let (mut started, mut newline) = (false, false);
     let mut push = |part: &str, boundary: &mut bool| {
         if part.is_empty() {
@@ -672,7 +662,7 @@ fn visible_parts(text: &str, rich: bool, window: usize, emit: &mut dyn FnMut(&st
                 }
             } else if rich {
                 let tag = rest[1..end].trim_start_matches('/');
-                boundary |= RICH_BLOCKS.contains(&&tag[..tag.find([' ', '/', '>']).unwrap_or(tag.len())]);
+                boundary |= form.rich_block(&tag[..tag.find([' ', '/', '>']).unwrap_or(tag.len())]);
             }
             rest = &rest[end..];
         } else {
@@ -887,7 +877,7 @@ impl Target {
                     let maximum = form.structure.map_or(MEDIA_GROUP_MAX, |structure| structure.items);
                     form.groups
                         .iter()
-                        .map(|&(layout, formats)| Group {
+                        .map(|&(layout, _, formats)| Group {
                             layout,
                             formats,
                             minimum: MEDIA_GROUP_MIN,

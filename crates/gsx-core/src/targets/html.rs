@@ -147,7 +147,10 @@ static RICH_FORM: HtmlForm = HtmlForm {
         (Feature::Datetime, "tg-time"),
     ],
     exclusive: &[],
-    groups: &[(Layout::Collage, &[Format::Image, Format::Video]), (Layout::Slideshow, &[Format::Image])],
+    groups: &[
+        (Layout::Collage, "tg-collage", &[Format::Image, Format::Video]),
+        (Layout::Slideshow, "tg-slideshow", &[Format::Image]),
+    ],
     code_contained: true,
     quote_nests: true,
     quote_contains_code: true,

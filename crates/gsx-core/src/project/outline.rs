@@ -238,23 +238,35 @@ impl<'a> Outline<'a> {
         let flow = &self.leaves[cursor.first..cursor.last];
         let (head, fresh, first_leaf) = (cursor.start, boundaries.len(), cursor.leaf);
         let mut done = true;
-        for (offset, char) in value[cursor.next..].char_indices() {
-            let at = cursor.next + offset;
-            if cursor.segmenter.starts(char) && at > cursor.start {
+        let printable = |byte: u8| (0x20..0x7F).contains(&byte);
+        let bytes = value.as_bytes();
+        let mut at = cursor.next;
+        let mut ascii = at > 0 && printable(bytes[at - 1]);
+        while let Some(&byte) = bytes.get(at) {
+            let (starts, width) = if ascii && printable(byte) {
+                (true, 1)
+            } else {
+                let char = value[at..].chars().next().unwrap_or_default();
+                ascii = printable(byte);
+                (cursor.segmenter.starts(char), char.len_utf8())
+            };
+            if starts && at > cursor.start {
                 boundaries.push(cursor.start);
                 cursor.start = at;
                 if at - head >= CHUNK && value[..at].ends_with(char::is_whitespace) {
-                    cursor.next = at + char.len_utf8();
+                    cursor.next = at + width;
                     done = false;
                     break;
                 }
             }
+            at += width;
         }
         if done && cursor.start < value.len() {
             boundaries.push(cursor.start);
         }
         let tail = if done { value.len() } else { cursor.start };
         let mut leaf = first_leaf;
+        let mut run = None;
         for index in fresh..boundaries.len() {
             let start = boundaries[index];
             let end = boundaries.get(index + 1).copied().unwrap_or(tail);
@@ -272,15 +284,21 @@ impl<'a> Outline<'a> {
                 retained,
             });
             if retained {
-                visible_starts.push(Some(visible.len()));
-                visible.push_str(&value[start..end]);
+                let from = *run.get_or_insert(start);
+                visible_starts.push(Some(visible.len() + start - from));
             } else {
+                if let Some(from) = run.take() {
+                    visible.push_str(&value[from..start]);
+                }
                 visible_starts.push(None);
             }
             letters.push(match &value.as_bytes()[start..end] {
                 [byte] => byte.is_ascii_alphanumeric(),
                 _ => value[start..end].chars().any(|char| letter_or_number(u32::from(char))),
             });
+        }
+        if let Some(from) = run {
+            visible.push_str(&value[from..tail]);
         }
         cursor.leaf = leaf;
         let base = cursor.base;
@@ -387,6 +405,20 @@ impl<'a> Outline<'a> {
                 return None;
             }
         }
+    }
+
+    pub fn share(&self, fraction: f64, upper: usize) -> usize {
+        let mut starts = Vec::with_capacity(self.leaves.len());
+        let mut total = 0;
+        for leaf in &self.leaves {
+            starts.push(total);
+            total += leaf.text.len();
+        }
+        let target = (total as f64 * fraction) as usize;
+        let built = self.built.borrow();
+        let segments = &built.segments[..upper.min(built.segments.len())];
+        let at = segments.partition_point(|segment| starts[segment.leaf as usize] + (segment.offset as usize) < target);
+        at.min(upper.saturating_sub(1))
     }
 
     pub fn end(&self) -> u32 {

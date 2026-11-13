@@ -734,7 +734,16 @@ impl Request<'_, '_> {
         bounded: bool,
         draw: &dyn Fn(Option<&Cut>) -> Rendered,
     ) -> Fitted {
-        let full = draw(None);
+        self.fit_from(draw(None), outline, bounded, draw)
+    }
+
+    fn fit_from<'o>(
+        &self,
+        full: Rendered,
+        outline: &dyn Fn() -> Outline<'o>,
+        bounded: bool,
+        draw: &dyn Fn(Option<&Cut>) -> Rendered,
+    ) -> Fitted {
         let limits = self.limits();
         let values = self.values(&limits, &full);
         let fits = |values: &[usize]| within(&limits, values);
@@ -773,9 +782,11 @@ impl Request<'_, '_> {
         let mut probes: HashMap<(u32, usize), (bool, f64)> = HashMap::new();
         let mut best: Option<(usize, (u32, usize), Probe)> = None;
         let mode = self.options.search.unwrap_or(self.target.search);
+        let start = bound.map(|upper| outline.share(1.0 / load(&values), upper));
         let keep = fit::search(
             mode,
             upper,
+            start,
             |keep| outline.clean(keep),
             |keep| {
                 let cut = outline.cut(keep, self.spec.truncation);
@@ -976,9 +987,15 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                 if !derived && matches!(target_url, Some(None)) {
                     changes.push(request.change(Feature::TargetUrl, None, Some(When::Refused)));
                 }
+                let markup = target.form.splits_by_nodes();
+                let threading = facts.overflow == Overflow::Thread
+                    && facts.placement != Some(Placement::Story)
+                    && target.threads()
+                    && !derived;
+                let mut full = None;
                 let suffix = target_url.as_ref().and_then(Option::as_deref).filter(|_| !derived).filter(|url| {
-                    let blank =
-                        target.form.visible_blank(&draw_body(spec.name, spent, None, false).text, measure::blank);
+                    let drawn = full.insert(draw_body(spec.name, spent, None, threading && !markup));
+                    let blank = target.form.visible_blank(&drawn.text, measure::blank);
                     let least = if blank { (*url).to_owned() } else { format!("{ELLIPSIS}\n\n{url}") };
                     let fits = request.fits(&Rendered::text(least));
                     if !fits {
@@ -986,22 +1003,18 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     }
                     fits
                 });
-                let markup = target.form.splits_by_nodes();
-                let full = (facts.overflow == Overflow::Thread
-                    && facts.placement != Some(Placement::Story)
-                    && target.threads()
-                    && !derived)
-                    .then(|| draw_body(spec.name, spent, None, !markup));
-                let split = full.and_then(|full| {
-                    let split = if markup {
-                        markup::split(&request, document, body, &full, suffix)
+                if threading && full.is_none() {
+                    full = Some(draw_body(spec.name, spent, None, !markup));
+                }
+                let split = full.as_ref().filter(|_| threading).and_then(|full| {
+                    if markup {
+                        markup::split(&request, document, body, full, suffix)
                     } else {
-                        thread::split(&request, &full, suffix).map(|thread| anchored(document, &full, thread))
-                    };
-                    split.map(|split| (full, split))
+                        thread::split(&request, full, suffix).map(|thread| anchored(document, full, thread))
+                    }
                 });
-                let mut fitted = match split {
-                    Some((full, mut split)) => {
+                let mut fitted = match (split, full) {
+                    (Some(mut split), Some(full)) => {
                         let mut first = split.parts.remove(0);
                         let mut changes = full.changes;
                         changes.reserve_exact(first.rendered.changes.len() + 1);
@@ -1012,9 +1025,12 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                         threaded = Some((spec.name, split));
                         first
                     }
-                    None => request.fit(&|| Outline::of_nodes(document, body, math), !removed, &|cut| {
-                        appended(target, draw_body(spec.name, spent, cut, false), suffix)
-                    }),
+                    (_, full) => {
+                        let draw =
+                            |cut: Option<&Cut>| appended(target, draw_body(spec.name, spent, cut, false), suffix);
+                        let whole = full.map_or_else(|| draw(None), |full| appended(target, full, suffix));
+                        request.fit_from(whole, &|| Outline::of_nodes(document, body, math), !removed, &draw)
+                    }
                 };
                 if suffix.is_some() {
                     fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));

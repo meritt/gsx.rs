@@ -76,12 +76,9 @@ fn trim(text: &mut String, styled: &mut Vec<Styled>, origins: &mut Vec<(Span<usi
     let end = text.trim_end_matches(blank).len().max(lead);
     text.truncate(end);
     text.replace_range(..lead, "");
-    let clamp = |span: &mut Span<usize>| {
-        *span = span.start.clamp(lead, end) - lead..span.end.clamp(lead, end) - lead;
-        span.start < span.end
-    };
-    styled.retain_mut(|entity| clamp(&mut entity.span));
-    origins.retain_mut(|(span, _)| clamp(span));
+    let kept = lead..end;
+    styled.retain_mut(|entity| super::layout::within(&mut entity.span, &kept));
+    origins.retain_mut(|(span, _)| super::layout::within(span, &kept));
 }
 
 fn code(style: Style) -> bool {
