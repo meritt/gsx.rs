@@ -267,11 +267,15 @@ def parse(text: str, media: Iterable[Media] = ()) -> Document:
     return Document(
         children=[_node(child) for child in document["children"]],
         markers=[Marker(item["kind"], Range(*item["range"])) for item in document["markers"]],
-        diagnostics=[
-            Diagnostic(item["code"], item["severity"], Range(*item["range"]), _details(item["details"]))
-            for item in document["diagnostics"]
-        ],
+        diagnostics=_diagnostics(document["diagnostics"]),
     )
+
+
+def _diagnostics(diagnostics: list) -> List[Diagnostic]:
+    return [
+        Diagnostic(item["code"], item["severity"], Range(*item["range"]), _details(item["details"]))
+        for item in diagnostics
+    ]
 
 
 @dataclass(frozen=True)
@@ -387,6 +391,8 @@ class Projection:
     fields: List[Field]
     measurements: List[Measurement]
     changes: List[Change]
+    diagnostics: List[Diagnostic]
+    """Diagnostics of the parsed document, as in Document.diagnostics."""
     media: List[str]
     blocks: Optional[List[Block]] = None
     """Present for targets of the blocks/1 form only."""
@@ -563,6 +569,7 @@ def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Medi
             )
             for item in projection["changes"]
         ],
+        diagnostics=_diagnostics(projection["diagnostics"]),
         media=projection["media"],
         blocks=None if "blocks" not in projection else [_block(block) for block in projection["blocks"]],
         items=None if "items" not in projection else [Attachment(**item) for item in projection["items"]],

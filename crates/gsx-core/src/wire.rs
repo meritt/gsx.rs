@@ -49,6 +49,8 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
     out.list(&measurements, Out::measurement);
     out.raw(",\"changes\":");
     out.list(&changes, Out::change);
+    out.raw(",\"diagnostics\":");
+    out.list(document.diagnostics(), Out::diagnostic);
     out.raw(",\"media\":");
     out.list(&media, |out, id| out.string(id));
     if target.form.blocks().is_some() {

@@ -265,6 +265,8 @@ export interface Projection {
   fields: Field[];
   measurements: Measurement[];
   changes: Change[];
+  /** Diagnostics of the parsed document, as in `Document.diagnostics`. */
+  diagnostics: Diagnostic[];
   media: string[];
   /** Present for targets of the `blocks/1` form only. */
   blocks?: Block[];

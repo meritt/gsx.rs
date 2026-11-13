@@ -1,6 +1,6 @@
 # Projection
 
-`project(document, target, facts) -> Projection` is pure. Target rules and explicit facts determine rendering, field limits, media handling and overflow. The caller validates document diagnostics and refuses publication when a change has class `blocked`.
+`project(document, target, facts) -> Projection` is pure. Target rules and explicit facts determine rendering, field limits, media handling and overflow. The caller validates document diagnostics and refuses publication when a change has class `blocked`. The projection result carries the document's diagnostics, so one `project` call and one parse answer a publish decision.
 
 ## Facts
 
@@ -32,6 +32,7 @@ console.log(target.manifest);
 | `fields` | Named text outputs, each with link ranges and entities |
 | `measurements` | Counts and maxima for applicable limits; item or block indices when needed |
 | `changes` | Transformations and blocking conditions, ordered by source position, uncapped |
+| `diagnostics` | The parsed document's diagnostics, identical to `document.diagnostics` for the same text and media declarations; independent of target, facts and parts |
 | `media` | IDs referenced by document directives; in a thread, those assigned to the part |
 | `blocks` | Block targets: text, media groups, files and separators in order |
 | `items` | Media attached to the message with published alt and spoiler state, in fact order: every item on non-block targets, items no block can show on Slack blocks; omitted from JSON when empty |

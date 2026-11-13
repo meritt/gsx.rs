@@ -110,8 +110,11 @@ for file in arguments.dropFirst() {
         }
         do {
             if let target = input.target {
-                _ = try GSX.project(input.markdown, target: target, facts: facts, media: media)
+                let projection = try GSX.project(input.markdown, target: target, facts: facts, media: media)
                 guard json.hasPrefix(#"{"projection":"#) else { fatalError("project returned a projection for \(json)") }
+                guard projection.diagnostics == (try GSX.parse(input.markdown, media: media)).diagnostics else {
+                    fatalError("project diagnostics differ from parse for \(json)")
+                }
             } else {
                 _ = try GSX.parse(input.markdown, media: media)
                 guard json.hasPrefix(#"{"document":"#) else { fatalError("parse returned a document for \(json)") }

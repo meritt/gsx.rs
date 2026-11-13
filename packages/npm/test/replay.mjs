@@ -92,8 +92,11 @@ for (const file of files) {
 
     try {
       if (target) {
-        gsx.project(markdown, target, facts, media);
+        const { diagnostics } = gsx.project(markdown, target, facts, media);
         if (!wire.projection) throw new Error(`project returned a projection for ${json}`);
+        if (JSON.stringify(diagnostics) !== JSON.stringify(gsx.parse(markdown, media).diagnostics)) {
+          throw new Error(`project diagnostics differ from parse for ${json}`);
+        }
       } else {
         gsx.parse(markdown, media);
         if (!wire.document) throw new Error(`parse returned a document for ${json}`);

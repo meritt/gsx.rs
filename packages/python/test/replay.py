@@ -80,9 +80,11 @@ def main(out, files):
             wire = json.loads(raw)
             try:
                 if target:
-                    gsx.project(markdown, target, facts, media)
+                    projection = gsx.project(markdown, target, facts, media)
                     if "projection" not in wire:
                         raise AssertionError("project returned a projection for " + raw)
+                    if projection.diagnostics != gsx.parse(markdown, media).diagnostics:
+                        raise AssertionError("project diagnostics differ from parse for " + raw)
                 else:
                     gsx.parse(markdown, media)
                     if "document" not in wire:

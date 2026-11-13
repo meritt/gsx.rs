@@ -12,6 +12,7 @@ use gsx_core::project::{
 use gsx_core::targets::TARGETS;
 use gsx_core::wire;
 use proptest::prelude::*;
+use support::Json;
 use support::markup::boundaries;
 use validator::Schema;
 
@@ -332,7 +333,16 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
     }
     let sampled = TARGETS[input.len() % TARGETS.len()];
     let out = wire::project(input.as_bytes(), &MEDIA[..setup.media], sampled, &facts);
-    SCHEMA.check_wire(&out).map_err(TestCaseError::fail)
+    SCHEMA.check_wire(&out).map_err(TestCaseError::fail)?;
+    let parsed = Json::parse(&wire::parse(input.as_bytes(), &MEDIA[..setup.media]));
+    let projected = Json::parse(&out);
+    prop_assert_eq!(
+        projected.get("projection").get("diagnostics"),
+        parsed.get("document").get("diagnostics"),
+        "{} diagnostics differ from the document's",
+        sampled.name
+    );
+    Ok(())
 }
 
 proptest! {

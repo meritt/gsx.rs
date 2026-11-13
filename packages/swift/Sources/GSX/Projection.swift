@@ -126,6 +126,8 @@ extension GSX {
         public let fields: [Field]
         public let measurements: [Measurement]
         public let changes: [Change]
+        /// Diagnostics of the parsed document, as in `Document.diagnostics`.
+        public let diagnostics: [Diagnostic]
         public let media: [String]
         /// Present for targets of the `blocks/1` form only.
         public let blocks: [Block]?

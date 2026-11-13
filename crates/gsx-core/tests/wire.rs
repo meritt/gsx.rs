@@ -1,5 +1,5 @@
 use gsx_core::document::{Limit, Media};
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow};
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire::{invalid_text, parse, project, refused_item, serialize, targets};
 
@@ -74,6 +74,30 @@ fn writes_projection() {
         r#""field":"text","range":[0,4],"truncated":null},"#
     )));
     assert!(json.ends_with(r#""media":[]}}"#), "{json}");
+}
+
+#[test]
+fn projection_carries_the_document_diagnostics() {
+    let media = [Media { id: "a", cover: None }];
+    let input = "::media{id=\"x\"}\n\n::time[soon]{datetime=\"tomorrow\"} ::media{id=\"a\"}\n";
+    let document = parse(input.as_bytes(), &media);
+    let diagnostics = &document[document.find(",\"diagnostics\":").unwrap()..document.len() - 2];
+    for code in ["MEDIA_REFERENCE_UNKNOWN", "DATETIME_INVALID", "MEDIA_REFERENCE_CONTEXT_UNSUPPORTED"] {
+        assert!(diagnostics.contains(code), "{diagnostics}");
+    }
+    let threaded = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    for target in TARGETS {
+        for facts in [&Facts::default(), &threaded] {
+            let json = project(input.as_bytes(), &media, target, facts);
+            assert!(json.contains(&format!("{diagnostics},\"media\":")), "{} {json}", target.name);
+        }
+    }
+    let clean = project(b"a", &[], target("x-plain").unwrap(), &Facts::default());
+    assert!(clean.contains(",\"diagnostics\":[],\"media\":"), "{clean}");
+    let deep = ">".repeat(33);
+    let rejected = project(deep.as_bytes(), &[], target("x-plain").unwrap(), &Facts::default());
+    assert!(rejected.starts_with("{\"error\":"), "{rejected}");
+    assert_eq!(rejected, parse(deep.as_bytes(), &[]));
 }
 
 #[test]

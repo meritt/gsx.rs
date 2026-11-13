@@ -51,6 +51,11 @@
         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
         "measurements": { "type": "array", "items": { "$ref": "#/$defs/measurement" } },
         "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
+        "diagnostics": {
+          "description": "Diagnostics of the parsed document, as in document.diagnostics.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/diagnostic" }
+        },
         "media": { "type": "array", "items": { "type": "string" } },
         "blocks": {
           "description": "Present for targets of the blocks/1 form only: text, media, files and separators in order.",
@@ -68,7 +73,7 @@
           "items": { "$ref": "#/$defs/part" }
         }
       },
-      "required": ["fields", "measurements", "changes", "media"],
+      "required": ["fields", "measurements", "changes", "diagnostics", "media"],
       "additionalProperties": false
     },
     "part": {

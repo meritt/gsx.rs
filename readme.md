@@ -96,7 +96,7 @@ projection = gsx.project(text, "telegram-entities", facts)
 assert projection.fields[0].text == "Hello world."
 ```
 
-Check document diagnostics before publishing and reject projections with `blocked` changes. The caller resolves media and account references and sends provider requests; gsx performs no I/O.
+Check document diagnostics before publishing, which every projection carries, and reject projections with `blocked` changes. The caller resolves media and account references and sends provider requests; gsx performs no I/O.
 
 ## Formatting
 

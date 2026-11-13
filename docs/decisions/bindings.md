@@ -22,7 +22,7 @@ Bindings pass text and explicit facts into `gsx-core` and decode its JSON. They 
 | Media ID rule | `document::{is_media_id, MEDIA_ID_MAX_BYTES, MEDIA_ID_PATTERN, MEDIA_GROUP_MIN, MEDIA_GROUP_MAX}` | `isMediaId`, `MEDIA_ID_MAX_BYTES`, `MEDIA_ID_PATTERN`, `MEDIA_GROUP_MIN`, `MEDIA_GROUP_MAX` / `GSX.isMediaId(_:)`, `GSX.mediaIdMaximumBytes`, `GSX.mediaIdPattern`, `GSX.mediaGroupMinimumCount`, `GSX.mediaGroupMaximumCount` | `is_media_id`, `MEDIA_ID_MAX_BYTES`, `MEDIA_ID_PATTERN`, `MEDIA_GROUP_MIN`, `MEDIA_GROUP_MAX` |
 | Raw JSON | `wire::{parse, serialize, project, targets}` | `parseJSON`, `serializeJSON`, `projectJSON` | `parse_json`, `serialize_json`, `project_json` |
 
-Rust serializes and projects an existing document. Other bindings accept source text and optional parse-time media declarations on each call. Typed methods raise a parse error for rejected input; raw methods retain the error object. Document diagnostics are returned without raising.
+Rust serializes and projects an existing document. Other bindings accept source text and optional parse-time media declarations on each call. Typed methods raise a parse error for rejected input; raw methods retain the error object. Document diagnostics are returned without raising, by `parse` in the document and by `project` in the projection.
 
 Signatures and types: [TypeScript](../../packages/npm/src/gsx.d.ts), [Swift](../../packages/swift/Sources/GSX/GSX.swift), [Python](../../packages/python/src/gsx/__init__.py).
 
@@ -46,7 +46,7 @@ Linux wheels are built in their PyPA images. musl builds disable `crt-static` so
 
 ## Wire format
 
-[`schema/gsx-1.schema.json`](../../schema/gsx-1.schema.json) defines the JSON written by [`wire.rs`](../../crates/gsx-core/src/wire.rs). Results are `{document: ...}`, `{serialized: ...}`, `{projection: ...}`, `{targets: ...}` or `{error: ...}`. Keys use camelCase; ranges are half-open `[start, end)` pairs.
+[`schema/gsx-1.schema.json`](../../schema/gsx-1.schema.json) defines the JSON written by [`wire.rs`](../../crates/gsx-core/src/wire.rs). Results are `{document: ...}`, `{serialized: ...}`, `{projection: ...}`, `{targets: ...}` or `{error: ...}`. Keys use camelCase; ranges are half-open `[start, end)` pairs. A projection always includes `diagnostics`, written by the same writer as `document.diagnostics` and byte-identical to it, so a caller deciding whether to publish needs no separate parse. Rejected input gives the same `{error: ...}` from `project` as from `parse`. Rust `project::project` takes a parsed `Document` and leaves its diagnostics there.
 
 A node carries `type`, `range` and its kind-specific fields, using `null` for absent nullable values. `provenance` appears only as `"literal"`, `gapBefore` only when set, and `children` only when non-empty. Exhaustive Rust matches enforce model-to-wire coverage; [schema tests](../../crates/gsx-core/tests/schema.rs) validate the separate schema against corpus results.
 
