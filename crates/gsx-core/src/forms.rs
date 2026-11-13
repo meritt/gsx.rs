@@ -4,10 +4,27 @@ pub mod markdown;
 pub mod plain;
 
 use crate::document::{Kind, Node};
-use crate::project::Feature;
+use crate::project::{Feature, Piece};
 
 fn media(node: &Node) -> bool {
     node.media_ids().is_some()
+}
+
+fn math_block(lang: Option<&str>) -> bool {
+    lang == Some("math")
+}
+
+fn spelled(piece: &str, kind: Piece) -> String {
+    match kind {
+        Piece::Whole => format!("${piece}$"),
+        Piece::Kept if piece.is_empty() => String::new(),
+        Piece::Kept => format!("${piece}"),
+        Piece::Suffix => piece.to_owned(),
+    }
+}
+
+fn dropped(piece: &str, kind: Piece) -> String {
+    if kind == Piece::Suffix { piece.to_owned() } else { String::new() }
 }
 
 fn wrapper(kind: &Kind) -> Option<Feature> {
@@ -34,6 +51,7 @@ fn label(nodes: &[Node], out: &mut String) {
     for node in nodes {
         match &node.kind {
             Kind::Text { value } | Kind::InlineCode { value } => out.push_str(value),
+            Kind::Math { value } => out.push_str(&spelled(value, Piece::Whole)),
             Kind::Break => out.push('\n'),
             _ => label(&node.children, out),
         }

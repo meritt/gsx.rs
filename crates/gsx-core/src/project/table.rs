@@ -275,6 +275,13 @@ pub struct HtmlForm {
     pub empty_removed: bool,
     pub trim: bool,
     pub time_formats: TimeFormats,
+    pub math: Option<MathTags>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MathTags {
+    pub inline: &'static str,
+    pub block: &'static str,
 }
 
 impl HtmlForm {
@@ -456,6 +463,13 @@ impl Form {
         }
     }
 
+    pub const fn math(self) -> Option<MathTags> {
+        match self {
+            Form::Html(form) => form.math,
+            _ => None,
+        }
+    }
+
     pub const fn markdown(self) -> Option<&'static MarkdownForm> {
         match self {
             Form::Markdown(form) => Some(form),
@@ -528,7 +542,7 @@ impl Form {
                     out,
                     "  blocks {blocks}\n  structure {structure}\n  tags {tags}\n  exclusive {}\n  groups {groups}\n  \
                      code_contained {}\n  quote_nests {}\n  quote_contains_code {}\n  code_info {}\n  empty_removed {}\n  \
-                     trim {}\n  time_formats {}",
+                     trim {}\n  time_formats {}\n  math {}",
                     join(form.exclusive.iter().map(|feature| feature.name())),
                     form.code_contained,
                     form.quote_nests,
@@ -537,6 +551,7 @@ impl Form {
                     form.empty_removed,
                     form.trim,
                     describe_time_formats(form.time_formats),
+                    form.math.map_or_else(|| "none".to_owned(), |tags| format!("{},{}", tags.inline, tags.block)),
                 );
             }
             Form::Markdown(form) => form.describe(out),

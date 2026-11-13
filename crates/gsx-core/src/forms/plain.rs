@@ -1,4 +1,4 @@
-use super::{closing_bidi, label, language, media, underlined, wrapper};
+use super::{closing_bidi, label, language, math_block, media, spelled, underlined, wrapper};
 use crate::document::{Kind, Node};
 use crate::project::links::{self, bluesky::visible};
 use crate::project::{CELL, Class, Context, Feature, QUOTE, RULE, Renderer, Style, When, date_refusal, href, marker};
@@ -41,6 +41,9 @@ fn block(context: &mut Context, node: &Node) {
             context.writer().push(RULE);
         }
         Kind::Code { lang, meta, value } => {
+            if math_block(lang.as_deref()) {
+                context.report(Feature::Math, node.range);
+            }
             let Some(style) = context.native(Feature::CodeBlock) else {
                 context.report(Feature::CodeBlock, node.range);
                 return context.leaf(node, value);
@@ -145,6 +148,10 @@ pub fn inline(context: &mut Context, nodes: &[Node]) {
                     context.report(Feature::InlineCode, node.range);
                     context.leaf(node, value);
                 }
+            }
+            Kind::Math { value } => {
+                context.report(Feature::Math, node.range);
+                context.leaf_with(node, value, spelled);
             }
             Kind::Break => context.writer().push("\n"),
             Kind::Link { url, title, .. } => {

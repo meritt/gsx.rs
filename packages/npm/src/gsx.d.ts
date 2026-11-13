@@ -35,7 +35,7 @@ export type Node =
   | (NodeBase & { type: 'listItem'; spread: boolean; checked: boolean | null })
   | (NodeBase & { type: 'code'; lang: string | null; meta: string | null; value: string })
   | (NodeBase & { type: 'table'; align: Align[] })
-  | (NodeBase & { type: 'text' | 'inlineCode'; value: string })
+  | (NodeBase & { type: 'text' | 'inlineCode' | 'math'; value: string })
   | (NodeBase & { type: 'link'; url: string; source: string; title: string | null })
   | (NodeBase & { type: 'datetime'; datetime: string | null; unix: number; format: TimeFormat | null })
   | (NodeBase & { type: 'mediaReference'; mediaId: string })
@@ -203,6 +203,7 @@ export type Feature =
   | 'highlight'
   | 'spoiler'
   | 'inline_code'
+  | 'math'
   | 'link'
   | 'link_title'
   | 'datetime'

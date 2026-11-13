@@ -1,4 +1,4 @@
-{"area":"syntax","cases":3970,"corpus":"gsx-corpus","reference":{"implementation":"gsx"},"schema":1,"sources":"every document.jsonl input that parses; markers are the UTF-16 ranges of syntax an editor highlights"}
+{"area":"syntax","cases":3983,"corpus":"gsx-corpus","reference":{"implementation":"gsx"},"schema":1,"sources":"every document.jsonl input that parses; markers are the UTF-16 ranges of syntax an editor highlights"}
 {"id":"9d72f94837e641c2","markdown":"\tfoo\tbaz\t\tbim\n","markers":[],"media":[]}
 {"id":"91a8cc00f70c9e89","markdown":"  \tfoo\tbaz\t\tbim\n","markers":[],"media":[]}
 {"id":"5b86f9a386c1cf8b","markdown":"    a\ta\n    ὐ\ta\n","markers":[],"media":[]}
@@ -2212,7 +2212,7 @@
 {"id":"b36503f600fe24a5","markdown":"==\\===","markers":[{"kind":"highlight","range":[0,2]},{"kind":"escape","range":[2,3]},{"kind":"highlight","range":[4,6]}],"media":[]}
 {"id":"2b08807744ff31c8","markdown":"&#61;=a==","markers":[{"kind":"characterReference","range":[0,5]}],"media":[]}
 {"id":"b359c38cee24a87e","markdown":"==a==\\","markers":[{"kind":"highlight","range":[0,2]},{"kind":"highlight","range":[3,5]}],"media":[]}
-{"id":"0ba5c0355b7ad353","markdown":"$x$==a==$y$","markers":[],"media":[]}
+{"id":"0ba5c0355b7ad353","markdown":"$x$==a==$y$","markers":[{"kind":"highlight","range":[3,5]},{"kind":"highlight","range":[6,8]}],"media":[]}
 {"id":"14a09762748c2d92","markdown":"\\||a||","markers":[{"kind":"escape","range":[0,1]}],"media":[]}
 {"id":"070e205cc8bbc873","markdown":"||a\\||","markers":[{"kind":"escape","range":[3,4]}],"media":[]}
 {"id":"171af82f5c4bd1a4","markdown":"\\\\||a||","markers":[{"kind":"escape","range":[0,1]},{"kind":"spoiler","range":[2,4]},{"kind":"spoiler","range":[5,7]}],"media":[]}
@@ -2233,7 +2233,7 @@
 {"id":"8bb681596cac5c4f","markdown":"$a\\$","markers":[{"kind":"escape","range":[2,3]}],"media":[]}
 {"id":"3798228c628e739a","markdown":"\\\\$a$","markers":[{"kind":"escape","range":[0,1]}],"media":[]}
 {"id":"596f07818499a86c","markdown":"`$a$`","markers":[{"kind":"codeText","range":[0,1]},{"kind":"codeText","range":[4,5]}],"media":[]}
-{"id":"bdcf4910a4475ee6","markdown":"$\\$$","markers":[{"kind":"escape","range":[1,2]}],"media":[]}
+{"id":"bdcf4910a4475ee6","markdown":"$\\$$","markers":[],"media":[]}
 {"id":"544124234eecf479","markdown":"&#36;a$","markers":[{"kind":"characterReference","range":[0,5]}],"media":[]}
 {"id":"1f453a23aded54e4","markdown":"$a$\\","markers":[],"media":[]}
 {"id":"f2699c101668d152","markdown":"$x$$a$$y$","markers":[],"media":[]}
@@ -2251,7 +2251,7 @@
 {"id":"f42e4670ce11eff3","markdown":"::time[\\:]{unix=\"1700000000\"}","markers":[{"kind":"directive","range":[0,2]},{"kind":"directive","range":[6,7]},{"kind":"escape","range":[7,8]},{"kind":"directive","range":[9,10]},{"kind":"directive","range":[10,11]},{"kind":"directive","range":[28,29]}],"media":[]}
 {"id":"a024ffc00d7cd498","markdown":"&#58;time[a]{unix=\"1700000000\"}","markers":[{"kind":"characterReference","range":[0,5]}],"media":[]}
 {"id":"9479965c65b24eba","markdown":"::time[a]{unix=\"1700000000\"}\\","markers":[{"kind":"directive","range":[0,2]},{"kind":"directive","range":[6,7]},{"kind":"directive","range":[8,9]},{"kind":"directive","range":[9,10]},{"kind":"directive","range":[27,28]}],"media":[]}
-{"id":"f1d546e9d7c43855","markdown":"$x$::time[a]{unix=\"1700000000\"}$y$","markers":[],"media":[]}
+{"id":"f1d546e9d7c43855","markdown":"$x$::time[a]{unix=\"1700000000\"}$y$","markers":[{"kind":"directive","range":[3,5]},{"kind":"directive","range":[9,10]},{"kind":"directive","range":[11,12]},{"kind":"directive","range":[12,13]},{"kind":"directive","range":[30,31]}],"media":[]}
 {"id":"2baca2f889fecccb","markdown":"*a","markers":[],"media":[]}
 {"id":"b86bf3325ee5db2d","markdown":"a*","markers":[],"media":[]}
 {"id":"4fee8b84d05642ef","markdown":"**","markers":[],"media":[]}
@@ -3969,3 +3969,16 @@
 {"id":"9f427a655e61efe9","markdown":"Doors open ::time[Friday, 20 November 18:00]{datetime=\"2026-11-20T18:00:00+03:00\" format=\"full\"}.","markers":[{"kind":"directive","range":[11,13]},{"kind":"directive","range":[17,18]},{"kind":"directive","range":[43,44]},{"kind":"directive","range":[44,45]},{"kind":"directive","range":[95,96]}],"media":[]}
 {"id":"e1d3f7ca84229245","markdown":"Doors open ::time[in a week]{unix=\"1795359600\" format=\"relative\"}.","markers":[{"kind":"directive","range":[11,13]},{"kind":"directive","range":[17,18]},{"kind":"directive","range":[27,28]},{"kind":"directive","range":[28,29]},{"kind":"directive","range":[64,65]}],"media":[]}
 {"id":"3ef0981d2f530c98","markdown":"Doors open ::time[at noon]{format=\"relative\" unix=\"1795359600\"}.","markers":[{"kind":"directive","range":[11,13]},{"kind":"directive","range":[17,18]},{"kind":"directive","range":[25,26]},{"kind":"directive","range":[26,27]},{"kind":"directive","range":[62,63]}],"media":[]}
+{"id":"3daa8d79126d4892","markdown":"Цена $100, **скидка** -$20","markers":[{"kind":"strong","range":[11,13]},{"kind":"strong","range":[19,21]}],"media":[]}
+{"id":"5ef1bf1b5dcdaf73","markdown":"Costs $5 and $10 **today**","markers":[{"kind":"strong","range":[17,19]},{"kind":"strong","range":[24,26]}],"media":[]}
+{"id":"228305da4b46ff24","markdown":"From $5-$10, **now** $20.","markers":[{"kind":"strong","range":[13,15]},{"kind":"strong","range":[18,20]}],"media":[]}
+{"id":"e29e229afe670249","markdown":"Билеты от $5 до 10$ **сегодня**","markers":[{"kind":"strong","range":[20,22]},{"kind":"strong","range":[29,31]}],"media":[]}
+{"id":"ea60b04deac72ac6","markdown":"Цена 5$, **скидка** 10$","markers":[{"kind":"strong","range":[9,11]},{"kind":"strong","range":[17,19]}],"media":[]}
+{"id":"ec2b6b2a88c2538c","markdown":"5$ и $x$, **итого** 7$","markers":[{"kind":"strong","range":[10,12]},{"kind":"strong","range":[17,19]}],"media":[]}
+{"id":"a2b51c715a59410e","markdown":"Площадь $S = \\pi r^2$, где $r$ — радиус.","markers":[],"media":[]}
+{"id":"6be4a932d063e40b","markdown":"Сумма $a<b$ и $c>d$, **итог** $x \\& y$.","markers":[{"kind":"strong","range":[21,23]},{"kind":"strong","range":[27,29]}],"media":[]}
+{"id":"b899f881ce3ac440","markdown":"Фото $<img src=\"media:x\"/> + a<b$ здесь","markers":[],"media":[]}
+{"id":"804130c006fa0fa5","markdown":"Формула:\n\n```math\nE = mc^2\n\\frac{a<b}{c}\n```","markers":[{"kind":"codeFence","range":[10,13]},{"kind":"codeFence","range":[41,44]}],"media":[]}
+{"id":"7d66e9acce9834fa","markdown":"```math display\n<video src=\"media:y\"> x^2\n```","markers":[{"kind":"codeFence","range":[0,3]},{"kind":"codeFence","range":[42,45]}],"media":[]}
+{"id":"8600994a61471105","markdown":"> Формула $x^2$\n\n- пункт $a<b$\n- **итог $y$**","markers":[{"kind":"blockQuote","range":[0,1]},{"kind":"listItem","range":[17,18]},{"kind":"listItem","range":[31,32]},{"kind":"strong","range":[33,35]},{"kind":"strong","range":[43,45]}],"media":[]}
+{"id":"3fb905ded84a8755","markdown":"Тег $a</tg-math><b>x</b>$ внутри","markers":[],"media":[]}

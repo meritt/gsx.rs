@@ -207,7 +207,8 @@ fn writes_canonical_markdown() {
     assert_eq!(canonically("|a|b|\n|:-|-:|\n|c|d|"), "| a | b |\n| :--- | ---: |\n| c | d |");
     assert_eq!(canonically("\\* not a list"), "\\* not a list");
     assert_eq!(canonically("&#42; not a list"), "&#42; not a list");
-    assert_eq!(canonically("a <b>c</b> $x$ [y][z] ++d"), "a <b>c</b> &#36;x&#36; [y][z] ++d");
+    assert_eq!(canonically("a <b>c</b> $x$ [y][z] ++d"), "a <b>c</b> $x$ [y][z] ++d");
+    assert_eq!(canonically("a $5 and $10"), "a &#36;5 and &#36;10");
     assert_eq!(canonically("> a\n>\n> - b\n\n    c"), "> a\n>\n> - b\n\n```\nc\n```");
     assert_eq!(canonically("- [ ]   \n*$[a]: x\n  *$"), "- [ ]   \n*$[a]: x\n  *$");
 }

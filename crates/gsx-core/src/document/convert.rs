@@ -420,6 +420,10 @@ fn fragment(context: &Context, item: &Item, value: &str, start: usize, end: usiz
 }
 
 fn literal_value(context: &Context, start: usize, end: usize) -> String {
+    unprefixed(context, start, end).split('\n').map(decode_string).collect::<Vec<_>>().join("\n")
+}
+
+fn unprefixed(context: &Context, start: usize, end: usize) -> String {
     let prefixes = context.prefixes;
     let first = prefixes.partition_point(|prefix| prefix.end <= start);
     let mut joined = String::new();
@@ -432,7 +436,7 @@ fn literal_value(context: &Context, start: usize, end: usize) -> String {
         joined.extend(std::iter::repeat_n(' ', prefix.padding));
     }
     joined.push_str(&context.text[cursor..end]);
-    joined.split('\n').map(decode_string).collect::<Vec<_>>().join("\n")
+    joined
 }
 
 fn literalized<'n>(items: Vec<Item<'n>>, context: &Context) -> Vec<Item<'n>> {
@@ -675,10 +679,7 @@ fn convert_node(node: &tree::Node, end: usize, context: &Context) -> Converted {
         | T::TextDirective => return Converted::One(context.literal(start, end, None), false),
         T::Link => return link_node(node, context),
         T::Text => return Converted::Many(text_nodes(node.start, node.end, &node.value, context)),
-        T::Math => {
-            let value = literal_value(context, node.start, end);
-            return Converted::One(context.literal(node.start, end, Some(value)), false);
-        }
+        T::Math => Kind::Math { value: unprefixed(context, start + 1, node.end - 1) },
         T::InlineCode => Kind::InlineCode { value: node.value.replace('\n', " ") },
         T::Root | T::Paragraph => Kind::Paragraph,
         T::Heading => Kind::Heading { depth: node.depth },
@@ -798,7 +799,9 @@ fn convert_children(parent: &tree::Node, context: &Context) -> Vec<Node> {
 
 fn visible(node: &Node) -> bool {
     let value = match &node.kind {
-        Kind::Text { value } | Kind::InlineCode { value } | Kind::Code { value, .. } => Some(value),
+        Kind::Text { value } | Kind::InlineCode { value } | Kind::Math { value } | Kind::Code { value, .. } => {
+            Some(value)
+        }
         _ => None,
     };
     value.is_some_and(|value| value.chars().any(|char| !whitespace(char))) || node.children.iter().any(visible)

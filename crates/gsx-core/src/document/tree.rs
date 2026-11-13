@@ -114,6 +114,7 @@ impl Node {
                 | Kind::Text
                 | Kind::InlineCode
                 | Kind::Break
+                | Kind::Math
                 | Kind::Image
                 | Kind::ImageReference
                 | Kind::Definition

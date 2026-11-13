@@ -46,6 +46,7 @@ extension GSX {
                 case "highlight": .highlight
                 case "spoiler": .spoiler
                 case "inlineCode": .inlineCode(value: try value(.value))
+                case "math": .math(value: try value(.value))
                 case "break": .break
                 case "link": .link(url: try value(.url), source: try value(.source), title: try optional(.title))
                 case "datetime":
@@ -78,6 +79,7 @@ extension GSX {
         case highlight
         case spoiler
         case inlineCode(value: String)
+        case math(value: String)
         case `break`
         case link(url: String, source: String, title: String?)
         case datetime(datetime: String?, unix: Int64, format: TimeFormat?)

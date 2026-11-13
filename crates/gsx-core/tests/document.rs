@@ -112,7 +112,7 @@ fn binds_math_literals_before_other_inline_constructs() {
         let math: Vec<&str> = document.children()[0]
             .children
             .iter()
-            .filter(|node| node.provenance == Provenance::Literal)
+            .filter(|node| matches!(node.kind, Kind::Math { .. }))
             .map(|node| document.source(node.range))
             .collect();
         let start = text.find('$').unwrap();
@@ -269,12 +269,13 @@ fn validates_link_destinations_as_whatwg_urls() {
 }
 
 #[test]
-fn literalizes_spans_across_nodes() {
-    let document = parse("> a $x `b\n> c` **d**$ e", &[]).unwrap();
+fn keeps_math_bodies_raw_across_nodes_without_container_prefixes() {
+    let document = parse("> a $x `b\n> c` **d** \\{ &amp;$ e", &[]).unwrap();
     let paragraph = &document.children()[0].children[0];
-    let literal = paragraph.children.iter().find(|node| node.provenance == Provenance::Literal).unwrap();
-    assert_eq!(document.source(literal.range), "$x `b\n> c` **d**$");
-    assert_eq!(literal.kind, Kind::Text { value: "$x `b\nc` **d**$".into() });
+    let math = paragraph.children.iter().find(|node| matches!(node.kind, Kind::Math { .. })).unwrap();
+    assert_eq!(document.source(math.range), "$x `b\n> c` **d** \\{ &amp;$");
+    assert_eq!(math.kind, Kind::Math { value: "x `b\nc` **d** \\{ &amp;".into() });
+    assert_eq!(math.provenance, Provenance::Authored);
 }
 
 #[test]
@@ -341,14 +342,14 @@ fn parses_labels_across_lines_and_bare_references() {
         ("::x[a\na@b.com]", "::x[a\na@b.com]"),
         ("::x[\na\n  b]", "::x[\na\n  b]"),
         ("&#;\\", "&#;\\"),
-        ("$a &#; = &#x; = &#12345678; = &#x110000;$", "$a &#; = &#x; = &#12345678; = \u{fffd}$"),
+        ("$a &#; = &#x; = &#12345678; = &#x110000;$", "a &#; = &#x; = &#12345678; = &#x110000;"),
     ] {
         let document = parse(text, &[]).unwrap_or_else(|error| panic!("{text:?}: {error}"));
         let values: String = document.children()[0]
             .children
             .iter()
             .map(|node| match &node.kind {
-                Kind::Text { value } => value.as_str(),
+                Kind::Text { value } | Kind::Math { value } => value.as_str(),
                 _ => "",
             })
             .collect();

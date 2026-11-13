@@ -1,12 +1,12 @@
 use super::limits::{CodePoints, Limit, Post, Reel, Story, Text, With, Without, limit};
 use super::plain::BODY;
-use super::{DATE_BOUNDS, DEFAULT, TELEGRAM_TIME_FORMATS, TEXT, rule};
+use super::{DATE_BOUNDS, DEFAULT, MATH, TELEGRAM_TIME_FORMATS, TEXT, rule};
 use crate::document::Layout;
 use crate::forms::html::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
-    Condition, Feature, Form, Format, HtmlBlocks, HtmlForm, Normalization, Rule, Search, Spoilers, Structure, Target,
-    When,
+    Condition, Feature, Form, Format, HtmlBlocks, HtmlForm, MathTags, Normalization, Rule, Search, Spoilers, Structure,
+    Target, When,
 };
 
 const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlForm, limits: &'static [Limit]) -> Target {
@@ -80,6 +80,7 @@ static TELEGRAM_FORM: HtmlForm = HtmlForm {
     empty_removed: true,
     trim: true,
     time_formats: TELEGRAM_TIME_FORMATS,
+    math: None,
 };
 
 const NESTED: Condition = Condition { when: When::Nested, class: Unwrapped, reason: "entity_cannot_contain_entity" };
@@ -114,6 +115,7 @@ pub static TELEGRAM: Target = Target {
             entity(Feature::Underline, &[]),
             rule(Feature::Highlight, Unwrapped, "highlight_unwrapped"),
             entity(Feature::Spoiler, &[]),
+            MATH,
             entity(Feature::Link, &[NESTED, INVISIBLE]),
             LINK_TITLE,
             entity(Feature::Datetime, &[NESTED, DATE_BOUNDS[0], DATE_BOUNDS[1]]),
@@ -152,6 +154,7 @@ static RICH_FORM: HtmlForm = HtmlForm {
     empty_removed: false,
     trim: false,
     time_formats: TELEGRAM_TIME_FORMATS,
+    math: Some(MathTags { inline: "tg-math", block: "tg-math-block" }),
 };
 
 pub static TELEGRAM_RICH: Target = Target {
@@ -207,6 +210,7 @@ static MAX_FORM: HtmlForm = HtmlForm {
     empty_removed: false,
     trim: false,
     time_formats: &[],
+    math: None,
 };
 
 pub static MAX: Target = html(
@@ -222,6 +226,7 @@ pub static MAX: Target = html(
         TEXTUAL[5],
         MEDIA,
         rule(Feature::Spoiler, Unwrapped, "spoiler_unwrapped"),
+        MATH,
         rule(Feature::Link, Omitted, "link_label_invisible"),
         LINK_TITLE,
         rule(Feature::Datetime, TextualFallback, "datetime_label_as_text"),

@@ -1,4 +1,4 @@
-use super::{closing_bidi, language, media, underlined, wrapper};
+use super::{closing_bidi, dropped, language, math_block, media, spelled, underlined, wrapper};
 use crate::document::{Align, Kind, Node, Provenance, TimeFormat};
 use crate::project::links::accepted;
 use crate::project::{
@@ -63,6 +63,9 @@ pub(crate) fn block(context: &mut Context, node: &Node, depth: u32) {
             }
         }
         Kind::Code { lang, meta, value } => {
+            if math_block(lang.as_deref()) {
+                context.report(Feature::Math, node.range);
+            }
             let language = language(lang.as_deref());
             if meta.is_some() || lang.is_some() && language.is_empty() {
                 context.report_when(Feature::CodeBlock, Some(node.range), Some(When::Info));
@@ -199,6 +202,10 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                 context.leaf_with(node, value, |piece, _| code(form, piece, cell));
                 context.writer().push(&format!("{padding}{fence}"));
             }
+            Kind::Math { value } => {
+                context.report(Feature::Math, node.range);
+                context.leaf_with(node, value, |piece, kind| text(form, &spelled(piece, kind), true, false));
+            }
             Kind::Break => context.writer().push("\n"),
             Kind::Link { url, title, .. } => {
                 if title.is_some() {
@@ -291,14 +298,8 @@ fn skip(context: &mut Context, nodes: &[Node]) {
             continue;
         }
         match &node.kind {
-            Kind::Text { value } | Kind::InlineCode { value } => {
-                context.leaf_with(
-                    node,
-                    value,
-                    |piece, kind| {
-                        if kind == Piece::Suffix { piece.to_owned() } else { String::new() }
-                    },
-                );
+            Kind::Text { value } | Kind::InlineCode { value } | Kind::Math { value } => {
+                context.leaf_with(node, value, dropped);
             }
             _ => skip(context, &node.children),
         }
@@ -309,6 +310,7 @@ fn plain(nodes: &[Node], out: &mut String) {
     for node in nodes {
         match &node.kind {
             Kind::Text { value } | Kind::InlineCode { value } => out.push_str(value),
+            Kind::Math { value } => out.push_str(&spelled(value, Piece::Whole)),
             Kind::Break => out.push('\n'),
             Kind::Link { url, .. } => {
                 plain(&node.children, out);
@@ -331,6 +333,10 @@ fn flat(context: &mut Context, nodes: &[Node], cell: bool) {
                     context.report(Feature::InlineCode, node.range);
                 }
                 context.leaf_with(node, value, |piece, _| code(form, piece, cell));
+            }
+            Kind::Math { value } => {
+                context.report(Feature::Math, node.range);
+                context.leaf_with(node, value, |piece, kind| code(form, &spelled(piece, kind), cell));
             }
             Kind::Break => context.writer().push("\n"),
             Kind::Link { url, .. } => {

@@ -27,8 +27,9 @@ pub use links::href;
 pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
     BlocksForm, Ceiling, Condition, Detection, EntityForm, Escape, FieldSpec, Form, Group, HtmlBlocks, HtmlForm,
-    LineStart, MarkdownForm, Media, MediaShape, Normalization, Offsets, Renderer, Rule, Search, Source, SpoilerMode,
-    Spoilers, Structure, Style, Target, TimeFormats, Truncation, Unplaced, When, date_refusal, time_format,
+    LineStart, MarkdownForm, MathTags, Media, MediaShape, Normalization, Offsets, Renderer, Rule, Search, Source,
+    SpoilerMode, Spoilers, Structure, Style, Target, TimeFormats, Truncation, Unplaced, When, date_refusal,
+    time_format,
 };
 
 use layout::Styled;
@@ -774,6 +775,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         .first()
         .filter(|node| title.is_some() && explicit.is_none() && matches!(node.kind, Kind::Heading { .. }));
     let body = if leading.is_some() { &children[1..] } else { children };
+    let math = target.form.math().is_some();
     let draw_heading = |heading: &Node, field, cut: Option<&Cut>| {
         let mut rendered = render(target, facts, field, cut, |context| {
             context.report_when(Feature::Heading, Some(heading.range), Some(When::TitleSource));
@@ -839,7 +841,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                         first
                     }
                     None => request.fit(
-                        || Outline::of_nodes(document, body),
+                        || Outline::of_nodes(document, body, math),
                         !removed,
                         |cut| appended(target, draw_body(spec.name, cut), suffix),
                     ),
@@ -855,7 +857,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             }
             (Source::Title { .. }, Some(title), _) => explicit_title(&request, title),
             (Source::Title { .. }, None, Some(heading)) => request.fit(
-                || Outline::of_nodes(document, std::slice::from_ref(heading)),
+                || Outline::of_nodes(document, std::slice::from_ref(heading), math),
                 true,
                 |cut| draw_heading(heading, spec.name, cut),
             ),

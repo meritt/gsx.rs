@@ -29,6 +29,8 @@ const THREADED_TEXT: Rule = Rule {
     ..TEXT
 };
 
+const MATH: Rule = rule(Feature::Math, TextualFallback, "math_as_text");
+
 const TELEGRAM_TIME_FORMATS: TimeFormats = &["t", "T", "d", "D", "dt", "Dt", "wDt", "r"];
 
 const DATE_BOUNDS: [Condition; 2] = [
@@ -118,6 +120,7 @@ macro_rules! rules {
             RULES.highlight,
             RULES.spoiler,
             RULES.inline_code,
+            $crate::targets::MATH,
             RULES.link,
             RULES.link_title,
             RULES.datetime,

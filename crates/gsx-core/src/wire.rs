@@ -366,7 +366,7 @@ impl Out {
                     Align::Center => out.string("center"),
                 });
             }
-            Kind::Text { value } | Kind::InlineCode { value } => {
+            Kind::Text { value } | Kind::InlineCode { value } | Kind::Math { value } => {
                 self.key("value");
                 self.string(value);
             }
@@ -659,6 +659,7 @@ const fn node_type(kind: &Kind) -> &'static str {
         Kind::Highlight => "highlight",
         Kind::Spoiler => "spoiler",
         Kind::InlineCode { .. } => "inlineCode",
+        Kind::Math { .. } => "math",
         Kind::Break => "break",
         Kind::Link { .. } => "link",
         Kind::Datetime { .. } => "datetime",

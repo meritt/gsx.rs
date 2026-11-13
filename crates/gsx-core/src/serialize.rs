@@ -360,6 +360,7 @@ impl Inline<'_, '_> {
             Kind::Highlight => Some('='),
             Kind::Spoiler => Some('|'),
             Kind::InlineCode { .. } => Some('`'),
+            Kind::Math { .. } => Some('$'),
             Kind::Link { .. } => Some(')'),
             Kind::Datetime { .. } => Some('}'),
             Kind::Break => Some('\n'),
@@ -391,6 +392,7 @@ impl Inline<'_, '_> {
             Kind::Highlight => Some('='),
             Kind::Spoiler => Some('|'),
             Kind::InlineCode { .. } => Some('`'),
+            Kind::Math { .. } => Some('$'),
             Kind::Link { .. } => Some('['),
             Kind::Datetime { .. } => Some(':'),
             Kind::Break => Some('\\'),
@@ -403,7 +405,7 @@ impl Inline<'_, '_> {
             self.reference_next = false;
         }
         match &node.kind {
-            Kind::Text { .. } if node.provenance == Provenance::Literal => {
+            _ if spelled(node) => {
                 if self.out.ends_with('\n') {
                     self.out.push_str("    ");
                 }
@@ -720,6 +722,11 @@ fn same(expected: &[Node], actual: &[Node]) -> bool {
 
 fn authored_text(node: &Node) -> bool {
     node.provenance == Provenance::Authored && matches!(node.kind, Kind::Text { .. })
+}
+
+fn spelled(node: &Node) -> bool {
+    matches!(node.kind, Kind::Math { .. })
+        || (matches!(node.kind, Kind::Text { .. }) && node.provenance == Provenance::Literal)
 }
 
 fn text_value(node: &Node) -> &str {

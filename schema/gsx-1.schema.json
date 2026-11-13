@@ -240,6 +240,7 @@
         "highlight",
         "spoiler",
         "inline_code",
+        "math",
         "link",
         "link_title",
         "datetime",
@@ -699,7 +700,7 @@
     },
     "valueNode": {
       "type": "object",
-      "properties": { "type": { "enum": ["text", "inlineCode"] }, "value": { "type": "string" } },
+      "properties": { "type": { "enum": ["text", "inlineCode", "math"] }, "value": { "type": "string" } },
       "required": ["value"]
     },
     "linkNode": {

@@ -256,6 +256,7 @@ extension GSX {
         case taskList = "task_list"
         case media, emphasis, strong, strikethrough, underline, highlight, spoiler
         case inlineCode = "inline_code"
+        case math
         case link
         case linkTitle = "link_title"
         case datetime

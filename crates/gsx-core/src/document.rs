@@ -113,6 +113,7 @@ pub enum Kind {
     Highlight,
     Spoiler,
     InlineCode { value: String },
+    Math { value: String },
     Break,
     Link { url: String, source: String, title: Option<String> },
     Datetime { datetime: Option<String>, unix: i64, format: Option<TimeFormat> },

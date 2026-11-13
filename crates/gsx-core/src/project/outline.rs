@@ -15,6 +15,7 @@ pub struct Leaf<'a> {
     pub node: Option<&'a Node>,
     pub text: &'a str,
     pub code: bool,
+    atomic: bool,
     nested: bool,
     previous: Option<u32>,
     source: Option<(u32, bool)>,
@@ -111,6 +112,7 @@ struct Builder<'a> {
     flows: Vec<(usize, usize)>,
     open: usize,
     nested: usize,
+    math: bool,
 }
 
 impl<'a> Builder<'a> {
@@ -121,16 +123,20 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn leaf(&mut self, node: &'a Node, text: &'a str, code: bool) {
+    fn leaf(&mut self, node: &'a Node, text: &'a str, code: bool, atomic: bool) {
         let source = self.document.map(|document| (node.range.start, document.source(node.range) == text));
         let previous = (self.leaves.len() > self.open).then(|| self.leaves.len() as u32 - 1);
-        self.leaves.push(Leaf { node: Some(node), text, code, nested: self.nested > 0, previous, source });
+        self.leaves.push(Leaf { node: Some(node), text, code, atomic, nested: self.nested > 0, previous, source });
     }
 
     fn visit(&mut self, node: &'a Node) {
         match &node.kind {
-            Kind::Text { value } => self.leaf(node, value, false),
-            Kind::InlineCode { value } | Kind::Code { value, .. } => self.leaf(node, value, true),
+            Kind::Text { value } => self.leaf(node, value, false, false),
+            Kind::Math { value } => self.leaf(node, value, false, self.math),
+            Kind::Code { lang, value, .. } => {
+                self.leaf(node, value, true, self.math && lang.as_deref() == Some("math"));
+            }
+            Kind::InlineCode { value } => self.leaf(node, value, true, false),
             Kind::Paragraph | Kind::Heading { .. } | Kind::TableCell => {
                 node.children.iter().for_each(|child| self.visit(child));
             }
@@ -151,8 +157,8 @@ impl<'a> Builder<'a> {
 }
 
 impl<'a> Outline<'a> {
-    pub fn of_nodes(document: &'a Document, nodes: &'a [Node]) -> Self {
-        let mut builder = Builder { document: Some(document), leaves: vec![], flows: vec![], open: 0, nested: 0 };
+    pub fn of_nodes(document: &'a Document, nodes: &'a [Node], math: bool) -> Self {
+        let mut builder = Builder { document: Some(document), leaves: vec![], flows: vec![], open: 0, nested: 0, math };
         for node in nodes {
             builder.flush();
             builder.visit(node);
@@ -162,7 +168,7 @@ impl<'a> Outline<'a> {
     }
 
     pub fn of_text(text: &'a str) -> Self {
-        let leaf = Leaf { node: None, text, code: false, nested: false, previous: None, source: None };
+        let leaf = Leaf { node: None, text, code: false, atomic: false, nested: false, previous: None, source: None };
         Self::new(vec![leaf], vec![(0, usize::from(!text.is_empty()))], 0)
     }
 
@@ -285,6 +291,14 @@ impl<'a> Outline<'a> {
                 }
             }
             run = stop;
+        }
+        for index in fresh..boundaries.len() {
+            let segment = segments[effective[base + index] as usize];
+            let local = segment.leaf as usize - cursor.first;
+            if flow[local].atomic && segment.offset > 0 {
+                let first = boundaries.partition_point(|&at| at <= starts[local]) - 1;
+                effective[base + index] = effective[base + first];
+            }
         }
         if done {
             built.cursor = None;

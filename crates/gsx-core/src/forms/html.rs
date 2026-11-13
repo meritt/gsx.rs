@@ -1,4 +1,4 @@
-use super::{label, language, media, underlined, wrapper};
+use super::{dropped, label, language, math_block, media, spelled, underlined, wrapper};
 use crate::document::{Align, Kind, Layout, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
@@ -81,11 +81,22 @@ pub(super) fn escape(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
+fn formula(context: &mut Context, node: &Node, value: &str, tag: &str) {
+    if context.contains_cut(node) {
+        return context.leaf_with(node, value, dropped);
+    }
+    context.writer().raw(&format!("<{tag}>"));
+    context.writer().verbatim(true);
+    context.leaf(node, value);
+    context.writer().verbatim(false);
+    context.writer().raw(&format!("</{tag}>"));
+}
+
 fn formatting(nodes: &[Node], decorated: bool) -> usize {
     nodes
         .iter()
         .map(|node| match node.kind {
-            Kind::InlineCode { .. } => 1,
+            Kind::InlineCode { .. } | Kind::Math { .. } => 1,
             Kind::Link { .. } => {
                 1 + usize::from(decorated && !underlined(&node.children)) + formatting(&node.children, decorated)
             }
@@ -273,6 +284,17 @@ impl Html {
     }
 
     fn code_block(&mut self, context: &mut Context, node: &Node, lang: Option<&str>, meta: bool, value: &str) {
+        if math_block(lang) {
+            match self.form.math {
+                Some(tags) => {
+                    if meta {
+                        context.report_when(Feature::CodeBlock, Some(node.range), Some(When::Info));
+                    }
+                    return formula(context, node, value, tags.block);
+                }
+                None => context.report(Feature::Math, node.range),
+            }
+        }
         let quoted = self.quoted > 0 && !self.form.quote_contains_code;
         if quoted {
             context.report(Feature::Blockquote, node.range);
@@ -307,6 +329,14 @@ impl Html {
                 Kind::Text { value } => context.leaf(node, value),
                 Kind::Break => context.writer().push("\n"),
                 Kind::InlineCode { value } => self.code(context, node, value),
+                Kind::Math { value } => {
+                    if let Some(tags) = self.form.math {
+                        formula(context, node, value, tags.inline);
+                    } else {
+                        context.report(Feature::Math, node.range);
+                        context.leaf_with(node, value, spelled);
+                    }
+                }
                 Kind::Link { url, title, .. } => {
                     if title.is_some() {
                         context.report(Feature::LinkTitle, node.range);
