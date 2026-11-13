@@ -28,12 +28,12 @@ pub fn data_pipes(line: &[u8], columns: usize, exact: bool) -> Vec<usize> {
 pub fn delimiter_columns(line: &[u8]) -> Option<usize> {
     let escaped = escaped_pipes(line);
     let found = pipes(line, &escaped, &[]);
-    if found.is_empty() {
+    let (Some(&head), Some(&tail)) = (found.first(), found.last()) else {
         return None;
-    }
+    };
     let (first, last) = bounds(line);
-    let content_start = if found[0] as i64 == first { first + 1 } else { first };
-    let content_end = if *found.last().unwrap() as i64 == last { last } else { last + 1 };
+    let content_start = if head as i64 == first { first + 1 } else { first };
+    let content_end = if tail as i64 == last { last } else { last + 1 };
     let mut cells: Vec<&[u8]> = vec![];
     let mut start = content_start;
     for &pipe in &found {

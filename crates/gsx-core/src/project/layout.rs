@@ -357,10 +357,10 @@ impl Writer {
                     *pending = false;
                     mark.chars().for_each(|char| self.put(char));
                 }
-                Prefix::Item { marker: marker @ Some(_), .. } => {
-                    marker.take().unwrap().chars().for_each(|char| self.put(char));
-                }
-                Prefix::Item { width, marker: None } => (0..*width).for_each(|_| self.put(' ')),
+                Prefix::Item { width, marker } => match marker.take() {
+                    Some(marker) => marker.chars().for_each(|char| self.put(char)),
+                    None => (0..*width).for_each(|_| self.put(' ')),
+                },
             }
         }
         self.prefixes = prefixes;

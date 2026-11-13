@@ -97,8 +97,7 @@ fn tag_char(char: char) -> bool {
 fn tags(text: &str, links: &[Autolink]) -> Vec<Autolink> {
     let mut found = vec![];
     let mut at = 0;
-    while at < text.len() {
-        let next = text[at..].chars().next().unwrap();
+    while let Some(next) = text[at..].chars().next() {
         let hash = if at == 0 && matches!(next, '#' | '＃') {
             Some(at)
         } else if space(next) && text[at + next.len_utf8()..].starts_with(['#', '＃']) {
@@ -110,7 +109,7 @@ fn tags(text: &str, links: &[Autolink]) -> Vec<Autolink> {
             at += next.len_utf8();
             continue;
         };
-        let body = hash + text[hash..].chars().next().unwrap().len_utf8();
+        let body = hash + if text[hash..].starts_with('#') { 1 } else { '＃'.len_utf8() };
         let run = text[body..].find(|char| !tag_char(char)).map_or(text.len(), |end| body + end);
         let group = &text[body..run];
         let valid =

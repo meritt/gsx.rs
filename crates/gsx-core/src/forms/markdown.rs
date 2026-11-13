@@ -404,9 +404,9 @@ fn raw(value: String, cell: bool) -> String {
     let mut chars = value.chars().peekable();
     while let Some(char) = chars.next() {
         match char {
-            '\\' if matches!(chars.peek(), Some('\\' | '|')) => {
+            '\\' => {
                 out.push('\\');
-                out.push(chars.next().unwrap());
+                out.extend(chars.next_if(|next| matches!(next, '\\' | '|')));
             }
             '|' => out.push_str("\\|"),
             char => out.push(char),
