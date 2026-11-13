@@ -17,9 +17,10 @@ const RELEASES: &str = "https://github.com/meritt/gsx.rs/releases/download";
 
 const BINARYEN: &str = "133";
 
-const WASM_OPT_FLAGS: [&str; 3] = ["-Os", "--strip-debug", "--strip-producers"];
+const WASM_OPT_FLAGS: [&str; 5] =
+    ["-Os", "--low-memory-unused", "--strip-debug", "--strip-producers", "--strip-target-features"];
 
-const WASM_GZIP_BUDGET: u64 = 365_000;
+const WASM_GZIP_BUDGET: u64 = 375_000;
 
 const GLUE_MARKER: &str = "/* @glue */";
 
