@@ -92,7 +92,7 @@ pub(super) fn mastodon_weighted(
     let mut segmenter = grapheme::Segmenter::default();
     let mut count = 0;
     let mut feed = |part: &str| count += part.chars().filter(|&char| segmenter.starts(char)).count();
-    let mut linked = 0;
+    let mut linked: usize = 0;
     let mut cursor = 0;
     loop {
         let url = match (urls.peek(), elided.peek()) {
@@ -113,7 +113,7 @@ pub(super) fn mastodon_weighted(
         cursor = span.end;
     }
     feed(&text[cursor..]);
-    count + linked * reserved_per_url.saturating_sub(1)
+    count.saturating_add(linked.saturating_mul(reserved_per_url.saturating_sub(1)))
 }
 
 pub(super) fn threads_weighted(text: &str) -> usize {
@@ -128,4 +128,17 @@ pub(super) fn threads_weighted(text: &str) -> usize {
             }
         })
         .sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mastodon_weighted;
+
+    #[test]
+    fn saturates_url_weight_when_the_reserved_length_fills_usize() {
+        let text = "ab https://e.co https://e.org";
+        assert_eq!(mastodon_weighted(text, &[3..15, 16..29], &[], usize::MAX), usize::MAX);
+        assert_eq!(mastodon_weighted(text, std::slice::from_ref(&(3..15)), &[], usize::MAX), usize::MAX);
+        assert_eq!(mastodon_weighted(text, &[3..15, 16..29], &[], 23), 3 + 1 + 2 * 23);
+    }
 }

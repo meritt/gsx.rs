@@ -8,6 +8,7 @@ use crate::project::{
     self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, MediaFact, Offsets, Part, Projection,
     Slot, Target, Truncated,
 };
+use crate::source;
 use crate::targets::TARGETS;
 
 pub fn parse(input: &[u8], media: &[Media]) -> String {
@@ -113,6 +114,9 @@ pub fn targets() -> String {
 }
 
 fn decode(input: &[u8]) -> Result<&str, String> {
+    if let Some(error) = document::oversized(input) {
+        return Err(result(&Err(error)));
+    }
     std::str::from_utf8(input).map_err(|error| {
         let (valid, rest) = input.split_at(error.valid_up_to());
         let offset = std::str::from_utf8(valid).unwrap_or_default().encode_utf16().count() as u32;
@@ -131,8 +135,12 @@ pub fn refused_item(items: &[MediaFact]) -> Option<String> {
     Some(format!("item {index} id is not a media ID"))
 }
 
+pub fn oversized(units: u64, code_point: u32) -> Option<String> {
+    source::oversized_units(units, code_point > 0xFFFF).map(|range| result(&Err(document::too_large(range))))
+}
+
 pub fn invalid_text(offset: u32, code_point: Option<u32>) -> String {
-    let range = Range { start: offset, end: offset + 1 };
+    let range = Range { start: offset, end: offset.saturating_add(1) };
     let details = code_point.map_or(Details::None, Details::CodePoint);
     result(&Err(Error { code: Code::MarkdownInvalidText, range: Some(range), details }))
 }

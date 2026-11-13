@@ -1,5 +1,6 @@
 use gsx_core::document::{self, Media};
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement};
+use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target};
+use gsx_core::source::Limit;
 use gsx_core::{targets, wire};
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
@@ -8,14 +9,33 @@ thread_local! {
     static INPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
+const UNITS: u32 = Limit::DocumentUnits.maximum();
+const CAPACITY: usize = 3 * UNITS as usize;
+
 #[wasm_bindgen]
-pub fn input(capacity: usize) -> *mut u8 {
-    INPUT.with_borrow_mut(|buffer| {
-        if buffer.len() < capacity {
-            buffer.resize(capacity, 0);
-        }
-        buffer.as_mut_ptr()
-    })
+pub fn input(capacity: f64) -> Result<*mut u8, JsError> {
+    INPUT
+        .with_borrow_mut(|buffer| grow(buffer, capacity))
+        .ok_or_else(|| JsError::new(&format!("capacity exceeds {CAPACITY} bytes")))
+}
+
+fn grow(buffer: &mut Vec<u8>, capacity: f64) -> Option<*mut u8> {
+    if !(0.0..=CAPACITY as f64).contains(&capacity) {
+        return None;
+    }
+    let capacity = capacity as usize;
+    if buffer.len() < capacity {
+        buffer.resize(capacity, 0);
+    }
+    Some(buffer.as_mut_ptr())
+}
+
+fn known(target: Option<String>) -> Result<(), JsError> {
+    target.map_or(Ok(()), |name| resolve(&name).map(drop))
+}
+
+fn resolve(name: &str) -> Result<&'static Target, JsError> {
+    targets::target(name).ok_or_else(|| JsError::new(&format!("unknown target {name:?}")))
 }
 
 fn text<T>(len: usize, run: impl FnOnce(&[u8]) -> Result<T, JsError>) -> Result<T, JsError> {
@@ -76,7 +96,7 @@ pub fn project(
     item_flags: Vec<u8>,
 ) -> Result<String, JsError> {
     let covers = strings(&covers);
-    let target = targets::target(target).ok_or_else(|| JsError::new(&format!("unknown target {target:?}")))?;
+    let target = resolve(target)?;
     let n = item_ids.len();
     if item_formats.len() != n || item_alts.len() != n || item_flags.len() != n {
         return Err(JsError::new("media fact arrays differ in length"));
@@ -165,12 +185,44 @@ pub fn media_group_max() -> usize {
     document::MEDIA_GROUP_MAX
 }
 
+#[wasm_bindgen(js_name = documentUnits)]
+pub fn document_units() -> u32 {
+    UNITS
+}
+
+#[wasm_bindgen]
+pub fn oversized(units: f64, code_point: u32, target: Option<String>) -> Result<Option<String>, JsError> {
+    known(target)?;
+    Ok(wire::oversized(units as u64, code_point))
+}
+
 #[wasm_bindgen(js_name = invalidText)]
-pub fn invalid_text(offset: u32, unit: u16) -> String {
-    wire::invalid_text(offset, Some(u32::from(unit)))
+pub fn invalid_text(offset: u32, unit: u16, target: Option<String>) -> Result<String, JsError> {
+    known(target)?;
+    Ok(wire::invalid_text(offset, Some(u32::from(unit))))
 }
 
 #[wasm_bindgen]
 pub fn version() -> String {
     gsx_core::VERSION.to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::grow;
+
+    #[test]
+    fn grows_the_input_to_three_bytes_per_document_unit_and_refuses_more() {
+        let mut buffer = vec![];
+        assert!(grow(&mut buffer, 16.0).is_some());
+        assert_eq!(buffer.len(), 16);
+        assert!(grow(&mut buffer, 786_432.0).is_some());
+        assert_eq!(buffer.len(), 786_432);
+        for capacity in [786_433.0, 2f64.powi(32) + 16.0, f64::MAX, f64::INFINITY, f64::NAN, -1.0] {
+            assert_eq!(grow(&mut buffer, capacity), None, "{capacity}");
+            assert_eq!(buffer.len(), 786_432);
+        }
+        assert!(grow(&mut buffer, 8.0).is_some());
+        assert_eq!(buffer.len(), 786_432);
+    }
 }

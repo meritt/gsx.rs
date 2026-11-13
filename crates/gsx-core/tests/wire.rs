@@ -186,3 +186,54 @@ fn reports_invalid_utf8_at_its_utf16_offset() {
     );
     assert_eq!(parse(b"ab\xff", &[]), r#"{"error":{"code":"MARKDOWN_INVALID_TEXT","range":[2,3],"details":{}}}"#);
 }
+
+#[test]
+fn keeps_the_invalid_text_range_well_formed_at_the_last_offset() {
+    assert_eq!(
+        invalid_text(u32::MAX, None),
+        r#"{"error":{"code":"MARKDOWN_INVALID_TEXT","range":[4294967295,4294967295],"details":{}}}"#
+    );
+}
+
+#[test]
+fn rejects_oversized_input_before_validating_its_encoding() {
+    let too_complex = r#"{"error":{"code":"MARKDOWN_TOO_COMPLEX","range":[262144,262146],"#.to_owned()
+        + r#""details":{"limit":"documentUnits","maximum":262144}}}"#;
+    let mut wtf8 = "a".repeat(262_145).into_bytes();
+    wtf8.extend([0xed, 0xa0, 0x80]);
+    assert_eq!(parse(&wtf8, &[]), too_complex);
+    assert_eq!(serialize(&wtf8, &[]), too_complex);
+    let mut within = "a".repeat(262_143).into_bytes();
+    within.extend([0xed, 0xa0, 0x80]);
+    let invalid = r#"{"error":{"code":"MARKDOWN_INVALID_TEXT","range":[262143,262144],"details":{"codePoint":55296}}}"#;
+    assert_eq!(parse(&within, &[]), invalid);
+}
+
+#[test]
+fn reports_oversized_input_from_its_utf16_length() {
+    let too_complex = |start: u32, end: u64| {
+        format!(
+            r#"{{"error":{{"code":"MARKDOWN_TOO_COMPLEX","range":[{start},{end}],"details":{{"limit":"documentUnits","maximum":262144}}}}}}"#
+        )
+    };
+    let a = |count| "a".repeat(count);
+    let cases = [
+        (a(262_145), Some(too_complex(262_144, 262_145))),
+        (format!("{}😀", a(262_143)), Some(too_complex(262_143, 262_145))),
+        (format!("{}😀a", a(262_142)), Some(too_complex(262_144, 262_145))),
+        (format!("{}é€", a(262_143)), Some(too_complex(262_144, 262_145))),
+        (a(262_144), None),
+        (format!("{}😀", a(262_142)), None),
+        ("€".repeat(262_144), None),
+    ];
+    for (text, expected) in cases {
+        let units: Vec<u16> = text.encode_utf16().collect();
+        let at = char::decode_utf16(units[262_143..].iter().copied()).next().and_then(Result::ok).map_or(0, u32::from);
+        let found = gsx_core::wire::oversized(units.len() as u64, at);
+        assert_eq!(found, expected, "{} units", units.len());
+        if let Some(expected) = expected {
+            assert_eq!(parse(text.as_bytes(), &[]), expected);
+        }
+    }
+    assert_eq!(gsx_core::wire::oversized(1 << 33, 0x61), Some(too_complex(262_144, u64::from(u32::MAX))));
+}

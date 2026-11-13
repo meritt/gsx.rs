@@ -73,8 +73,35 @@ fn properties(text: &str) -> Result<(), TestCaseError> {
     deep(|| outputs.iter().try_for_each(|out| SCHEMA.check_wire(out))).map_err(TestCaseError::fail)
 }
 
+#[test]
+fn source_and_point_clamp_offsets_to_the_document() {
+    let document = parse("hello world", &[]).unwrap();
+    assert_eq!(document.source(Range { start: 5, end: 2 }), "");
+    assert_eq!(document.source(Range { start: 0, end: 99 }), "hello world");
+    assert_eq!(document.source(Range { start: 99, end: u32::MAX }), "");
+    assert_eq!(document.point(u32::MAX), document.end());
+    let crlf = parse("é😀\r\nb", &[]).unwrap();
+    assert_eq!(crlf.source(Range { start: 0, end: 99 }), "é😀\r\nb");
+    assert_eq!(crlf.source(Range { start: 3, end: u32::MAX }), "\r\nb");
+    assert_eq!(crlf.point(u32::MAX), crlf.end());
+}
+
+fn offset() -> impl Strategy<Value = u32> {
+    prop_oneof![0u32..64, Just(u32::MAX), any::<u32>()]
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(2048))]
+
+    #[test]
+    fn any_range_reads_the_clamped_source(text in markup(), start in offset(), end in offset()) {
+        if let Ok(document) = parse(&text, MEDIA) {
+            let units = document.end().offset;
+            let clamped = Range { start: start.min(end).min(units), end: end.min(units) };
+            prop_assert_eq!(document.source(Range { start, end }), document.source(clamped));
+            prop_assert_eq!(document.point(start), document.point(start.min(units)));
+        }
+    }
 
     #[test]
     fn markup_parses_deterministically_within_bounds(text in markup()) {

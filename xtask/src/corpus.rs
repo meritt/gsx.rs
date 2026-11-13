@@ -5,6 +5,7 @@ use std::path::Path;
 
 use gsx_core::document::{MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, MEDIA_ID_MAX_BYTES, MEDIA_ID_PATTERN, Media, is_media_id};
 use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target};
+use gsx_core::source::Limit;
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire;
 
@@ -106,6 +107,70 @@ pub fn media(out: &Path) -> Result {
             "{{\"id\":\"media-id-{index}\",\"mediaId\":{}}}",
             json(&id.encode_utf16().collect::<Vec<_>>())
         ));
+    }
+    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+}
+
+pub fn sizes(out: &Path) -> Result {
+    let units = Limit::DocumentUnits.maximum() as usize;
+    let a = |count| "a".repeat(count).encode_utf16().collect::<Vec<_>>();
+    let with = |count, tail: &[u16]| [a(count), tail.to_vec()].concat();
+    let samples = [
+        ("at-limit", a(units)),
+        ("at-limit-pair", with(units - 2, &[0xd83d, 0xde00])),
+        ("at-limit-three-bytes", "€".repeat(units).encode_utf16().collect()),
+        ("over-limit", a(units + 1)),
+        ("over-limit-pair-across", with(units - 1, &[0xd83d, 0xde00])),
+        ("over-limit-pair-before", with(units - 2, &[0xd83d, 0xde00, 0x61])),
+        ("over-limit-lone-surrogate", with(units - 1, &[0xd800, 0x61])),
+        ("over-limit-lone-surrogate-after", with(units + 1, &[0xdc00])),
+        ("lone-surrogate", with(1, &[0xd800, 0x61])),
+    ];
+    let mut lines = vec!["{\"corpus\":\"gsx-sizes\"}".to_owned()];
+    for (id, markdown) in &samples {
+        let markdown = json(markdown);
+        lines.push(format!("{{\"id\":\"size-{id}\",\"markdown\":{markdown},\"media\":[]}}"));
+        lines.push(format!(
+            "{{\"id\":\"size-{id}-project\",\"markdown\":{markdown},\"media\":[],\"target\":\"x-plain\",\"facts\":{{}}}}"
+        ));
+        lines.push(format!(
+            "{{\"id\":\"size-{id}-refused\",\"markdown\":{markdown},\"media\":[],\"target\":\"x-plain\",\
+             \"facts\":{{\"items\":[{{\"id\":\"not an id\",\"format\":\"image\"}}]}}}}"
+        ));
+    }
+    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+}
+
+pub fn limits(out: &Path) -> Result {
+    const MARKDOWN: &str = "# Heading\n\n\
+        Read https://example.com/a and [docs](https://example.org/b \"t\") #one #two #three #four #five #six \
+        @alice @bob.\n\n\
+        ::media{id=\"a\"}\n\n\
+        > Quote with `code`, **strong** and ||spoiler||\n\n\
+        1. First\n2. Second ::time[today]{unix=\"1785423600\"}";
+    const ITEMS: &str = r#"[{"id":"a","format":"image","alt":"An alt text","spoiler":false,"inline":true}]"#;
+    const KEYS: [&str; 5] =
+        ["maxCharacters", "charactersReservedPerUrl", "captionLimit", "descriptionLimit", "hashtagLimit"];
+    const VARIANTS: [(&str, &str); 3] = [("truncate", "post"), ("thread", "post"), ("truncate", "story")];
+    let markdown = json(&MARKDOWN.encode_utf16().collect::<Vec<_>>());
+    let mut lines = vec!["{\"corpus\":\"gsx-limits\"}".to_owned()];
+    for target in TARGETS {
+        let sets = KEYS.iter().map(|key| (*key, vec![*key])).chain([("all", KEYS.to_vec())]);
+        for (name, keys) in sets {
+            for value in [0, 1, u32::MAX] {
+                for (overflow, placement) in VARIANTS {
+                    let limits = keys.iter().map(|key| format!("\"{key}\":{value}")).collect::<Vec<_>>().join(",");
+                    lines.push(format!(
+                        "{{\"id\":\"limit-{name}-{value}-{overflow}-{placement}\",\"markdown\":{markdown},\
+                         \"media\":[{{\"id\":\"a\"}}],\"target\":\"{}\",\"facts\":{{{limits},\"media\":\"image\",\
+                         \"mediaCount\":1,\"placement\":\"{placement}\",\"title\":\"Title\",\
+                         \"targetUrl\":\"https://example.com/t\",\"spoilerText\":\"CW\",\"overflow\":\"{overflow}\",\
+                         \"entitiesAllowed\":true,\"items\":{ITEMS}}}}}",
+                        target.name
+                    ));
+                }
+            }
+        }
     }
     fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
 }
@@ -253,13 +318,22 @@ fn outcome(
         entities_allowed: matches!(facts.get("entitiesAllowed"), Json::Bool(true)),
         items: matches!(facts.get("items"), Json::Array(_)).then_some(&items[..]),
     };
+    if let (Operation::Project, Some(refusal)) = (operation, wire::refused_item(facts.items.unwrap_or_default())) {
+        return Ok(format!("{{\"refused\":{}}}", json(&refusal.encode_utf16().collect::<Vec<_>>())));
+    }
     Ok(match (String::from_utf16(units).ok(), operation, target) {
         (Some(text), Operation::Project, Some(target)) => wire::project(text.as_bytes(), &media, target, &facts),
         (Some(text), Operation::Serialize, _) => wire::serialize(text.as_bytes(), &media),
         (Some(text), _, _) => wire::parse(text.as_bytes(), &media),
         (None, _, _) => {
-            let at = first_lone_surrogate(units);
-            wire::invalid_text(at, units.get(at as usize).copied().map(u32::from))
+            let boundary = Limit::DocumentUnits.maximum() as usize - 1;
+            let code_point = units.get(boundary..).and_then(|rest| char::decode_utf16(rest.iter().copied()).next());
+            let code_point =
+                code_point.map_or(0, |unit| unit.map_or_else(|lone| lone.unpaired_surrogate().into(), u32::from));
+            wire::oversized(units.len() as u64, code_point).unwrap_or_else(|| {
+                let at = first_lone_surrogate(units);
+                wire::invalid_text(at, units.get(at as usize).copied().map(u32::from))
+            })
         }
     })
 }

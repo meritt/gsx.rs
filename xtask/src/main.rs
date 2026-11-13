@@ -38,6 +38,8 @@ const CORPUS: [&str; 2] = ["testdata/corpus/document.jsonl", "testdata/corpus/di
 const SELECTION: &str = "testdata/corpus/targets/x-plain.jsonl";
 const PROJECTION: &str = "target/staging/projection.jsonl";
 const MEDIA: &str = "target/staging/media.jsonl";
+const SIZES: &str = "target/staging/sizes.jsonl";
+const LIMITS: &str = "target/staging/limits.jsonl";
 
 type Result<T = ()> = std::result::Result<T, String>;
 
@@ -582,7 +584,7 @@ fn corpus_args(command: &mut Command) -> &mut Command {
 
 fn corpus_files() -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = CORPUS.iter().map(|file| root().join(file)).collect();
-    files.extend([root().join(PROJECTION), root().join(MEDIA)]);
+    files.extend([root().join(PROJECTION), root().join(MEDIA), root().join(SIZES), root().join(LIMITS)]);
     files
 }
 
@@ -592,6 +594,8 @@ fn cases() -> Result<Vec<corpus::Case>> {
     fs::create_dir_all(parent).map_err(at(parent.display()))?;
     corpus::projection(&CORPUS.map(|file| root().join(file)), &root().join(SELECTION), &projection)?;
     corpus::media(&root().join(MEDIA))?;
+    corpus::sizes(&root().join(SIZES))?;
+    corpus::limits(&root().join(LIMITS))?;
     corpus::load(&corpus_files())
 }
 

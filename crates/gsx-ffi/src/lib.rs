@@ -284,7 +284,7 @@ pub unsafe extern "C" fn gsx_project(
         output(error, || {
             let text = slice(text, len, "text")?;
             let name = string(target, target_len, "target")?;
-            let target = targets::target(name).ok_or_else(|| format!("unknown target {name:?}"))?;
+            let target = targets::target(name).ok_or_else(|| format!("unknown target \"{name}\""))?;
             let media = media_list(media, media_len)?;
             let Some(facts) = facts.as_ref() else {
                 return Ok(wire::project(text, &media, target, &CoreFacts::default()));
@@ -535,6 +535,7 @@ mod tests {
             wire::project(text.as_bytes(), &[], youtube, &core)
         );
         assert_eq!(project(b"", "nope", None).unwrap_err(), r#"unknown target "nope""#);
+        assert_eq!(project(b"", "a\"b\\", None).unwrap_err(), r#"unknown target "a"b\""#);
         let bad = Facts { media: 5, ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "media kind 5 is not GSX_MEDIA_*");
         let bad = Facts { placement: 4, ..facts };

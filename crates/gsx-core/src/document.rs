@@ -255,7 +255,7 @@ impl Document {
     }
 
     pub fn point(&self, offset: u32) -> Point {
-        self.lines.point(offset)
+        self.lines.point(offset.min(self.lines.len()))
     }
 
     pub fn end(&self) -> Point {
@@ -263,7 +263,8 @@ impl Document {
     }
 
     pub fn source(&self, range: Range) -> &str {
-        let (start, end) = (self.lines.byte(range.start), self.lines.byte(range.end));
+        let end = range.end.min(self.lines.len());
+        let (start, end) = (self.lines.byte(range.start.min(end)), self.lines.byte(end));
         match &self.input {
             Some(input) => &input[self.lines.input_byte(start)..self.lines.input_byte(end)],
             None => &self.text[start..end],
@@ -271,11 +272,22 @@ impl Document {
     }
 }
 
+pub(crate) fn oversized(input: &[u8]) -> Option<Error> {
+    source::oversized(input).map(too_large)
+}
+
+pub(crate) fn too_large((start, end): (u32, u32)) -> Error {
+    Error {
+        code: Code::MarkdownTooComplex,
+        range: Some(Range { start, end }),
+        details: Details::Limit(source::Limit::DocumentUnits),
+    }
+}
+
 pub fn parse(input: &str, media: &[Media]) -> Result<Document, Error> {
     let error = |code, range, details| Error { code, range, details };
-    if let Some((start, end)) = source::oversized(input) {
-        let limit = Details::Limit(source::Limit::DocumentUnits);
-        return Err(error(Code::MarkdownTooComplex, Some(Range { start, end }), limit));
+    if let Some(oversized) = oversized(input.as_bytes()) {
+        return Err(oversized);
     }
     let normalized = source::normalize(input).map_err(|invalid| {
         let range = Range { start: invalid.start, end: invalid.start + 1 };

@@ -28,7 +28,7 @@ Media directives occupy top-level blocks, separated from non-media blocks by a b
 | `MARKDOWN_INVALID_TEXT` | C0 controls except tab, LF and CR; DEL and C1 controls; invalid encoding or lone surrogates at a binding boundary |
 | `MARKDOWN_TOO_COMPLEX` | A budget was exceeded; details identify the limit and maximum |
 
-CRLF and CR normalize to LF. Source ranges still address the original input. A leading BOM is skipped but remains counted in offsets. All range conventions are defined in [bindings.md](bindings.md#wire-format).
+CRLF and CR normalize to LF. Source ranges still address the original input. A leading BOM is skipped but remains counted in offsets. All range conventions are defined in [bindings.md](bindings.md#wire-format). `Document::source(range)` returns a range's original spelling and `Document::point(offset)` its line and column; both clamp to the document, reading an offset past the end as the end and a range whose start follows its end as empty at its end.
 
 The tokenizer bounds link-destination parentheses at 32 levels (`LK08`). Link text longer than 999 bytes matches no definition as a shortcut or collapsed reference, the same bound definitions and full references have. A task checkbox needs content on its line or a continuation and opens only a paragraph (`K05`, `K09`, `K11`). The paired delimiters `~`, `=`, `+`, `|` are excluded from punctuation when computing `*` and `_` flanking (`A08`, `A09`). Table spoiler handling runs inside the table grammar.
 
@@ -63,6 +63,6 @@ Exceeding a budget rejects the document with the affected source range. Values a
 | `documentPairedDelimiters` | 1024 | Matched underline, highlight and spoiler pairs |
 | `documentTableCells` | 8192 | Cells, each row counted at least at the header width |
 
-Input size and lines are checked before tokenization. Container depth is bounded while opening containers; inline tokenization bounds attention and labels, leaving later delimiters as text while recording the exceeded budget. Final event validation enforces the remaining limits and rejects any recorded overflow. The [corpus](../../testdata/corpus) pins syntax and diagnostic results; [repository checks](../../AGENTS.md#corpus) define regeneration and acceptance.
+Input size is checked first, before encoding validation at a binding boundary: UTF-16 units are counted from UTF-8 lead bytes, two for a four-byte lead, so an oversized input is rejected without being decoded, and its range ends at the input's length in those units, saturating at 2³² − 1. Lines are checked before tokenization. Container depth is bounded while opening containers; inline tokenization bounds attention and labels, leaving later delimiters as text while recording the exceeded budget. Final event validation enforces the remaining limits and rejects any recorded overflow. The [corpus](../../testdata/corpus) pins syntax and diagnostic results; [repository checks](../../AGENTS.md#corpus) define regeneration and acceptance.
 
 Parsing must scale linearly within these budgets; adversarial scaling cases are checked in [document tests](../../crates/gsx-core/tests/document.rs). Container and inline depth caps bound every recursive stage. [Wire tests](../../crates/gsx-core/tests/wire.rs) parse, serialize and project depth-limit inputs on a 128 KiB thread stack in release builds.

@@ -100,8 +100,14 @@ for file in arguments.dropFirst() {
             entitiesAllowed: given?.entitiesAllowed ?? false,
             items: given?.items
         )
-        let json = try input.target.map { try GSX.projectJSON(input.markdown, target: $0, facts: facts, media: media) }
-            ?? GSX.parseJSON(input.markdown, media: media)
+        let json: String
+        do {
+            json = try input.target.map { try GSX.projectJSON(input.markdown, target: $0, facts: facts, media: media) }
+                ?? GSX.parseJSON(input.markdown, media: media)
+        } catch let error as GSX.InternalError where input.target != nil {
+            lines.append(#"{"refused":"\#(error.message)"}"#)
+            continue
+        }
         do {
             if let target = input.target {
                 _ = try GSX.project(input.markdown, target: target, facts: facts, media: media)

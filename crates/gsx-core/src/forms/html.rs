@@ -549,7 +549,9 @@ impl Html {
                 let overhead = cost(&format!("{separator}{prefix}"));
                 let room = remaining.saturating_sub(overhead);
                 let value = cost(alt);
-                let whole = before.is_some_and(|before| before + kept + overhead + value <= maximum);
+                let whole = before.is_some_and(|before| {
+                    before.saturating_add(kept).saturating_add(overhead).saturating_add(value) <= maximum
+                });
                 let text = if whole || value <= room {
                     alt.to_owned()
                 } else if room == 0 {

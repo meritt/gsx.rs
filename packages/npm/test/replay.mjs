@@ -27,6 +27,19 @@ try {
   if (!(error instanceof TypeError)) throw error;
 }
 
+if (gsx.isMediaId('a'.repeat(1e7))) {
+  throw new Error('isMediaId accepts an ID over the byte limit');
+}
+
+for (const text of ['a'.repeat(262145), 'a\ud800']) {
+  try {
+    gsx.projectJSON(text, 'no-such-target');
+    throw new Error(`projectJSON accepts an unknown target for ${text.length} units`);
+  } catch (error) {
+    if (!error.message.startsWith('unknown target')) throw error;
+  }
+}
+
 try {
   gsx.projectJSON('', 'telegram-html-rich', { items: [{ id: 'x"/><img src="media:evil', format: 'image' }] });
   throw new Error('projectJSON accepts an item ID outside the media ID rule');
@@ -65,7 +78,16 @@ for (const file of files) {
     }
 
     const { markdown, media, target, facts } = record;
-    const json = target ? gsx.projectJSON(markdown, target, facts, media) : gsx.parseJSON(markdown, media);
+    let json;
+
+    try {
+      json = target ? gsx.projectJSON(markdown, target, facts, media) : gsx.parseJSON(markdown, media);
+    } catch (error) {
+      if (!target) throw error;
+      lines.push(JSON.stringify({ refused: error.message }));
+      continue;
+    }
+
     const wire = JSON.parse(json);
 
     try {

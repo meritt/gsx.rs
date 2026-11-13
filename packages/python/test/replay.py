@@ -70,7 +70,13 @@ def main(out, files):
             listed = given.pop("items", None)
             items = None if listed is None else tuple(gsx.MediaFact(**item) for item in listed)
             facts = gsx.Facts(items=items, **{FACTS[key]: value for key, value in given.items()})
-            raw = gsx.project_json(markdown, target, facts, media) if target else gsx.parse_json(markdown, media)
+            try:
+                raw = gsx.project_json(markdown, target, facts, media) if target else gsx.parse_json(markdown, media)
+            except gsx.InternalError as error:
+                if not target:
+                    raise
+                lines.append(json.dumps({"refused": str(error)}, separators=(",", ":")))
+                continue
             wire = json.loads(raw)
             try:
                 if target:

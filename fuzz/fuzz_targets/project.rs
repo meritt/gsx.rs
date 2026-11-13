@@ -29,6 +29,21 @@ struct Item<'a> {
     inline: bool,
 }
 
+#[derive(Arbitrary, Clone, Copy, Debug)]
+enum Limit {
+    Small(u16),
+    Full(u32),
+}
+
+impl Limit {
+    fn value(self) -> u32 {
+        match self {
+            Limit::Small(value) => value.into(),
+            Limit::Full(value) => value,
+        }
+    }
+}
+
 #[derive(Arbitrary, Debug)]
 struct Input<'a> {
     media: u8,
@@ -39,11 +54,11 @@ struct Input<'a> {
     items: Vec<Item<'a>>,
     title: Option<&'a str>,
     target_url: Option<&'a str>,
-    max_characters: Option<u16>,
-    characters_reserved_per_url: Option<u8>,
-    caption_limit: Option<u16>,
-    description_limit: Option<u16>,
-    hashtag_limit: Option<u8>,
+    max_characters: Option<Limit>,
+    characters_reserved_per_url: Option<Limit>,
+    caption_limit: Option<Limit>,
+    description_limit: Option<Limit>,
+    hashtag_limit: Option<Limit>,
     spoiler_text: Option<&'a str>,
     thread: bool,
     entities_allowed: bool,
@@ -82,11 +97,11 @@ fuzz_target!(|input: Input| {
         placement: input.placement.map(|placement| pick(&PLACEMENTS, placement)),
         title: input.title,
         target_url: input.target_url,
-        max_characters: input.max_characters.map(u32::from),
-        characters_reserved_per_url: input.characters_reserved_per_url.map(u32::from),
-        caption_limit: input.caption_limit.map(u32::from),
-        description_limit: input.description_limit.map(u32::from),
-        hashtag_limit: input.hashtag_limit.map(u32::from),
+        max_characters: input.max_characters.map(Limit::value),
+        characters_reserved_per_url: input.characters_reserved_per_url.map(Limit::value),
+        caption_limit: input.caption_limit.map(Limit::value),
+        description_limit: input.description_limit.map(Limit::value),
+        hashtag_limit: input.hashtag_limit.map(Limit::value),
         spoiler_text: input.spoiler_text,
         overflow: if input.thread { Overflow::Thread } else { Overflow::Truncate },
         entities_allowed: input.entities_allowed,
