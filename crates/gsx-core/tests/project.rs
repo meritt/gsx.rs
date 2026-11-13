@@ -139,6 +139,29 @@ fn threads_far_below_a_large_maximum_split_linearly() {
     assert!(long < floor * 16, "{short:?} for 200, {long:?} for 1600");
 }
 
+#[test]
+fn capped_hashtags_project_linearly() {
+    let document = |paragraphs: usize| parse(&vec!["#a *b* ".repeat(200); paragraphs].join("\n\n"), &[]).unwrap();
+    let (small, large) = (document(16), document(64));
+    for name in ["instagram-plain", "youtube-plain"] {
+        let target = target(name).unwrap();
+        let fastest = |document: &Document| {
+            (0..2)
+                .map(|_| {
+                    let started = std::time::Instant::now();
+                    let projection = project(document, target, &Facts::default());
+                    assert!(projection.changes.iter().any(|change| change.feature == Feature::Hashtag));
+                    started.elapsed()
+                })
+                .min()
+                .unwrap()
+        };
+        let (short, long) = (fastest(&small), fastest(&large));
+        let floor = short.max(std::time::Duration::from_millis(2));
+        assert!(long < floor * 10, "{name}: {short:?} for 16 paragraphs, {long:?} for 64");
+    }
+}
+
 fn seconds_per_byte(markdown: &str, name: &str, facts: &Facts) -> f64 {
     let document = parse(markdown, &[]).unwrap();
     let target = target(name).unwrap();
@@ -156,6 +179,50 @@ fn seconds_per_byte(markdown: &str, name: &str, facts: &Facts) -> f64 {
 }
 
 #[test]
+fn strips_closing_parentheses_after_bluesky_links_in_linear_time() {
+    let text = |tail: &str, times: usize| format!("https&#58;//a{} x", tail.repeat(times));
+    let facts = Facts::default();
+    let document = parse(&text(")", 8), &[]).unwrap();
+    let projection = project_with(&document, target("bluesky-entities").unwrap(), &facts, &Options::default());
+    let entities = &projection.field(FieldName::Text).unwrap().entities;
+    assert_eq!(
+        entities.iter().map(|entity| (entity.style, entity.value.as_deref())).collect::<Vec<_>>(),
+        [(Style::Link, Some("https://a/"))]
+    );
+    let cost = seconds_per_byte(&text(")", 64000), "bluesky-entities", &facts);
+    let growth = cost / seconds_per_byte(&text(")", 16000), "bluesky-entities", &facts);
+    let ratio = cost / seconds_per_byte(&text("a", 64000), "bluesky-entities", &facts);
+    assert!(growth <= 2.5, "closing parentheses cost {growth:.1} times more per byte at four times the size");
+    assert!(ratio <= 2.0, "closing parentheses cost {ratio:.1} times more per byte than letters");
+}
+
+#[test]
+fn checks_bluesky_tags_and_mentions_against_links_in_linear_time() {
+    for (name, marker) in [("tags", "#a"), ("mentions", "@a.bc")] {
+        let text = |times: usize| format!("https&#58;//a.co {marker} ").repeat(times);
+        let facts = Facts::default();
+        let cost = seconds_per_byte(&text(8000), "bluesky-entities", &facts);
+        let growth = cost / seconds_per_byte(&text(2000), "bluesky-entities", &facts);
+        let unlinked = format!("a.co {marker} ").repeat(8000 * (17 + marker.len()) / (5 + marker.len() + 1));
+        let ratio = cost / seconds_per_byte(&unlinked, "bluesky-entities", &facts);
+        assert!(growth <= 2.5, "{name} after links cost {growth:.1} times more per byte at four times the size");
+        assert!(ratio <= 2.0, "{name} after links cost {ratio:.1} times more per byte than without links");
+    }
+}
+
+#[test]
+fn caps_telegram_entities_in_linear_time() {
+    let text = |times: usize| format!("{}\n\n", "*a* ".repeat(200)).repeat(times);
+    let allowed = Facts { entities_allowed: true, ..Facts::default() };
+    let document = parse(&text(1), &[]).unwrap();
+    let projection = project_with(&document, target("telegram-entities").unwrap(), &allowed, &Options::default());
+    assert_eq!(projection.field(FieldName::Text).unwrap().entities.len(), 100);
+    let cost = seconds_per_byte(&text(40), "telegram-entities", &allowed);
+    let growth = cost / seconds_per_byte(&text(10), "telegram-entities", &allowed);
+    assert!(growth <= 2.5, "capped entities cost {growth:.1} times more per byte at four times the size");
+}
+
+#[test]
 fn fits_a_repeatedly_placed_alt_once() {
     let markdown = "::media{id=\"m\"}\n\nText.\n\n".repeat(2000);
     let seconds = |length: usize| {
@@ -168,6 +235,27 @@ fn fits_a_repeatedly_placed_alt_once() {
     };
     let growth = seconds(65_536) / seconds(4096);
     assert!(growth <= 3.0, "placements cost {growth:.1} times more with a sixteen times longer alt");
+}
+
+#[test]
+fn measures_rich_captions_in_linear_time() {
+    let items = [MediaFact { id: "m", format: Format::Image, alt: Some("b"), spoiler: false, inline: false }];
+    let facts = Facts { media: Some(MediaKind::Image), media_count: 1, items: Some(&items), ..Facts::default() };
+    let markdown = |figures: usize| "::media{id=\"m\"}\n\n".repeat(figures) + &"a ".repeat(20000);
+    let projection = project(&parse(&markdown(3), &[]).unwrap(), target("telegram-html-rich").unwrap(), &facts);
+    assert_eq!(text(&projection, FieldName::Text).matches("<figcaption>b</figcaption>").count(), 3);
+    let seconds = |figures: usize| {
+        let markdown = markdown(figures);
+        seconds_per_byte(&markdown, "telegram-html-rich", &facts) * markdown.len() as f64
+    };
+    let growth = seconds(2000) / seconds(500) / 4.0;
+    assert!(growth <= 2.0, "captions cost {growth:.1} times more per figure at four times the figures");
+    let markup = |figures: usize| {
+        let markdown = "::media{id=\"m\"}\n".repeat(figures);
+        seconds_per_byte(&markdown, "telegram-html-rich", &facts) * markdown.len() as f64
+    };
+    let growth = markup(15000) / markup(1875) / 8.0;
+    assert!(growth <= 1.6, "figure markup costs {growth:.1} times more per figure at eight times the figures");
 }
 
 fn reasons(projection: &Projection) -> Vec<(Class, Feature, &'static str)> {

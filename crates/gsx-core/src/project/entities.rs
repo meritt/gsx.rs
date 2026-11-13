@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops::Range as Span;
 
 use crate::document::Range;
@@ -144,9 +145,10 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
     if let Some(cap) = form.cap
         && styled.len() > cap
     {
+        let mut seen = HashSet::new();
         for entity in styled.drain(cap..) {
             if let Some(source) = entity.source
-                && !capped.contains(&source)
+                && seen.insert(source)
             {
                 capped.push(source);
             }

@@ -574,11 +574,19 @@ impl Html {
         let body = cost(&context.target.form.visible(context.writer().since(0)));
         let Some(mut remaining) = maximum.checked_sub(body) else { return };
         let cut = context.done();
+        let additive = limit.is_some_and(|limit| limit.unit.max_bytes().is_some());
+        let mut measured = (0, 0, None);
         let mut inserts = vec![];
         let mut kept = 0;
         for figure in std::mem::take(&mut self.figures) {
             let before = if cut && !figure.cut {
-                Some(cost(&context.target.form.visible(&context.writer().since(0)[..figure.end])))
+                let form = context.target.form;
+                let (from, prefix, tail) = if additive && measured.0 <= figure.end { measured } else { (0, 0, None) };
+                let visible = form.visible(&context.writer().since(0)[from..figure.end]);
+                let joint = tail.is_some_and(|tail| tail != '\n') && !visible.is_empty();
+                let total = prefix + cost(&visible) + if joint { cost("\n") } else { 0 };
+                measured = (figure.end, total, visible.chars().next_back().or(tail));
+                Some(total)
             } else {
                 None
             };
@@ -633,9 +641,22 @@ impl Html {
                 inserts.push((figure.end, caption + "</figure>"));
             }
         }
-        for (at, markup) in inserts.into_iter().rev() {
-            context.writer().insert(at, &markup);
+        if inserts.is_empty() {
+            return;
         }
+        context.writer().edit(|text| {
+            let extra = inserts.iter().map(|(_, markup)| markup.len()).sum::<usize>();
+            let mut spliced = String::with_capacity(text.len() + extra);
+            let mut last = 0;
+            for (at, markup) in &inserts {
+                debug_assert!(last <= *at, "figure inserts follow output order");
+                spliced.push_str(&text[last..*at]);
+                spliced.push_str(markup);
+                last = *at;
+            }
+            spliced.push_str(&text[last..]);
+            *text = spliced;
+        });
     }
 
     fn rich(&mut self, context: &mut Context, nodes: &[Node], level: usize) {

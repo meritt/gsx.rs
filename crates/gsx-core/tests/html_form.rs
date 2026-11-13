@@ -316,6 +316,23 @@ fn rich_keeps_captions_before_the_cut() {
 }
 
 #[test]
+fn rich_counts_block_breaks_between_figures_before_keeping_a_caption_whole() {
+    let ids: Vec<String> = (0..30).map(|index| format!("m{index}")).collect();
+    let mut figures: Vec<String> =
+        ids.iter().enumerate().map(|(index, id)| format!("p{index}\n\n::media{{id=\"{id}\"}}\n\n")).collect();
+    figures.push("word ".repeat(7000));
+    let markdown = figures.concat();
+    let before = (0..30).map(|index| format!("p{index}").len()).sum::<usize>() + 29;
+    let alt = "a".repeat(32_768 + 10 - 1 - before);
+    let items: Vec<_> =
+        ids.iter().enumerate().map(|(index, id)| image(id, (index == 29).then_some(alt.as_str()))).collect();
+    let projection = rich(&markdown, &items);
+    assert!(text(&projection).matches("word").count() > 6000);
+    assert!(projection.measurements[0].value <= 32_768);
+    assert_ne!(projection.items[29].alt.as_deref(), Some(alt.as_str()));
+}
+
+#[test]
 fn rich_shares_the_rest_with_a_caption_too_long_to_keep_whole() {
     let alt = "described ".repeat(4000);
     let markdown = format!("Intro\n\n::media{{id=\"a\"}}\n\n{}", "word ".repeat(7000));

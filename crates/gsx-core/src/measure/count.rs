@@ -11,19 +11,13 @@ pub(super) fn utf16_code_units(text: &str) -> usize {
 }
 
 pub(super) fn markers(text: &str, sigil: char, word: fn(char) -> bool) -> Vec<usize> {
-    let mut positions = vec![];
-    let mut previous: Option<char> = None;
-    let mut chars = text.char_indices().peekable();
-    while let Some((at, char)) = chars.next() {
-        if char == sigil
-            && previous.is_none_or(char::is_whitespace)
-            && chars.peek().is_some_and(|&(_, next)| word(next))
-        {
-            positions.push(at);
-        }
-        previous = Some(char);
-    }
-    positions
+    text.match_indices(sigil)
+        .map(|(at, _)| at)
+        .filter(|&at| {
+            text[..at].chars().next_back().is_none_or(char::is_whitespace)
+                && text[at + sigil.len_utf8()..].chars().next().is_some_and(word)
+        })
+        .collect()
 }
 
 pub(super) fn graphemes(text: &str) -> usize {

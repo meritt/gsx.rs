@@ -512,7 +512,7 @@ fn without_sigils(
         cursor = at + 1;
     }
     out.push_str(&text[cursor..]);
-    let shift = |offset: usize| offset - sigils.iter().take_while(|&&at| at < offset).count();
+    let shift = |offset: usize| offset - sigils.partition_point(|&at| at < offset);
     for span in links.iter_mut().chain(origins.iter_mut().map(|(span, _)| span)) {
         *span = shift(span.start)..shift(span.end);
     }
