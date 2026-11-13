@@ -130,9 +130,8 @@ pub fn prefixes(unit: Unit, text: &str, facts: &Facts, ends: &[usize]) -> Vec<Op
             ends,
         ),
         Unit::ThreadsWeighted => count::cluster_prefixes(text, ends, true),
-        Unit::CodePoints | Unit::Utf16CodeUnits | Unit::Hashtags | Unit::Mentions | Unit::Links => {
-            (vec![None; ends.len()], 0)
-        }
+        Unit::Links => count::unique_url_prefixes(text, facts.urls, ends),
+        Unit::CodePoints | Unit::Utf16CodeUnits | Unit::Hashtags | Unit::Mentions => (vec![None; ends.len()], 0),
     };
     values
 }

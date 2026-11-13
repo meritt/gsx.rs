@@ -26,7 +26,7 @@ pub(super) const fn terminal(char: char) -> bool {
 }
 
 pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) -> Option<Thread> {
-    let limits = request.limits();
+    let limits = part_limits(request, full, suffix);
     let decorate = |rendered: Rendered, first: bool| {
         if first { appended(request.target, rendered, suffix) } else { rendered }
     };
@@ -38,7 +38,7 @@ pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) ->
     if probe(0..length, true) {
         return None;
     }
-    let maxima = limits.iter().filter_map(|limit| limit.cap());
+    let maxima = limits.iter().filter(|limit| !limit.unit.counts_markers()).filter_map(|limit| limit.cap());
     let reach = maxima.clone().max().map(|maximum| maximum.saturating_add(1).saturating_mul(4));
     let near = maxima.min().map(|maximum| maximum.saturating_add(1).saturating_mul(4));
     let reached = Cell::new(None);
@@ -161,6 +161,15 @@ pub(super) fn split(request: &Request, full: &Rendered, suffix: Option<&str>) ->
         parts.push(fitted);
     }
     Some(Thread { parts, spans, boundaries, truncated })
+}
+
+fn part_limits(request: &Request, full: &Rendered, suffix: Option<&str>) -> Vec<Bound> {
+    let mut limits = request.limits();
+    for limit in &mut limits {
+        limit.binding |= limit.unit == Unit::Links
+            && limit.maximum.is_some_and(|maximum| suffix.is_some() || request.measure(Unit::Links, full) > maximum);
+    }
+    limits
 }
 
 const FIRST_WINDOW: usize = 2048;
@@ -358,7 +367,8 @@ fn breaks(text: &str, merged: &[Span<usize>]) -> [Vec<(usize, usize)>; 3] {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Facts, Options, Request, Source};
+    use super::super::{Facts, Options, Rendered, Request, Source};
+    use super::part_limits;
     use crate::targets::TARGETS;
 
     const TOKENS: [&str; 52] = [
@@ -454,9 +464,8 @@ mod tests {
             {
                 let spec = target.fields(facts).find(|spec| spec.source == Source::Body).expect("body field");
                 let request = Request { target, spec, facts, options, spent: [0; 2] };
-                let limits = request.limits();
-                let units: Vec<_> =
-                    limits.iter().filter(|limit| !limit.unit.counts_markers()).map(|limit| limit.unit).collect();
+                let limits = part_limits(&request, &Rendered::text(String::new()), Some(""));
+                let units: Vec<_> = limits.iter().filter(|limit| limit.binding).map(|limit| limit.unit).collect();
                 assert!(!units.is_empty(), "{}", target.name);
                 let plain = "alpha beta\u{a0}gamma\n\ndelta 👍\u{1F3FD} 中文 end";
                 for text in std::iter::once(plain.to_owned()).chain((0..60).map(|_| generated(&mut seed))) {
