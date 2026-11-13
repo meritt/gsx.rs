@@ -59,6 +59,7 @@ static DISCORD_FORM_BLOCKS: BlocksForm = BlocksForm {
     spoiler: true,
     separator: true,
     unplaced: Unplaced::File,
+    unplaced_alt: None,
 };
 
 pub static DISCORD: Target = blocks(
@@ -77,6 +78,7 @@ static SLACK_FORM_BLOCKS: BlocksForm = BlocksForm {
     spoiler: false,
     separator: false,
     unplaced: Unplaced::Attach,
+    unplaced_alt: Some(limit(Alt, CodePoints, 1000)),
 };
 
 pub static SLACK: Target = blocks(

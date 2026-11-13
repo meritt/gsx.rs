@@ -418,6 +418,7 @@ pub struct BlocksForm {
     pub spoiler: bool,
     pub separator: bool,
     pub unplaced: Unplaced,
+    pub unplaced_alt: Option<measure::Limit>,
 }
 
 impl BlocksForm {
@@ -601,6 +602,9 @@ impl Form {
                     form.spoiler,
                     form.separator,
                 );
+                if let Some(limit) = &form.unplaced_alt {
+                    let _ = writeln!(out, "  unplaced {}", describe_limit(limit));
+                }
             }
         }
     }
@@ -677,6 +681,23 @@ fn visible_parts(text: &str, form: &HtmlForm, window: usize, emit: &mut dyn FnMu
         }
     }
     true
+}
+
+fn describe_limit(limit: &measure::Limit) -> String {
+    let maximum = match limit.maximum {
+        measure::Maximum::Fixed(value) => value.to_string(),
+        measure::Maximum::Resolved(fact, value) => format!("{value} fact={}", fact.name()),
+        measure::Maximum::Given(fact) => format!("none fact={}", fact.name()),
+        measure::Maximum::Unlimited => "none".to_owned(),
+    };
+    format!(
+        "{} {} maximum={maximum} placements={} media={} rendering={}",
+        limit.field.name(),
+        limit.unit.name(),
+        join(limit.placements.iter().map(|placement| placement.name())),
+        limit.media.name(),
+        limit.rendering.name(),
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -960,21 +981,7 @@ impl Target {
             );
         }
         for limit in self.limits {
-            let maximum = match limit.maximum {
-                measure::Maximum::Fixed(value) => value.to_string(),
-                measure::Maximum::Resolved(fact, value) => format!("{value} fact={}", fact.name()),
-                measure::Maximum::Given(fact) => format!("none fact={}", fact.name()),
-                measure::Maximum::Unlimited => "none".to_owned(),
-            };
-            let _ = writeln!(
-                out,
-                "limit {} {} maximum={maximum} placements={} media={} rendering={}",
-                limit.field.name(),
-                limit.unit.name(),
-                join(limit.placements.iter().map(|placement| placement.name())),
-                limit.media.name(),
-                limit.rendering.name(),
-            );
+            let _ = writeln!(out, "limit {}", describe_limit(limit));
         }
         out
     }

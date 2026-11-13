@@ -134,6 +134,10 @@ fn slack_attaches_media_that_no_block_can_show() {
             ("media_alt_omitted", FieldName::Alt, slot)
         ]
     );
+    let described =
+        run("slack-blocks", "::media{id=\"p\"}", &[MediaFact { alt: Some("A pier"), inline: false, ..image("p") }]);
+    assert_eq!(described.items, [Attachment { alt: Some("A pier".into()), ..attachment("p") }]);
+    assert!(target("slack-blocks").unwrap().manifest().contains("\n  unplaced alt code-points maximum=1000 "));
 }
 
 #[test]

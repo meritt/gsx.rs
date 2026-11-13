@@ -88,8 +88,8 @@ The [API changelog](https://dev.max.ru/docs-api/changelog-api/) dates the docume
 | Date syntax, escaping | [Formatting message text](https://docs.slack.dev/messaging/formatting-message-text) | Confirmed |
 | Date tokens `{time}`, `{time_secs}`, `{date_num}`, `{date}`, `{date_short}`, `{date_long}`, `{ago}` combined with plain text in one token string | [Formatting message text](https://docs.slack.dev/messaging/formatting-message-text) | Confirmed 2026-11-11; the page shows `{date} at {time}`, and `{date_long} {time}` follows its plain-text rule without an example |
 | File comment on `slack-plain` | [files.completeUploadExternal](https://docs.slack.dev/reference/methods/files.completeUploadExternal) | Confirmed: `initial_comment` states no maximum |
-| Uploaded image alt of 1000 on `slack-markdown` and `slack-plain` | [files.getUploadURLExternal](https://docs.slack.dev/reference/methods/files.getUploadURLExternal) | Confirmed 2026-11-13: `alt_txt` describes an image for screen readers, and the error `alt_txt_too_large` states the limit of 1000 |
-| Uploaded alt formats on `slack-markdown` and `slack-plain`: images and GIFs | [files.getUploadURLExternal](https://docs.slack.dev/reference/methods/files.getUploadURLExternal) | Confirmed 2026-11-13 for images. Assumption: a GIF takes alt as an image; videos and audio take none |
+| Uploaded image alt of 1000 on `slack-markdown`, `slack-plain` and files attached on `slack-blocks` | [files.getUploadURLExternal](https://docs.slack.dev/reference/methods/files.getUploadURLExternal) | Confirmed 2026-11-13: `alt_txt` describes an image for screen readers, and the error `alt_txt_too_large` states the limit of 1000 |
+| Uploaded alt formats on `slack-markdown`, `slack-plain` and files attached on `slack-blocks`: images and GIFs | [files.getUploadURLExternal](https://docs.slack.dev/reference/methods/files.getUploadURLExternal) | Confirmed 2026-11-13 for images. Assumption: a GIF takes alt as an image; videos and audio take none |
 | Slideshow group of ten images on `slack-blocks` | None | Assumption: the Block Kit and file upload pages state no group bound |
 
 ## X

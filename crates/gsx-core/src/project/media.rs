@@ -78,6 +78,7 @@ fn fit_alt(
     format: Format,
     placement: Option<Placement>,
     resolved: &[(Fact, u32)],
+    unplaced: Option<&'static measure::Limit>,
 ) -> Alt {
     if !target.carries_alt(format, placement) {
         let (class, reason) = target.rule(Feature::Media).outcome(Some(When::Refused));
@@ -87,7 +88,10 @@ fn fit_alt(
     }
     let context = measure::Context { placement: Placement::Post, media: kind(format) };
     let facts = measure::Facts { resolved, ..measure::Facts::default() };
-    let limits: Vec<_> = target.applicable(FieldName::Alt, context).collect();
+    let limits: Vec<_> = match unplaced {
+        Some(limit) => limit.applies(FieldName::Alt, context).then_some(limit).into_iter().collect(),
+        None => target.applicable(FieldName::Alt, context).collect(),
+    };
     let fits = |text: &str| limits.iter().all(|limit| !limit.measure(text, &facts).exceeds());
     let measured: Vec<_> = limits.iter().map(|limit| limit.measure(alt, &facts)).collect();
     let worst = measured.iter().copied().find(measure::Measurement::exceeds);
@@ -147,7 +151,7 @@ pub(super) fn attach(target: &'static Target, facts: &Facts, children: &[Node]) 
         let range = ranges.get(fact.id).map(|&top| children[top].range);
         let alt = authored(fact).and_then(|alt| {
             let slot = Slot { block: None, item: index as u32 };
-            fit_alt(target, alt, fact.format, facts.placement, &resolved).place(
+            fit_alt(target, alt, fact.format, facts.placement, &resolved, None).place(
                 range,
                 slot,
                 &mut attached.measurements,
@@ -255,7 +259,8 @@ impl Layouter {
         }
         let alt = authored(fact).and_then(|alt| {
             let (target, placement, resolved) = (self.target, self.placement, &self.resolved);
-            let fitted = self.alts[index].get_or_insert_with(|| fit_alt(target, alt, fact.format, placement, resolved));
+            let fitted =
+                self.alts[index].get_or_insert_with(|| fit_alt(target, alt, fact.format, placement, resolved, None));
             fitted.place(range, slot, &mut self.laid.measurements, &mut self.laid.changes)
         });
         Item { reference: format!("media:{}", fact.id), alt, spoiler: fact.spoiler && self.form.spoiler }
@@ -316,14 +321,19 @@ impl Layouter {
         if fact.spoiler && !carried {
             self.change_at(FieldName::Text, range, When::Spoiler, Some(slot));
         }
-        if authored(fact).is_some() {
-            self.change_at(FieldName::Alt, range, When::Refused, Some(slot));
-        }
+        let alt = authored(fact).and_then(|alt| {
+            let Some(limit) = self.form.unplaced_alt.as_ref() else {
+                self.change_at(FieldName::Alt, range, When::Refused, Some(slot));
+                return None;
+            };
+            let fitted = fit_alt(self.target, alt, fact.format, self.placement, &self.resolved, Some(limit));
+            fitted.place(range, slot, &mut self.laid.measurements, &mut self.laid.changes)
+        });
         let reference = format!("media:{}", fact.id);
         let spoiler = fact.spoiler && carried;
         match self.form.unplaced {
-            Unplaced::File => self.laid.blocks.push(Block::File(Item { reference, alt: None, spoiler })),
-            Unplaced::Attach => self.laid.attachments.push(Attachment { reference, alt: None, spoiler }),
+            Unplaced::File => self.laid.blocks.push(Block::File(Item { reference, alt, spoiler })),
+            Unplaced::Attach => self.laid.attachments.push(Attachment { reference, alt, spoiler }),
         }
     }
 }
