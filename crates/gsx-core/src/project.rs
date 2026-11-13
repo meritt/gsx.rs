@@ -4,12 +4,15 @@ mod facts;
 mod fit;
 mod layout;
 pub mod links;
+mod markup;
 mod media;
 pub mod nfc;
 mod outline;
 mod table;
 mod thread;
 
+use std::borrow::Cow;
+use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::ops::Range as Span;
 
@@ -118,11 +121,12 @@ pub struct Context<'a> {
     open: Vec<Style>,
     allowed: bool,
     items: Option<&'a [MediaFact<'a>]>,
-    positions: HashMap<&'a str, usize>,
+    positions: OnceCell<HashMap<&'a str, usize>>,
     anchors: Vec<Anchor>,
     alts: Vec<(usize, Option<String>)>,
     urls: Vec<String>,
     url_cap: Option<usize>,
+    origins: bool,
 }
 
 impl<'a> Context<'a> {
@@ -130,8 +134,12 @@ impl<'a> Context<'a> {
         self.items.unwrap_or_default()
     }
 
+    fn positions(&self) -> &HashMap<&'a str, usize> {
+        self.positions.get_or_init(|| media::positions(self.items.unwrap_or_default()))
+    }
+
     pub fn position(&self, id: &str) -> Option<usize> {
-        self.positions.get(id).copied()
+        self.positions().get(id).copied()
     }
 
     pub fn admit(&mut self, href: &str) -> bool {
@@ -151,9 +159,10 @@ impl<'a> Context<'a> {
     }
 
     pub fn gap(&mut self, after: Option<u32>, node: &Node, gap: u32) -> u32 {
-        let collapses = self.target.handles(Feature::Text)
-            && self.target.rule(Feature::Text).conditions.iter().any(|condition| condition.when == When::BlankLines);
-        if !collapses || gap <= 2 {
+        if gap <= 2 {
+            return gap;
+        }
+        if !self.target.conditions(Feature::Text, When::BlankLines) {
             return gap;
         }
         if let Some(start) = after {
@@ -250,7 +259,7 @@ impl<'a> Context<'a> {
     pub fn report_media(&mut self, node: &Node) {
         self.anchor(Some(node));
         let ids = node.media_ids().unwrap_or_default();
-        let listed = |id: &String| self.items.is_none() || self.positions.contains_key(id.as_str());
+        let listed = |id: &String| self.items.is_none() || self.positions().contains_key(id.as_str());
         let (some_listed, some_missing) = (ids.iter().any(listed), !ids.iter().all(listed));
         if some_missing {
             self.report_when(Feature::Media, Some(node.range), Some(When::Missing));
@@ -300,7 +309,9 @@ impl<'a> Context<'a> {
                 let end = self.writer.mark();
                 self.writer.eligible(start..end);
             }
-            self.writer.origin(start, node.range);
+            if self.origins {
+                self.writer.origin(start, node.range);
+            }
         }
     }
 
@@ -314,7 +325,9 @@ impl<'a> Context<'a> {
         } else {
             let start = self.writer.mark();
             self.writer.push(&map(value, Piece::Whole));
-            self.writer.origin(start, node.range);
+            if self.origins {
+                self.writer.origin(start, node.range);
+            }
         }
     }
 
@@ -399,6 +412,7 @@ fn render(
     field: FieldName,
     spent: Spent,
     cut: Option<&Cut>,
+    origins: bool,
     draw: impl FnOnce(&mut Context),
 ) -> Rendered {
     let mut context = Context {
@@ -412,7 +426,7 @@ fn render(
         open: vec![],
         allowed: facts.entities_allowed,
         items: facts.items,
-        positions: media::positions(facts.items.unwrap_or_default()),
+        positions: OnceCell::new(),
         anchors: vec![],
         alts: vec![],
         urls: vec![],
@@ -420,6 +434,7 @@ fn render(
             let reserved = facts.target_url.is_some() && target.handles(Feature::TargetUrl);
             cap - usize::from(reserved)
         }),
+        origins,
     };
     draw(&mut context);
     let mut written = std::mem::replace(&mut context.writer, Writer::new(Escape::None)).finish();
@@ -529,12 +544,10 @@ fn normalized(text: &str, links: &[Span<usize>]) -> (String, Vec<Span<usize>>) {
 }
 
 type Probe = (Rendered, Vec<usize>);
+type Entities<'t> = (Cow<'t, str>, Vec<Span<usize>>, Vec<Span<usize>>, bool);
 
 fn within(limits: &[Bound], values: &[usize]) -> bool {
-    limits
-        .iter()
-        .zip(values)
-        .all(|(limit, value)| limit.unit.counts_markers() || limit.maximum.is_none_or(|maximum| *value <= maximum))
+    limits.iter().zip(values).all(|(limit, value)| limit.cap().is_none_or(|maximum| *value <= maximum))
 }
 
 struct Fitted {
@@ -542,10 +555,27 @@ struct Fitted {
     measurements: Vec<Measurement>,
 }
 
+struct Split {
+    parts: Vec<Fitted>,
+    ranges: Vec<Range>,
+    boundaries: Vec<Option<Boundary>>,
+    media: Vec<Vec<String>>,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Bound {
     unit: Unit,
     maximum: Option<usize>,
+}
+
+impl Bound {
+    fn cap(self) -> Option<usize> {
+        self.maximum.filter(|_| !self.unit.counts_markers())
+    }
+
+    fn binds(self) -> bool {
+        self.cap().is_some()
+    }
 }
 
 struct Request<'a, 'b> {
@@ -575,15 +605,30 @@ impl Request<'_, '_> {
     }
 
     fn measure(&self, unit: Unit, rendered: &Rendered) -> usize {
-        let mut text = self.target.form.visible(&rendered.text);
+        self.measure_text(unit, &rendered.text)
+    }
+
+    fn entities<'t>(&self, unit: Unit, text: &'t str) -> Entities<'t> {
+        let mut text = self.target.form.visible(text);
         if let (Unit::MastodonWeighted, Some(spoiler)) = (unit, self.facts.spoiler_text) {
-            text = std::borrow::Cow::Owned(format!("{spoiler}{text}"));
+            text = Cow::Owned(format!("{spoiler}{text}"));
         }
-        let (urls, elided) = match unit {
-            Unit::XWeighted | Unit::Links => (links::x_urls(&text), vec![]),
-            Unit::MastodonWeighted => links::mastodon_entities(&text),
-            _ => (vec![], vec![]),
+        let (urls, elided, whole) = match unit {
+            Unit::XWeighted | Unit::Links => match links::x_urls(&text) {
+                Some(urls) => (urls, vec![], true),
+                None => (vec![], vec![], false),
+            },
+            Unit::MastodonWeighted => {
+                let (urls, elided) = links::mastodon_entities(&text);
+                (urls, elided, true)
+            }
+            _ => (vec![], vec![], true),
         };
+        (text, urls, elided, whole)
+    }
+
+    fn measure_text(&self, unit: Unit, text: &str) -> usize {
+        let (text, urls, elided, _) = self.entities(unit, text);
         let resolved = self.resolved();
         let facts = measure::Facts { urls: &urls, elided: &elided, resolved: &resolved };
         let earlier = MARKERS.into_iter().zip(self.spent).find(|((marker, _), _)| *marker == unit);
@@ -622,13 +667,50 @@ impl Request<'_, '_> {
     }
 
     fn fits(&self, rendered: &Rendered) -> bool {
-        let limits = self.limits();
-        let values = self.values(&limits, rendered);
-        within(&limits, &values)
+        self.admits(&self.limits(), rendered)
+    }
+
+    fn admits(&self, limits: &[Bound], rendered: &Rendered) -> bool {
+        self.admits_text(limits, &rendered.text)
+    }
+
+    fn prefixes(&self, unit: Unit, text: &str, ends: &[usize]) -> Vec<Option<usize>> {
+        let (joined, urls, elided, whole) = self.entities(unit, text);
+        if !whole || self.target.form.html().is_some() {
+            return vec![None; ends.len()];
+        }
+        let shift = joined.len() - text.len();
+        let ends: Vec<usize> = ends.iter().map(|end| end + shift).collect();
+        let resolved = self.resolved();
+        let facts = measure::Facts { urls: &urls, elided: &elided, resolved: &resolved };
+        measure::prefixes(unit, &joined, &facts, &ends)
+    }
+
+    fn admitted(&self, limits: &[Bound], text: &str, ends: &[usize]) -> Vec<Option<bool>> {
+        let mut admitted = vec![Some(true); ends.len()];
+        for limit in limits {
+            let Some(maximum) = limit.cap() else { continue };
+            for (admitted, value) in admitted.iter_mut().zip(self.prefixes(limit.unit, text, ends)) {
+                *admitted = match (*admitted, value.map(|value| value <= maximum)) {
+                    (Some(false), _) | (_, Some(false)) => Some(false),
+                    (Some(true), Some(true)) => Some(true),
+                    _ => None,
+                };
+            }
+        }
+        admitted
+    }
+
+    fn admits_text(&self, limits: &[Bound], text: &str) -> bool {
+        limits.iter().all(|limit| limit.cap().is_none_or(|maximum| self.measure_text(limit.unit, text) <= maximum))
     }
 
     fn values(&self, limits: &[Bound], rendered: &Rendered) -> Vec<usize> {
         limits.iter().map(|limit| self.measure(limit.unit, rendered)).collect()
+    }
+
+    fn bounded(&self, limits: &[Bound], rendered: &Rendered) -> Vec<usize> {
+        limits.iter().map(|limit| if limit.binds() { self.measure(limit.unit, rendered) } else { 0 }).collect()
     }
 
     fn measurements(&self, limits: &[Bound], values: &[usize]) -> Vec<Measurement> {
@@ -648,9 +730,9 @@ impl Request<'_, '_> {
 
     fn fit<'o>(
         &self,
-        outline: impl FnOnce() -> Outline<'o>,
+        outline: &dyn Fn() -> Outline<'o>,
         bounded: bool,
-        draw: impl Fn(Option<&Cut>) -> Rendered,
+        draw: &dyn Fn(Option<&Cut>) -> Rendered,
     ) -> Fitted {
         let full = draw(None);
         let limits = self.limits();
@@ -678,22 +760,18 @@ impl Request<'_, '_> {
         if outline.is_empty() {
             return overflow(full);
         }
-        let least = limits
-            .iter()
-            .filter(|limit| !limit.unit.counts_markers())
-            .filter_map(|limit| limit.maximum)
-            .min()
-            .unwrap_or(maximum);
-        let upper = bounded.then(|| outline.upper(least)).flatten().unwrap_or_else(|| outline.units() - 1);
+        let least = limits.iter().filter_map(|limit| limit.cap()).min().unwrap_or(maximum);
+        let bound = bounded.then(|| outline.upper(least)).flatten();
+        let upper = bound.unwrap_or_else(|| outline.units() - 1);
         let load = |values: &[usize]| {
             limits
                 .iter()
                 .zip(values)
-                .filter(|(limit, _)| !limit.unit.counts_markers())
-                .filter_map(|(limit, &value)| limit.maximum.map(|maximum| value as f64 / maximum.max(1) as f64))
+                .filter_map(|(limit, &value)| limit.cap().map(|maximum| value as f64 / maximum.max(1) as f64))
                 .fold(0.0, f64::max)
         };
-        let mut probes: HashMap<(u32, usize), (f64, Option<Probe>)> = HashMap::new();
+        let mut probes: HashMap<(u32, usize), (bool, f64)> = HashMap::new();
+        let mut best: Option<(usize, (u32, usize), Probe)> = None;
         let mode = self.options.search.unwrap_or(self.target.search);
         let keep = fit::search(
             mode,
@@ -701,31 +779,65 @@ impl Request<'_, '_> {
             |keep| outline.clean(keep),
             |keep| {
                 let cut = outline.cut(keep, self.spec.truncation);
-                let (load, probe) = probes.entry(cut.key()).or_insert_with(|| {
+                *probes.entry(cut.key()).or_insert_with(|| {
                     let rendered = draw(Some(&cut));
-                    let values = self.values(&limits, &rendered);
-                    (load(&values), fits(&values).then_some((rendered, values)))
-                });
-                (probe.is_some(), *load)
+                    let values = self.bounded(&limits, &rendered);
+                    let (fit, load) = (fits(&values), load(&values));
+                    if fit && best.as_ref().is_none_or(|(kept, ..)| keep > *kept) {
+                        best = Some((keep, cut.key(), (rendered, values)));
+                    }
+                    (fit, load)
+                })
             },
         );
         let Some(keep) = keep else {
             return overflow(full);
         };
         let cut = outline.cut(keep, self.spec.truncation);
-        let (mut rendered, fitted) =
-            probes.remove(&cut.key()).and_then(|(_, probe)| probe).expect("the kept cut was probed and fits");
+        let (mut rendered, mut fitted) = match best {
+            Some((_, key, probe)) if key == cut.key() => probe,
+            _ => {
+                let rendered = draw(Some(&cut));
+                let values = self.bounded(&limits, &rendered);
+                (rendered, values)
+            }
+        };
+        for (limit, value) in limits.iter().zip(&mut fitted) {
+            if !limit.binds() {
+                *value = self.measure(limit.unit, &rendered);
+            }
+        }
         let (range, exact) = cut.dropped(outline.end());
         let mut change = self.change(Feature::Text, Some(range), None);
         change.truncated = Some(Truncated { unit, maximum: maximum as u32, value: value as u32, exact });
         rendered.changes.push(change);
         Fitted { rendered, measurements: self.measurements(&limits, &fitted) }
     }
+
+    fn fit_part<'o>(
+        &self,
+        outline: &dyn Fn() -> Outline<'o>,
+        draw: &dyn Fn(Option<&Cut>) -> Rendered,
+    ) -> Option<(Fitted, Option<Change>)> {
+        let mut fitted = self.fit(outline, true, draw);
+        let over = |measurement: &Measurement| {
+            !measurement.unit.counts_markers() && measurement.maximum.is_some_and(|maximum| measurement.value > maximum)
+        };
+        if fitted.measurements.iter().any(over) {
+            return None;
+        }
+        let changes = &mut fitted.rendered.changes;
+        let truncated = changes
+            .iter()
+            .rposition(|change| change.feature == Feature::Text && change.truncated.is_some())
+            .map(|index| changes.remove(index));
+        Some((fitted, truncated))
+    }
 }
 
 fn appended(target: &Target, mut rendered: Rendered, url: Option<&str>) -> Rendered {
     if let Some(url) = url {
-        if measure::blank(&target.form.visible(&rendered.text)) {
+        if target.form.visible_blank(&rendered.text, measure::blank) {
             rendered.text.clear();
             rendered.links.clear();
             rendered.styled.clear();
@@ -814,7 +926,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     let body = if leading.is_some() { &children[1..] } else { children };
     let math = target.form.math().is_some();
     let draw_heading = |heading: &Node, field, spent, cut: Option<&Cut>| {
-        let mut rendered = render(target, facts, field, spent, cut, |context| {
+        let mut rendered = render(target, facts, field, spent, cut, false, |context| {
             context.report_when(Feature::Heading, Some(heading.range), Some(When::TitleSource));
             (target.renderer.inline)(context, &heading.children);
         });
@@ -828,13 +940,15 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     let removed = removable
         && target.fields(facts).find(|spec| matches!(spec.source, Source::Title { .. })).is_some_and(|spec| {
             let request = Request { target, spec, facts, options, spent: [0; 2] };
-            let blocks =
-                render(target, facts, spec.name, [0; 2], None, |context| (target.renderer.blocks)(context, body));
+            let blocks = render(target, facts, spec.name, [0; 2], None, false, |context| {
+                (target.renderer.blocks)(context, body);
+            });
             request.fits(&Rendered::text(first_line(&blocks.unprefixed())))
         });
-    let draw_body = |field, spent, cut: Option<&Cut>| {
+    let draw_body = |field, spent, cut: Option<&Cut>, origins| {
         let spent = if removed { [0; 2] } else { spent };
-        let mut rendered = render(target, facts, field, spent, cut, |context| (target.renderer.blocks)(context, body));
+        let mut rendered =
+            render(target, facts, field, spent, cut, origins, |context| (target.renderer.blocks)(context, body));
         if removed {
             rendered.text = without_first_line(&rendered.text);
             rendered.links.clear();
@@ -863,7 +977,8 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     changes.push(request.change(Feature::TargetUrl, None, Some(When::Refused)));
                 }
                 let suffix = target_url.as_ref().and_then(Option::as_deref).filter(|_| !derived).filter(|url| {
-                    let blank = measure::blank(&target.form.visible(&draw_body(spec.name, spent, None).text));
+                    let blank =
+                        target.form.visible_blank(&draw_body(spec.name, spent, None, false).text, measure::blank);
                     let least = if blank { (*url).to_owned() } else { format!("{ELLIPSIS}\n\n{url}") };
                     let fits = request.fits(&Rendered::text(least));
                     if !fits {
@@ -871,20 +986,35 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     }
                     fits
                 });
-                let full = (facts.overflow == Overflow::Thread && target.threads() && !derived)
-                    .then(|| draw_body(spec.name, spent, None));
-                let split = full.as_ref().and_then(|full| thread::split(&request, full, suffix));
-                let mut fitted = match full.zip(split) {
+                let markup = target.form.splits_by_nodes();
+                let full = (facts.overflow == Overflow::Thread
+                    && facts.placement != Some(Placement::Story)
+                    && target.threads()
+                    && !derived)
+                    .then(|| draw_body(spec.name, spent, None, !markup));
+                let split = full.and_then(|full| {
+                    let split = if markup {
+                        markup::split(&request, document, body, &full, suffix)
+                    } else {
+                        thread::split(&request, &full, suffix).map(|thread| anchored(document, &full, thread))
+                    };
+                    split.map(|split| (full, split))
+                });
+                let mut fitted = match split {
                     Some((full, mut split)) => {
-                        let first = split.parts.remove(0);
-                        threaded = Some((spec.name, split, full));
+                        let mut first = split.parts.remove(0);
+                        let mut changes = full.changes;
+                        changes.reserve_exact(first.rendered.changes.len() + 1);
+                        changes.append(&mut first.rendered.changes);
+                        changes.push(request.change(Feature::Text, None, Some(When::Thread)));
+                        first.rendered.changes = changes;
+                        first.rendered.alts = full.alts;
+                        threaded = Some((spec.name, split));
                         first
                     }
-                    None => request.fit(
-                        || Outline::of_nodes(document, body, math),
-                        !removed,
-                        |cut| appended(target, draw_body(spec.name, spent, cut), suffix),
-                    ),
+                    None => request.fit(&|| Outline::of_nodes(document, body, math), !removed, &|cut| {
+                        appended(target, draw_body(spec.name, spent, cut, false), suffix)
+                    }),
                 };
                 if suffix.is_some() {
                     fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));
@@ -896,21 +1026,21 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                 fitted
             }
             (Source::Title { .. }, Some(title), _) => explicit_title(&request, title),
-            (Source::Title { .. }, None, Some(heading)) => request.fit(
-                || Outline::of_nodes(document, std::slice::from_ref(heading), math),
-                true,
-                |cut| draw_heading(heading, spec.name, spent, cut),
-            ),
+            (Source::Title { .. }, None, Some(heading)) => {
+                request.fit(&|| Outline::of_nodes(document, std::slice::from_ref(heading), math), true, &|cut| {
+                    draw_heading(heading, spec.name, spent, cut)
+                })
+            }
             (Source::Title { .. }, None, None) => {
                 let source = first_line(
-                    &render(target, facts, spec.name, spent, None, |context| (target.renderer.blocks)(context, body))
-                        .unprefixed(),
+                    &render(target, facts, spec.name, spent, None, false, |context| {
+                        (target.renderer.blocks)(context, body);
+                    })
+                    .unprefixed(),
                 );
-                let mut fitted = request.fit(
-                    || Outline::of_text(&source),
-                    true,
-                    |cut| Rendered::text(cut.map_or_else(|| source.clone(), |cut| cut.replacement.clone())),
-                );
+                let mut fitted = request.fit(&|| Outline::of_text(&source), true, &|cut| {
+                    Rendered::text(cut.map_or_else(|| source.clone(), |cut| cut.replacement.clone()))
+                });
                 if let Some(heading) = leading {
                     fitted.rendered.changes.extend(draw_heading(heading, spec.name, spent, None).changes);
                 }
@@ -954,7 +1084,9 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
             text: rendered.text,
         });
     }
-    if facts.media_count == 0 && fields.iter().all(|field| measure::blank(&target.form.visible(&field.text))) {
+    let blank = |text: &str| target.form.visible_blank(text, measure::blank);
+    let later = threaded.as_ref().is_some_and(|(_, split)| split.parts.iter().any(|part| !blank(&part.rendered.text)));
+    if facts.media_count == 0 && !later && fields.iter().all(|field| blank(&field.text)) {
         let end = children.last().map_or(0, |node| node.range.end);
         let (class, reason) = target.rule(Feature::Text).outcome(Some(When::Empty));
         let field =
@@ -985,39 +1117,52 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     media(children, &mut references);
     let mut parts = vec![];
     if let Some(threaded) = threaded {
-        parts = threaded_parts(target, document, threaded, &fields, &measurements, &items);
+        parts = threaded_parts(target, threaded, &fields, &measurements, &items);
         references.clone_from(&parts[0].media);
         items.clone_from(&parts[0].items);
     }
     Projection { fields, measurements, changes, media: references, blocks, items, parts }
 }
 
-fn threaded_parts(
-    target: &'static Target,
-    document: &Document,
-    (name, split, full): (FieldName, thread::Thread, Rendered),
-    fields: &[Field],
-    measurements: &[Measurement],
-    items: &[Attachment],
-) -> Vec<Part> {
+fn anchored(document: &Document, full: &Rendered, mut thread: thread::Thread) -> Split {
     let children = document.children();
-    let ranges: Vec<Range> = split.spans.iter().map(|span| source_range(document, &full, span)).collect();
-    let mut ids: Vec<Vec<String>> = vec![vec![]; split.spans.len()];
+    let mut locator = Locator::new(document, full);
+    let ranges: Vec<Range> = thread.spans.iter().map(|span| locator.range(span)).collect();
+    for (index, at, mut change) in thread.truncated {
+        let range = ranges[index];
+        let (start, exact) = locator.start(at);
+        change.range = Some(Range { start: start.clamp(range.start, range.end), end: range.end });
+        if let Some(truncated) = &mut change.truncated {
+            truncated.exact = exact;
+        }
+        thread.parts[0].rendered.changes.push(change);
+    }
+    let mut ids: Vec<Vec<String>> = vec![vec![]; thread.spans.len()];
     for anchor in &full.anchors {
         let Some(range) = anchor.node else { continue };
         let Ok(at) = children.binary_search_by_key(&range.start, |node| node.range.start) else { continue };
-        let index = split.spans.iter().rposition(|span| span.start <= anchor.at).unwrap_or(0);
+        let index = thread.spans.partition_point(|span| span.start <= anchor.at).saturating_sub(1);
         for id in children[at].media_ids().unwrap_or_default() {
             if !ids[index].contains(id) {
                 ids[index].push(id.clone());
             }
         }
     }
-    let placed: Vec<String> = ids.iter().flatten().map(|id| format!("media:{id}")).collect();
+    Split { parts: thread.parts, ranges, boundaries: thread.boundaries, media: ids }
+}
+
+fn threaded_parts(
+    target: &'static Target,
+    (name, split): (FieldName, Split),
+    fields: &[Field],
+    measurements: &[Measurement],
+    items: &[Attachment],
+) -> Vec<Part> {
+    let placed: Vec<String> = split.media.iter().flatten().map(|id| format!("media:{id}")).collect();
     let mut parts = vec![];
     let first = fields.iter().find(|field| field.name == name).cloned();
     let mut rest = split.parts.into_iter();
-    for (index, media) in ids.into_iter().enumerate() {
+    for (index, media) in split.media.into_iter().enumerate() {
         let (field, measured) = if index == 0 {
             let measured = measurements
                 .iter()
@@ -1053,44 +1198,67 @@ fn threaded_parts(
             measurements: measured,
             media,
             items: attached,
-            range: ranges[index],
+            range: split.ranges[index],
             boundary: split.boundaries[index],
         });
     }
     parts
 }
 
-fn source_range(document: &Document, full: &Rendered, span: &Span<usize>) -> Range {
-    let origins = &full.origins;
-    let exact = |(rendered, source): &(Span<usize>, Range)| {
-        full.text.get(rendered.clone()).is_some_and(|text| text == document.source(*source))
-    };
-    let offset = |origin: &(Span<usize>, Range), at: usize| {
-        origin.1.start + full.text[origin.0.start..at].encode_utf16().count() as u32
-    };
-    let first = origins.partition_point(|(rendered, _)| rendered.end <= span.start);
-    let start = match origins.get(first) {
-        Some(origin) if origin.0.start <= span.start => {
-            if exact(origin) {
-                offset(origin, span.start)
-            } else {
-                origin.1.start
-            }
+struct Locator<'a> {
+    document: &'a Document,
+    full: &'a Rendered,
+    exact: Vec<Option<bool>>,
+    cursor: (usize, usize, u32),
+}
+
+impl<'a> Locator<'a> {
+    fn new(document: &'a Document, full: &'a Rendered) -> Self {
+        Self { document, full, exact: vec![None; full.origins.len()], cursor: (usize::MAX, 0, 0) }
+    }
+
+    fn exact(&mut self, index: usize) -> bool {
+        let (rendered, source) = &self.full.origins[index];
+        *self.exact[index].get_or_insert_with(|| {
+            self.full.text.get(rendered.clone()).is_some_and(|text| text == self.document.source(*source))
+        })
+    }
+
+    fn offset(&mut self, index: usize, at: usize) -> u32 {
+        let (rendered, source) = &self.full.origins[index];
+        let (origin, byte, units) = self.cursor;
+        let (from, counted) = if origin == index && byte <= at { (byte, units) } else { (rendered.start, 0) };
+        let units = counted + self.full.text[from..at].encode_utf16().count() as u32;
+        self.cursor = (index, at, units);
+        source.start + units
+    }
+
+    fn start(&mut self, at: usize) -> (u32, bool) {
+        let origins = &self.full.origins;
+        let first = origins.partition_point(|(rendered, _)| rendered.end <= at);
+        match origins.get(first) {
+            Some(_) if origins[first].0.start <= at && self.exact(first) => (self.offset(first, at), true),
+            Some(origin) if origin.0.start <= at => (origin.1.start, false),
+            _ => (first.checked_sub(1).map_or(0, |previous| origins[previous].1.end), false),
         }
-        _ => first.checked_sub(1).map_or(0, |previous| origins[previous].1.end),
-    };
-    let last = origins.partition_point(|(rendered, _)| rendered.start < span.end);
-    let end = match last.checked_sub(1).map(|index| &origins[index]) {
-        Some(origin) if span.end <= origin.0.end => {
-            if exact(origin) {
-                offset(origin, span.end)
-            } else {
-                origin.1.end
+    }
+
+    fn range(&mut self, span: &Span<usize>) -> Range {
+        let origins = &self.full.origins;
+        let (start, _) = self.start(span.start);
+        let last = origins.partition_point(|(rendered, _)| rendered.start < span.end);
+        let end = match last.checked_sub(1) {
+            Some(index) if span.end <= origins[index].0.end => {
+                if self.exact(index) {
+                    self.offset(index, span.end)
+                } else {
+                    origins[index].1.end
+                }
             }
-        }
-        _ => origins.get(last).map_or(document.end().offset, |next| next.1.start),
-    };
-    Range { start, end: end.max(start) }
+            _ => origins.get(last).map_or(self.document.end().offset, |next| next.1.start),
+        };
+        Range { start, end: end.max(start) }
+    }
 }
 
 fn explicit_title(request: &Request, title: &str) -> Fitted {

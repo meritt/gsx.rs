@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use gsx_core::document::{Document, parse};
 use gsx_core::project::{
-    Boundary, Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Placement, Projection,
-    Style, Target, Unit, project, project_with,
+    Boundary, Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Part, Placement,
+    Projection, Style, Target, Unit, project, project_with,
 };
 use gsx_core::targets::{TARGETS, target};
 
@@ -65,6 +65,78 @@ fn threads_split_linearly() {
             assert!(long < floor * 10, "{} {pattern:?}: {short:?} for {times}, {long:?} for 4x", target.name);
         }
     }
+}
+
+#[test]
+fn threads_of_tiny_parts_split_linearly() {
+    let threaded = |document: &Document, target: &'static Target, maximum: usize| {
+        let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+        let options = Options { search: None, maximum: Some(maximum) };
+        (0..2)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                let parts = project_with(document, target, &facts, &options).parts.len();
+                assert!(parts > 50, "{} split into {parts} parts", target.name);
+                started.elapsed()
+            })
+            .min()
+            .unwrap()
+    };
+    for (pattern, maximum) in [("word ", 1), ("x", 1), ("*a* https://example.com/c ", 30)] {
+        let times = 1_600 / pattern.len();
+        let small = parse(&pattern.repeat(times), &[]).unwrap();
+        let large = parse(&pattern.repeat(8 * times), &[]).unwrap();
+        for target in TARGETS.iter().filter(|target| target.threads()) {
+            let (short, long) = (threaded(&small, target, maximum), threaded(&large, target, maximum));
+            let floor = short.max(std::time::Duration::from_millis(2));
+            assert!(long < floor * 16, "{} {pattern:?}: {short:?} for {times}, {long:?} for 8x", target.name);
+        }
+    }
+}
+
+#[test]
+fn threads_cut_a_giant_word_linearly() {
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let document = |length: usize| parse(&format!("{} y", "x".repeat(length)), &[]).unwrap();
+    let (small, large) = (document(16_000), document(128_000));
+    for target in TARGETS.iter().filter(|target| target.threads()) {
+        let fastest = |document: &Document| {
+            (0..2)
+                .map(|_| {
+                    let started = std::time::Instant::now();
+                    assert!(project(document, target, &facts).parts.len() > 1, "{} did not split", target.name);
+                    started.elapsed()
+                })
+                .min()
+                .unwrap()
+        };
+        let (short, long) = (fastest(&small), fastest(&large));
+        let floor = short.max(std::time::Duration::from_millis(2));
+        assert!(long < floor * 16, "{}: {short:?} for 16000, {long:?} for 128000", target.name);
+    }
+}
+
+#[test]
+fn threads_far_below_a_large_maximum_split_linearly() {
+    let facts = Facts { overflow: Overflow::Thread, characters_reserved_per_url: Some(u32::MAX), ..Facts::default() };
+    let options = Options { search: None, maximum: Some(1_000_000) };
+    let target = target("mastodon-plain").unwrap();
+    let document = |times: usize| parse(&"word https://example.com/c ".repeat(times), &[]).unwrap();
+    let (small, large) = (document(200), document(1_600));
+    let fastest = |document: &Document| {
+        (0..2)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                let parts = project_with(document, target, &facts, &options).parts.len();
+                assert!(parts > 50, "split into {parts} parts");
+                started.elapsed()
+            })
+            .min()
+            .unwrap()
+    };
+    let (short, long) = (fastest(&small), fastest(&large));
+    let floor = short.max(std::time::Duration::from_millis(2));
+    assert!(long < floor * 16, "{short:?} for 200, {long:?} for 1600");
 }
 
 fn reasons(projection: &Projection) -> Vec<(Class, Feature, &'static str)> {
@@ -457,6 +529,98 @@ fn thread_parts_cover_text_rendered_differently_from_its_source() {
 }
 
 #[test]
+fn thread_with_one_part_stays_unsplit() {
+    let limited = Facts { max_characters: Some(1), ..Facts::default() };
+    let projection = run("x-plain", "-", &Facts { overflow: Overflow::Thread, ..limited });
+    assert_eq!(projection.parts, [] as [Part; 0]);
+    assert!(projection.changes.iter().all(|change| change.reason != "text_threaded"));
+    assert_eq!(projection, run("x-plain", "-", &limited));
+}
+
+#[test]
+fn thread_parts_trim_whitespace_at_grapheme_cuts() {
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let options = Options { search: None, maximum: Some(5) };
+    let threaded = |name: &str, markdown: &str| {
+        project_with(&parse(markdown, &[]).unwrap(), target(name).unwrap(), &facts, &options)
+    };
+    assert_eq!(threaded("x-plain", &format!("{}&", "\t".repeat(21))).parts, [] as [Part; 0]);
+}
+
+#[test]
+fn thread_parts_keep_links_whole() {
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let options = Options { search: None, maximum: Some(5) };
+    let threaded = |markdown: &str| {
+        project_with(&parse(markdown, &[]).unwrap(), target("bluesky-entities").unwrap(), &facts, &options)
+    };
+    let projection = threaded("ab[aaaabbbb](https://example.com) cd");
+    let texts: Vec<_> = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+    assert_eq!(texts, ["ab", "aaaa…", "cd"]);
+    assert_eq!(boundaries(&projection), [Some(Boundary::Grapheme), Some(Boundary::Word), None]);
+    let link = &projection.parts[1];
+    let facets: Vec<_> = link.fields[0]
+        .entities
+        .iter()
+        .map(|entity| (entity.style, entity.range.start, entity.range.end, entity.value.as_deref()))
+        .collect();
+    assert_eq!(facets, [(Style::Link, 0, 7, Some("https://example.com/"))]);
+    assert_eq!((link.range.start, link.range.end), (3, 11));
+    let truncated: Vec<_> = projection
+        .changes
+        .iter()
+        .filter_map(|change| change.truncated.map(|truncated| (change.range.unwrap(), truncated)))
+        .map(|(range, truncated)| {
+            (range.start, range.end, truncated.unit, truncated.maximum, truncated.value, truncated.exact)
+        })
+        .collect();
+    assert_eq!(truncated, [(7, 11, Unit::Graphemes, 5, 8, true)]);
+    let whole = threaded("[aaaa bbbb](https://example.com)");
+    assert_eq!(whole.parts, [] as [Part; 0]);
+    assert_eq!(text(&whole, FieldName::Text), "aaaa…");
+}
+
+#[test]
+fn thread_parts_cut_back_before_a_link_fit_their_maximum() {
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let options = Options { search: None, maximum: Some(7) };
+    let markdown = "漢字www.example.org[https://example.com](https://example.com)";
+    let projection = project_with(&parse(markdown, &[]).unwrap(), target("x-plain").unwrap(), &facts, &options);
+    let texts: Vec<_> = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+    assert_eq!(texts, ["漢字www", ".exampl", "e.or", "g", "…"]);
+    for part in &projection.parts {
+        for measurement in &part.measurements {
+            assert!(measurement.maximum.is_none_or(|maximum| measurement.value <= maximum), "{texts:?}");
+        }
+    }
+}
+
+#[test]
+fn thread_parts_keep_bare_urls_whole() {
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let url = "https://example.com/abcdefghij";
+    for name in ["x-plain", "mastodon-plain"] {
+        let options = Options { search: None, maximum: Some(25) };
+        let markdown = format!("Смотри:{url}");
+        let projection = project_with(&parse(&markdown, &[]).unwrap(), target(name).unwrap(), &facts, &options);
+        let texts: Vec<_> = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+        let holders: Vec<_> = texts.iter().filter(|text| text.contains("example")).collect();
+        assert_eq!(holders.len(), 1, "{name}: {texts:?}");
+        assert!(holders[0].contains(url), "{name}: {texts:?}");
+        for part in &projection.parts {
+            for measurement in &part.measurements {
+                assert!(measurement.maximum.is_none_or(|maximum| measurement.value <= maximum), "{name}: {texts:?}");
+            }
+        }
+    }
+    let markdown = format!("Начало поста. https://example.com/{} Конец поста.", "a".repeat(600));
+    let projection = run("threads-entities", &markdown, &facts);
+    let texts: Vec<_> = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+    assert_eq!(texts, ["Начало поста.", "…", "Конец поста."]);
+    assert!(reasons(&projection).contains(&(Class::Approximated, Feature::Text, "text_truncated")));
+}
+
+#[test]
 fn manifests_are_deterministic_and_distinct() {
     let digests: HashSet<_> = TARGETS.iter().map(|target| target.digest()).collect();
     assert_eq!(digests.len(), TARGETS.len());
@@ -465,4 +629,65 @@ fn manifests_are_deterministic_and_distinct() {
         assert_eq!(target.digest(), target.digest());
         assert_eq!(target.digest().len(), 16);
     }
+}
+
+#[test]
+fn markup_thread_fills_parts_across_collapsed_blank_lines() {
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let paragraph = "word ".repeat(180);
+    let paragraph = paragraph.trim();
+    let markdown = format!("{paragraph}{}{paragraph}\n\n{paragraph}", "\n".repeat(300));
+    let projection = run("discord-markdown", &markdown, &facts);
+    assert_eq!(projection.parts.len(), 2);
+    assert_eq!(projection.parts[0].fields[0].text, format!("{paragraph}\n\n{paragraph}"));
+}
+
+#[test]
+fn markup_thread_opens_with_media_alone_when_the_element_then_fits() {
+    let facts = Facts { overflow: Overflow::Thread, media: Some(MediaKind::Image), ..Facts::default() };
+    let code = format!("```\n{}\n```", "x".repeat(1500));
+    for markdown in [code.clone(), format!("#\n\n{code}")] {
+        let projection = run("telegram-html", &markdown, &facts);
+        let texts: Vec<_> = projection.parts.iter().map(|part| part.fields[0].text.as_str()).collect();
+        assert_eq!(texts, ["", &format!("<pre>{}</pre>", "x".repeat(1500))], "{markdown:?}");
+        assert!(projection.changes.iter().all(|change| change.reason != "text_truncated"));
+    }
+}
+
+#[test]
+fn telegram_thread_parts_without_listed_media_take_the_text_limit() {
+    let paragraph = format!("{}.", "word ".repeat(180).trim_end());
+    let markdown = format!("{}\n\n::media{{id=\"photo\"}}\n\nAfter the photo.", vec![paragraph; 6].join("\n\n"));
+    let document = parse(&markdown, &[]).unwrap();
+    let items = [MediaFact { id: "photo", format: Format::Image, alt: None, spoiler: false, inline: false }];
+    let listed = Facts {
+        overflow: Overflow::Thread,
+        media: Some(MediaKind::Image),
+        media_count: 1,
+        items: Some(&items),
+        ..Facts::default()
+    };
+    let maximum = |part: &Part| part.measurements.iter().find(|m| m.field == FieldName::Text).unwrap().maximum;
+    let projection = project(&document, target("telegram-html").unwrap(), &listed);
+    let (first, rest) = projection.parts.split_first().unwrap();
+    assert!(first.media.is_empty() && first.items.is_empty());
+    assert_eq!(maximum(first), Some(4096));
+    assert!(first.fields[0].text.chars().count() > 1024, "{}", first.fields[0].text.len());
+    let carrier = rest.iter().find(|part| part.media == ["photo"]).unwrap();
+    assert_eq!(maximum(carrier), Some(1024));
+    assert!(rest.iter().filter(|part| part.media.is_empty()).all(|part| maximum(part) == Some(4096)));
+
+    let unlisted = Facts { items: None, ..listed };
+    let projection = project(&document, target("telegram-html").unwrap(), &unlisted);
+    assert_eq!(maximum(&projection.parts[0]), Some(1024));
+}
+
+#[test]
+fn markup_thread_keeps_no_media_alone_part_before_an_element_truncated_anyway() {
+    let facts = Facts { overflow: Overflow::Thread, media: Some(MediaKind::Image), ..Facts::default() };
+    let options = Options { search: None, maximum: Some(3) };
+    let document = parse("#\n\n- abcdef ghijkl", &[]).unwrap();
+    let projection = project_with(&document, target("telegram-html").unwrap(), &facts, &options);
+    assert_eq!(projection.parts, [] as [Part; 0]);
+    assert_eq!(text(&projection, FieldName::Text), "– …");
 }

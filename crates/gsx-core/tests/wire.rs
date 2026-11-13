@@ -147,7 +147,7 @@ fn lists_target_capabilities_from_the_rule_table() {
     let json = targets();
     let expected = [
         concat!(
-            r#""threads":false,"facts":["media","mediaCount","placement","items"],"#,
+            r#""threads":true,"facts":["media","mediaCount","placement","overflow","items"],"#,
             r#""fields":[{"name":"text","required":false,"media":"any"}],"#,
             r#""limits":[{"field":"text","unit":"code-points","maximum":4096,"fact":null,"placements":["post"],"#,
             r#""media":"without","rendering":"visible"},"#,
@@ -161,7 +161,8 @@ fn lists_target_capabilities_from_the_rule_table() {
             r#"{"feature":"text","class":"approximated","reason":"text_truncated","conditions":["#,
             r#"{"when":"empty","class":"blocked","reason":"text_empty"},"#,
             r#"{"when":"overflow","class":"blocked","reason":"text_too_long"},"#,
-            r#"{"when":"blank_lines","class":"approximated","reason":"blank_lines_collapsed"}]}],"#,
+            r#"{"when":"blank_lines","class":"approximated","reason":"blank_lines_collapsed"},"#,
+            r#"{"when":"thread","class":"approximated","reason":"text_threaded"}]}],"#,
             r#""media":{"formats":["image","gif","video","audio"],"alt":["image","gif","video","audio"],"#,
             r#""spoiler":{"mode":"carried","formats":["image","gif","video"]},"inline":false,"groups":[]}},"#,
             r#"{"name":"telegram-html-rich""#,

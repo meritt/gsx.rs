@@ -172,6 +172,20 @@ impl<'a> Outline<'a> {
         Self::new(vec![leaf], vec![(0, usize::from(!text.is_empty()))], 0)
     }
 
+    pub fn of_rendered(text: &'a str) -> Self {
+        let leaf = Leaf {
+            node: None,
+            text,
+            code: false,
+            atomic: false,
+            nested: false,
+            previous: None,
+            source: Some((0, true)),
+        };
+        let units = text.encode_utf16().count() as u32;
+        Self::new(vec![leaf], vec![(0, usize::from(!text.is_empty()))], units)
+    }
+
     fn new(leaves: Vec<Leaf<'a>>, flows: Vec<(usize, usize)>, end: u32) -> Self {
         Outline { leaves, flows, end, built: RefCell::default() }
     }

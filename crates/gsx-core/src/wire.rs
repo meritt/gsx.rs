@@ -6,8 +6,8 @@ use crate::document::{
 };
 use crate::measure::{Fact, Limit, Maximum, Placement};
 use crate::project::{
-    self, Attachment, Block, Change, Entity, Facts, Field, Format, Item, Measurement, MediaFact, MediaShape, Offsets,
-    Part, Projection, Slot, Target, Truncated,
+    self, Attachment, Block, Change, Entity, Facts, Field, Format, Item, Measurement, MediaFact, MediaShape, Part,
+    Projection, Slot, Target, Truncated,
 };
 use crate::source;
 use crate::targets::TARGETS;
@@ -97,11 +97,7 @@ pub fn targets() -> String {
         out.key("form");
         out.string(target.form.version());
         out.key("offsets");
-        match target.form.entities().map(|form| form.offsets) {
-            Some(Offsets::Utf8) => out.string("utf8"),
-            Some(Offsets::Utf16) => out.string("utf16"),
-            None => out.raw("null"),
-        }
+        out.optional(target.form.entities().map(|form| form.offsets.name()));
         out.key("digest");
         out.string(&target.digest());
         out.key("manifest");

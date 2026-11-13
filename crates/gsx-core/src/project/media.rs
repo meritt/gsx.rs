@@ -195,7 +195,7 @@ pub fn positions<'a>(items: &[MediaFact<'a>]) -> HashMap<&'a str, usize> {
     found
 }
 
-fn kind(format: Format) -> Option<MediaKind> {
+pub(super) fn kind(format: Format) -> Option<MediaKind> {
     match format {
         Format::Image | Format::Gif => Some(MediaKind::Image),
         Format::Video => Some(MediaKind::Video),

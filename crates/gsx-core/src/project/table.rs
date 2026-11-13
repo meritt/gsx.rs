@@ -163,6 +163,15 @@ pub enum Offsets {
     Utf16,
 }
 
+impl Offsets {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Offsets::Utf8 => "utf8",
+            Offsets::Utf16 => "utf16",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Style {
     Bold,
@@ -494,6 +503,10 @@ impl Form {
         }
     }
 
+    pub const fn splits_by_nodes(self) -> bool {
+        matches!(self, Form::Html(_) | Form::Markdown(_))
+    }
+
     pub const fn markdown(self) -> Option<&'static MarkdownForm> {
         match self {
             Form::Markdown(form) => Some(form),
@@ -522,10 +535,7 @@ impl Form {
                 let _ = writeln!(out, "  escape {escape}");
             }
             Form::Entities(form) => {
-                let offsets = match form.offsets {
-                    Offsets::Utf8 => "utf8",
-                    Offsets::Utf16 => "utf16",
-                };
+                let offsets = form.offsets.name();
                 let styles =
                     join(form.styles.iter().map(|(feature, style)| format!("{}={}", feature.name(), style.name())));
                 let detection = match form.detection {
@@ -610,43 +620,73 @@ impl Form {
         let Some(form) = self.html() else {
             return Cow::Borrowed(text);
         };
-        let rich = form.blocks == HtmlBlocks::Rich;
         let mut out = String::with_capacity(text.len());
-        let mut boundary = false;
-        let push = |out: &mut String, text: &str, boundary: &mut bool| {
-            if text.is_empty() {
-                return;
-            }
-            if std::mem::take(boundary) && !out.is_empty() && !out.ends_with('\n') {
-                out.push('\n');
-            }
-            out.push_str(text);
-        };
-        let mut rest = text;
-        while let Some(at) = rest.find(['<', '&']) {
-            push(&mut out, &rest[..at], &mut boundary);
-            rest = &rest[at..];
-            if rest.starts_with('<') {
-                let end = rest.find('>').map_or(rest.len(), |end| end + 1);
-                let name = rest[1..end].trim_start_matches('/').split([' ', '/', '>']).next().unwrap_or("");
-                if &rest[..end] == "<br>" {
-                    push(&mut out, "\n", &mut boundary);
-                } else if rich && RICH_BLOCKS.contains(&name) {
-                    boundary = true;
-                }
-                rest = &rest[end..];
-            } else {
-                let (decoded, length) = [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&amp;", "&")]
-                    .into_iter()
-                    .find(|(entity, _)| rest.starts_with(entity))
-                    .map_or(("&", 1), |(entity, char)| (char, entity.len()));
-                push(&mut out, decoded, &mut boundary);
-                rest = &rest[length..];
-            }
-        }
-        push(&mut out, rest, &mut boundary);
+        visible_parts(text, form.blocks == HtmlBlocks::Rich, usize::MAX, &mut |part| {
+            out.push_str(part);
+            true
+        });
         Cow::Owned(out)
     }
+
+    pub fn visible_blank(self, text: &str, blank: fn(&str) -> bool) -> bool {
+        match self.html() {
+            Some(form) => visible_parts(text, form.blocks == HtmlBlocks::Rich, 256, &mut |part| blank(part)),
+            None => blank(text),
+        }
+    }
+}
+
+fn visible_parts(text: &str, rich: bool, window: usize, emit: &mut dyn FnMut(&str) -> bool) -> bool {
+    let (mut started, mut newline) = (false, false);
+    let mut push = |part: &str, boundary: &mut bool| {
+        if part.is_empty() {
+            return true;
+        }
+        if std::mem::take(boundary) && started && !newline && !emit("\n") {
+            return false;
+        }
+        started = true;
+        newline = part.ends_with('\n');
+        emit(part)
+    };
+    let mut boundary = false;
+    let mut rest = text;
+    while !rest.is_empty() {
+        let scope = &rest[..rest.floor_char_boundary(window)];
+        let Some(at) = scope.bytes().position(|byte| byte == b'<' || byte == b'&') else {
+            if !push(scope, &mut boundary) {
+                return false;
+            }
+            rest = &rest[scope.len()..];
+            continue;
+        };
+        if !push(&rest[..at], &mut boundary) {
+            return false;
+        }
+        rest = &rest[at..];
+        if rest.starts_with('<') {
+            let end = rest.find('>').map_or(rest.len(), |end| end + 1);
+            if &rest[..end] == "<br>" {
+                if !push("\n", &mut boundary) {
+                    return false;
+                }
+            } else if rich {
+                let tag = rest[1..end].trim_start_matches('/');
+                boundary |= RICH_BLOCKS.contains(&&tag[..tag.find([' ', '/', '>']).unwrap_or(tag.len())]);
+            }
+            rest = &rest[end..];
+        } else {
+            let (decoded, length) = [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&amp;", "&")]
+                .into_iter()
+                .find(|(entity, _)| rest.starts_with(entity))
+                .map_or(("&", 1), |(entity, char)| (char, entity.len()));
+            if !push(decoded, &mut boundary) {
+                return false;
+            }
+            rest = &rest[length..];
+        }
+    }
+    true
 }
 
 #[derive(Clone, Copy)]
@@ -767,10 +807,14 @@ impl Target {
         codes
     }
 
+    pub fn conditions(&self, feature: Feature, when: When) -> bool {
+        self.rules
+            .iter()
+            .any(|rule| rule.feature == feature && rule.conditions.iter().any(|condition| condition.when == when))
+    }
+
     pub fn threads(&self) -> bool {
-        self.rules.iter().any(|rule| {
-            rule.feature == Feature::Text && rule.conditions.iter().any(|condition| condition.when == When::Thread)
-        })
+        self.conditions(Feature::Text, When::Thread)
     }
 
     pub fn facts(&self) -> Vec<&'static str> {
@@ -781,8 +825,7 @@ impl Target {
                 .any(|limit| matches!(limit.maximum, Maximum::Resolved(read, _) | Maximum::Given(read) if read == fact))
         };
         let weighted = self.limits.iter().any(|limit| limit.unit == Unit::MastodonWeighted);
-        let empty = self.handles(Feature::Text)
-            && self.rule(Feature::Text).conditions.iter().any(|condition| condition.when == When::Empty);
+        let empty = self.conditions(Feature::Text, When::Empty);
         [
             (
                 "media",

@@ -1,6 +1,6 @@
 use super::limits::{Alt, CodePoints, Image, Limit, Only, Text, limit};
 use super::plain::BODY;
-use super::{DEFAULT, Rules, SPOILERS_CARRIED, rule};
+use super::{DEFAULT, Rules, SPOILERS_CARRIED, THREADED_TEXT, rule};
 use crate::forms::markdown::RENDERER;
 use crate::project::Class::{Approximated, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
@@ -71,7 +71,7 @@ pub static DISCORD: Target = Target {
     spoilers: Spoilers::Items(&[Format::Image, Format::Gif, Format::Video, Format::Audio]),
     ..markdown(
         "discord-markdown",
-        rules!(Rules { media: SPOILERS_CARRIED, ..DISCORD_RULES }),
+        rules!(Rules { media: SPOILERS_CARRIED, text: THREADED_TEXT, ..DISCORD_RULES }),
         &DISCORD_FORM,
         &[limit(Text, CodePoints, 2000), limit(Alt, CodePoints, 1024)],
     )
@@ -116,7 +116,7 @@ pub(super) const SLACK_RULES: Rules =
 
 pub static SLACK: Target = markdown(
     "slack-markdown",
-    rules!(SLACK_RULES),
+    rules!(Rules { text: THREADED_TEXT, ..SLACK_RULES }),
     &SLACK_FORM,
     &[limit(Text, CodePoints, 12000), limit(Alt, CodePoints, 1000).when(Only(Image))],
 );

@@ -705,7 +705,7 @@ impl Html {
         let form = context.target.form;
         let written = context.writer().since(start);
         let inner = &written["<p>".len()..written.len() - "</p>".len()];
-        let empty = form.visible(inner).trim_matches(blank).is_empty();
+        let empty = form.visible_blank(inner, |part| part.chars().all(blank));
         let lead = inner.len() - inner.trim_start_matches("<br>").len();
         let trail = inner.len() - inner.trim_end_matches("<br>").len();
         if empty {
