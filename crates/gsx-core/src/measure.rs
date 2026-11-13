@@ -63,6 +63,18 @@ pub enum Fact {
     HashtagLimit,
 }
 
+impl Fact {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Fact::MaxCharacters => "maxCharacters",
+            Fact::CharactersReservedPerUrl => "charactersReservedPerUrl",
+            Fact::DescriptionLimit => "descriptionLimit",
+            Fact::CaptionLimit => "captionLimit",
+            Fact::HashtagLimit => "hashtagLimit",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Facts<'a> {
     pub urls: &'a [Range<usize>],

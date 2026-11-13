@@ -143,6 +143,58 @@ fn lists_targets_with_their_manifests() {
 }
 
 #[test]
+fn lists_target_capabilities_from_the_rule_table() {
+    let json = targets();
+    let expected = [
+        concat!(
+            r#""threads":false,"facts":["media","mediaCount","placement","items"],"#,
+            r#""fields":[{"name":"text","required":false,"media":"any"}],"#,
+            r#""limits":[{"field":"text","unit":"code-points","maximum":4096,"fact":null,"placements":["post"],"#,
+            r#""media":"without","rendering":"visible"},"#,
+            r#"{"field":"text","unit":"code-points","maximum":1024,"fact":null,"placements":["post","reel"],"#,
+            r#""media":"with","rendering":"visible"},"#,
+            r#"{"field":"text","unit":"code-points","maximum":2048,"fact":null,"placements":["story"],"#,
+            r#""media":"any","rendering":"visible"}],"#,
+            r#""features":[{"feature":"heading","class":"textual_fallback","reason":"heading_as_bold","conditions":[]},"#,
+        ),
+        concat!(
+            r#"{"feature":"text","class":"approximated","reason":"text_truncated","conditions":["#,
+            r#"{"when":"empty","class":"blocked","reason":"text_empty"},"#,
+            r#"{"when":"overflow","class":"blocked","reason":"text_too_long"}]}],"#,
+            r#""media":{"formats":["image","gif","video","audio"],"alt":["image","gif","video","audio"],"#,
+            r#""spoiler":{"mode":"carried","formats":["image","gif","video"]},"inline":false,"groups":[]}},"#,
+            r#"{"name":"telegram-html-rich""#,
+        ),
+        concat!(
+            r#""groups":[{"layout":"collage","formats":["image","video"],"minimum":2,"maximum":50},"#,
+            r#"{"layout":"slideshow","formats":["image"],"minimum":2,"maximum":50}]}}"#,
+        ),
+        concat!(
+            r#""limits":[{"field":"text","unit":"mastodon-weighted","maximum":500,"fact":"maxCharacters","#,
+            r#""placements":null,"media":"any","rendering":"payload"},"#,
+            r#"{"field":"alt","unit":"code-points","maximum":null,"fact":"descriptionLimit","placements":null,"#,
+            r#""media":"any","rendering":"payload"}]"#,
+        ),
+        r#"{"field":"text","unit":"code-points","maximum":null,"fact":null,"placements":null,"media":"any","rendering":"payload"}"#,
+        r#""spoiler":{"mode":"widened","formats":["image","gif","video","audio"]}"#,
+        concat!(
+            r#""media":{"formats":["image","gif","video"],"alt":["image","gif","video"],"#,
+            r#""spoiler":{"mode":"carried","formats":["image","gif","video","audio"]},"inline":true,"#,
+            r#""groups":[{"layout":"collage","formats":["image","gif","video"],"minimum":2,"maximum":10}]}"#,
+        ),
+        concat!(
+            r#""media":{"formats":["image","gif"],"alt":["image","gif"],"spoiler":{"mode":"omitted","formats":[]},"#,
+            r#""inline":true,"groups":[{"layout":"slideshow","formats":["image","gif"],"minimum":2,"maximum":10}]}"#,
+        ),
+        r#""facts":["mediaCount","placement","captionLimit","entitiesAllowed","items"]"#,
+        r#""facts":["mediaCount","title","items"],"fields":[{"name":"title","required":true,"media":"any"}"#,
+    ];
+    for expected in expected {
+        assert!(json.contains(expected), "{expected}\n{json}");
+    }
+}
+
+#[test]
 fn writes_document() {
     assert_eq!(
         parse("# a *b*".as_bytes(), &[]),

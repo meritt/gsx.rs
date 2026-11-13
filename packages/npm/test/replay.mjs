@@ -72,6 +72,11 @@ for (const file of files) {
   const cases = readFileSync(file, 'utf8').split('\n').slice(1).filter(Boolean).map(JSON.parse);
 
   for (const record of cases) {
+    if (record.targets) {
+      lines.push(JSON.stringify({ targets: gsx.targets() }));
+      continue;
+    }
+
     if ('mediaRule' in record || 'mediaId' in record) {
       lines.push(mediaRule(record));
       continue;

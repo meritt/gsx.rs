@@ -26,9 +26,9 @@ pub use layout::{CELL, ELLIPSIS, QUOTE, RULE, Writer, marker, single_line};
 pub use links::href;
 pub use media::{Attachment, Block, Item, placed, references};
 pub use table::{
-    BlocksForm, Ceiling, Condition, Detection, EntityForm, Escape, FieldSpec, Form, HtmlBlocks, HtmlForm, LineStart,
-    MarkdownForm, Media, Normalization, Offsets, Renderer, Rule, Search, Source, Spoilers, Structure, Style, Target,
-    Truncation, Unplaced, When, date_refusal,
+    BlocksForm, Ceiling, Condition, Detection, EntityForm, Escape, FieldSpec, Form, Group, HtmlBlocks, HtmlForm,
+    LineStart, MarkdownForm, Media, MediaShape, Normalization, Offsets, Renderer, Rule, Search, Source, SpoilerMode,
+    Spoilers, Structure, Style, Target, Truncation, Unplaced, When, date_refusal,
 };
 
 use layout::Styled;

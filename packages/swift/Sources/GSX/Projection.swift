@@ -311,6 +311,96 @@ extension GSX {
         public let codes: [String]
         /// Whether `overflow: .thread` applies.
         public let threads: Bool
+        /// Facts that can change this target's projection, in their wire spelling, such as `maxCharacters`.
+        public let facts: [String]
+        public let fields: [TargetField]
+        /// At most one limit applies to one field, unit, placement and media kind.
+        public let limits: [Limit]
+        public let features: [Rule]
+        public let media: MediaCapabilities
+    }
+
+    public struct TargetField: Sendable, Hashable, Decodable {
+        public enum Media: String, Sendable, Hashable, Decodable {
+            case any, image, video
+        }
+
+        public let name: FieldName
+        public let required: Bool
+        /// The media kind the field needs.
+        public let media: Media
+    }
+
+    /// A fixed limit has `maximum` and no `fact`; a fact with a default has both; a fact without a default has `fact` only; an unlimited count has neither.
+    public struct Limit: Sendable, Hashable, Decodable {
+        public enum Media: String, Sendable, Hashable, Decodable {
+            case any, with, without, image, video, gif, audio
+        }
+
+        public enum Rendering: String, Sendable, Hashable, Decodable {
+            case payload, visible
+        }
+
+        public let field: FieldName
+        public let unit: Unit
+        public let maximum: Int?
+        /// The fact in its wire spelling, such as `maxCharacters`.
+        public let fact: String?
+        /// `nil` means every placement.
+        public let placements: [Placement]?
+        public let media: Media
+        public let rendering: Rendering
+    }
+
+    /// A feature's default outcome and the conditional outcomes that replace it.
+    public struct Rule: Sendable, Hashable, Decodable {
+        public struct Condition: Sendable, Hashable, Decodable {
+            public let when: String
+            public let kind: ChangeClass
+            public let reason: String
+
+            enum CodingKeys: String, CodingKey {
+                case when, kind = "class", reason
+            }
+        }
+
+        public let feature: Feature
+        public let kind: ChangeClass
+        public let reason: String
+        public let conditions: [Condition]
+
+        enum CodingKeys: String, CodingKey {
+            case feature, kind = "class", reason, conditions
+        }
+    }
+
+    public struct MediaCapabilities: Sendable, Hashable, Decodable {
+        public enum SpoilerMode: String, Sendable, Hashable, Decodable {
+            case carried, widened, omitted
+        }
+
+        public struct Spoiler: Sendable, Hashable, Decodable {
+            public let mode: SpoilerMode
+            public let formats: [MediaFact.Format]
+        }
+
+        public struct Group: Sendable, Hashable, Decodable {
+            public let layout: Layout
+            /// Item formats placed in a group of this layout.
+            public let formats: [MediaFact.Format]
+            public let minimum: Int
+            public let maximum: Int
+        }
+
+        /// Item formats published as media; where `inline` is read, only inline items of these formats are placed.
+        public let formats: [MediaFact.Format]
+        /// Item formats whose alt the projection publishes.
+        public let alt: [MediaFact.Format]
+        public let spoiler: Spoiler
+        /// Whether `MediaFact.inline` is read.
+        public let inline: Bool
+        /// Group layouts rendered as a group; empty when none.
+        public let groups: [Group]
     }
 
     struct ProjectionWire: Decodable {

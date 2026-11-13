@@ -35,7 +35,7 @@ fn known(target: Option<String>) -> Result<(), JsError> {
 }
 
 fn resolve(name: &str) -> Result<&'static Target, JsError> {
-    targets::target(name).ok_or_else(|| JsError::new(&format!("unknown target {name:?}")))
+    targets::target(name).ok_or_else(|| JsError::new(&format!("unknown target \"{name}\"")))
 }
 
 fn text<T>(len: usize, run: impl FnOnce(&[u8]) -> Result<T, JsError>) -> Result<T, JsError> {

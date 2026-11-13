@@ -33,6 +33,19 @@ pub enum Format {
     Audio,
 }
 
+impl Format {
+    pub const ALL: &[Format] = &[Format::Image, Format::Gif, Format::Video, Format::Audio];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Format::Image => "image",
+            Format::Gif => "gif",
+            Format::Video => "video",
+            Format::Audio => "audio",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MediaFact<'a> {
     pub id: &'a str,

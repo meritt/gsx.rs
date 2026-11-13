@@ -37,6 +37,37 @@ def media_rule(case):
     return json.dumps(valid)
 
 
+def listing():
+    def rule(rule):
+        conditions = [{"when": c.when, "class": c.class_, "reason": c.reason} for c in rule.conditions]
+        return {"feature": rule.feature, "class": rule.class_, "reason": rule.reason, "conditions": conditions}
+
+    def target(target):
+        media = target.media
+        return {
+            "name": target.name,
+            "form": target.form,
+            "offsets": target.offsets,
+            "digest": target.digest,
+            "manifest": target.manifest,
+            "codes": target.codes,
+            "threads": target.threads,
+            "facts": target.facts,
+            "fields": [vars(spec) for spec in target.fields],
+            "limits": [vars(limit) for limit in target.limits],
+            "features": [rule(item) for item in target.features],
+            "media": {
+                "formats": media.formats,
+                "alt": media.alt,
+                "spoiler": vars(media.spoiler),
+                "inline": media.inline,
+                "groups": [vars(group) for group in media.groups],
+            },
+        }
+
+    return json.dumps({"targets": [target(item) for item in gsx.targets()]}, separators=(",", ":"), ensure_ascii=False)
+
+
 def main(out, files):
     names = [target.name for target in gsx.targets()]
     if "x-plain" not in names:
@@ -60,6 +91,9 @@ def main(out, files):
         with open(path, encoding="utf-8") as handle:
             cases = [json.loads(line) for line in handle.read().split("\n")[1:] if line]
         for case in cases:
+            if case.get("targets"):
+                lines.append(listing())
+                continue
             if "mediaRule" in case or "mediaId" in case:
                 lines.append(media_rule(case))
                 continue

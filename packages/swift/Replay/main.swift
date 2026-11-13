@@ -33,6 +33,69 @@ struct Case: Decodable {
 struct MediaRule: Decodable {
     let mediaRule: Bool?
     let mediaId: String?
+    let targets: Bool?
+}
+
+func quoted(_ text: String) -> String {
+    var out = "\""
+    for scalar in text.unicodeScalars {
+        switch scalar {
+        case "\"": out += "\\\""
+        case "\\": out += "\\\\"
+        case "\n": out += "\\n"
+        case "\r": out += "\\r"
+        case "\t": out += "\\t"
+        case "\u{08}": out += "\\b"
+        case "\u{0C}": out += "\\f"
+        case "\u{00}"..."\u{1F}": out += String(format: "\\u%04x", scalar.value)
+        default: out.unicodeScalars.append(scalar)
+        }
+    }
+    return out + "\""
+}
+
+func array<T>(_ items: [T], _ each: (T) -> String) -> String {
+    "[" + items.map(each).joined(separator: ",") + "]"
+}
+
+func optional<T>(_ value: T?, _ each: (T) -> String) -> String {
+    value.map(each) ?? "null"
+}
+
+func listing() throws -> String {
+    func target(_ target: GSX.Target) -> String {
+        let fields = array(target.fields) {
+            #"{"name":\#(quoted($0.name.rawValue)),"required":\#($0.required),"media":\#(quoted($0.media.rawValue))}"#
+        }
+        let limits = array(target.limits) { limit in
+            #"{"field":\#(quoted(limit.field.rawValue)),"unit":\#(quoted(limit.unit.rawValue)),"#
+                + #""maximum":\#(optional(limit.maximum) { String($0) }),"fact":\#(optional(limit.fact, quoted)),"#
+                + #""placements":\#(optional(limit.placements) { array($0) { quoted($0.rawValue) } }),"#
+                + #""media":\#(quoted(limit.media.rawValue)),"rendering":\#(quoted(limit.rendering.rawValue))}"#
+        }
+        let features = array(target.features) { rule in
+            let conditions = array(rule.conditions) {
+                #"{"when":\#(quoted($0.when)),"class":\#(quoted($0.kind.rawValue)),"reason":\#(quoted($0.reason))}"#
+            }
+            return #"{"feature":\#(quoted(rule.feature.rawValue)),"class":\#(quoted(rule.kind.rawValue)),"#
+                + #""reason":\#(quoted(rule.reason)),"conditions":\#(conditions)}"#
+        }
+        let media = target.media
+        let formats = { (formats: [GSX.MediaFact.Format]) in array(formats) { quoted($0.rawValue) } }
+        let groups = array(media.groups) {
+            #"{"layout":\#(quoted($0.layout.rawValue)),"formats":\#(formats($0.formats)),"#
+                + #""minimum":\#($0.minimum),"maximum":\#($0.maximum)}"#
+        }
+        return #"{"name":\#(quoted(target.name)),"form":\#(quoted(target.form.rawValue)),"#
+            + #""offsets":\#(optional(target.offsets) { quoted($0.rawValue) }),"digest":\#(quoted(target.digest)),"#
+            + #""manifest":\#(quoted(target.manifest)),"codes":\#(array(target.codes, quoted)),"#
+            + #""threads":\#(target.threads),"facts":\#(array(target.facts, quoted)),"fields":\#(fields),"#
+            + #""limits":\#(limits),"features":\#(features),"#
+            + #""media":{"formats":\#(formats(media.formats)),"alt":\#(formats(media.alt)),"#
+            + #""spoiler":{"mode":\#(quoted(media.spoiler.mode.rawValue)),"formats":\#(formats(media.spoiler.formats))},"#
+            + #""inline":\#(media.inline),"groups":\#(groups)}}"#
+    }
+    return #"{"targets":\#(array(try GSX.targets, target))}"#
 }
 
 let targets = try GSX.targets
@@ -71,6 +134,10 @@ let decoder = JSONDecoder()
 for file in arguments.dropFirst() {
     let text = try String(contentsOfFile: file, encoding: .utf8)
     for line in text.split(separator: "\n").dropFirst() {
+        if let record = try? decoder.decode(MediaRule.self, from: Data(line.utf8)), record.targets == true {
+            lines.append(try listing())
+            continue
+        }
         if let record = try? decoder.decode(MediaRule.self, from: Data(line.utf8)),
             record.mediaRule != nil || record.mediaId != nil
         {

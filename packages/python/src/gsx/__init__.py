@@ -14,24 +14,31 @@ __all__ = [
     "Attachment",
     "Block",
     "Change",
+    "Condition",
     "Details",
     "Diagnostic",
     "Document",
     "Entity",
     "Facts",
     "Field",
+    "Group",
     "InternalError",
     "Item",
+    "Limit",
     "Marker",
     "Measurement",
     "Part",
     "Media",
+    "MediaCapabilities",
     "MediaFact",
     "Node",
     "ParseError",
     "Projection",
     "Range",
+    "Rule",
+    "Spoiler",
     "Target",
+    "TargetField",
     "Truncated",
     "is_media_id",
     "parse",
@@ -413,6 +420,74 @@ class Part:
 
 
 @dataclass(frozen=True)
+class TargetField:
+    name: str
+    required: bool
+    media: str
+    """The media kind the field needs: "any", "image" or "video"."""
+
+
+@dataclass(frozen=True)
+class Limit:
+    """A fixed limit has maximum and no fact; a fact with a default has both; a fact without a default has fact only; an unlimited count has neither."""
+
+    field: str
+    unit: str
+    maximum: Optional[int]
+    fact: Optional[str]
+    """The fact in its wire spelling, such as "maxCharacters"."""
+    placements: Optional[List[str]]
+    """None means every placement."""
+    media: str
+    rendering: str
+
+
+@dataclass(frozen=True)
+class Condition:
+    when: str
+    class_: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class Rule:
+    """A feature's default outcome and the conditional outcomes that replace it."""
+
+    feature: str
+    class_: str
+    reason: str
+    conditions: List[Condition]
+
+
+@dataclass(frozen=True)
+class Group:
+    layout: str
+    formats: List[str]
+    minimum: int
+    maximum: int
+
+
+@dataclass(frozen=True)
+class Spoiler:
+    mode: str
+    """"carried", "widened" or "omitted"."""
+    formats: List[str]
+
+
+@dataclass(frozen=True)
+class MediaCapabilities:
+    formats: List[str]
+    """Item formats published as media; where inline is read, only inline items of these formats are placed."""
+    alt: List[str]
+    """Item formats whose alt the projection publishes."""
+    spoiler: Spoiler
+    inline: bool
+    """Whether items[].inline is read."""
+    groups: List[Group]
+    """Group layouts rendered as a group; empty when none."""
+
+
+@dataclass(frozen=True)
 class Target:
     name: str
     form: str
@@ -423,6 +498,13 @@ class Target:
     """Every code a blocked change of this target can carry."""
     threads: bool
     """Whether overflow "thread" applies."""
+    facts: List[str]
+    """Facts that can change this target's projection, in their wire spelling, such as "maxCharacters"."""
+    fields: List[TargetField]
+    limits: List[Limit]
+    """At most one limit applies to one field, unit, placement and media kind."""
+    features: List[Rule]
+    media: MediaCapabilities
 
 
 class _MediaFact(ctypes.Structure):
@@ -619,4 +701,36 @@ def _block(block: dict) -> Block:
 
 def targets() -> List[Target]:
     listing = json.loads(_call("gsx_targets", _lib.gsx_targets))
-    return [Target(**item) for item in listing["targets"]]
+    return [_target(item) for item in listing["targets"]]
+
+
+def _target(item: dict) -> Target:
+    media = item["media"]
+    return Target(
+        item["name"],
+        item["form"],
+        item["offsets"],
+        item["digest"],
+        item["manifest"],
+        item["codes"],
+        item["threads"],
+        item["facts"],
+        [TargetField(**spec) for spec in item["fields"]],
+        [Limit(**limit) for limit in item["limits"]],
+        [
+            Rule(
+                rule["feature"],
+                rule["class"],
+                rule["reason"],
+                [Condition(condition["when"], condition["class"], condition["reason"]) for condition in rule["conditions"]],
+            )
+            for rule in item["features"]
+        ],
+        MediaCapabilities(
+            media["formats"],
+            media["alt"],
+            Spoiler(**media["spoiler"]),
+            media["inline"],
+            [Group(**group) for group in media["groups"]],
+        ),
+    )

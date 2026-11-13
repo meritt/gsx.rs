@@ -28,12 +28,35 @@ pub enum Placement {
     Story,
 }
 
+impl Placement {
+    pub const ALL: &[Placement] = ALL;
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Post => "post",
+            Reel => "reel",
+            Story => "story",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MediaKind {
     Image,
     Video,
     Gif,
     Audio,
+}
+
+impl MediaKind {
+    pub const fn name(self) -> &'static str {
+        match self {
+            MediaKind::Image => "image",
+            MediaKind::Video => "video",
+            MediaKind::Gif => "gif",
+            MediaKind::Audio => "audio",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,6 +68,15 @@ pub enum Condition {
 }
 
 impl Condition {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Condition::Any => "any",
+            Condition::Without => "without",
+            Condition::With => "with",
+            Condition::Only(kind) => kind.name(),
+        }
+    }
+
     fn matches(self, media: Option<MediaKind>) -> bool {
         match self {
             Condition::Any => true,
@@ -59,6 +91,15 @@ impl Condition {
 pub enum Rendering {
     Payload,
     Visible,
+}
+
+impl Rendering {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Rendering::Payload => "payload",
+            Rendering::Visible => "visible",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

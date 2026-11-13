@@ -17,6 +17,7 @@ enum Operation {
     Serialize,
     Project,
     Media,
+    Targets,
 }
 
 #[derive(Debug)]
@@ -58,6 +59,10 @@ pub fn load(files: &[impl AsRef<Path>]) -> Result<Vec<Case>> {
 }
 
 fn media_case(value: &Json) -> Option<Case> {
+    if let Json::Bool(true) = value.get("targets") {
+        let id = value.get("id").string().unwrap_or_default();
+        return Some(Case { id, expected: wire::targets(), well_formed: true, operation: Operation::Targets });
+    }
     let expected = match (value.get("mediaRule"), value.get("mediaId").string()) {
         (Json::Bool(true), _) => format!(
             "{{\"mediaIdMaxBytes\":{MEDIA_ID_MAX_BYTES},\"mediaGroupMin\":{MEDIA_GROUP_MIN},\
@@ -100,8 +105,11 @@ pub fn media(out: &Path) -> Result {
         "a\n",
         "a\0b",
     ];
-    let mut lines =
-        vec!["{\"corpus\":\"gsx-media\"}".to_owned(), "{\"id\":\"media-rule\",\"mediaRule\":true}".to_owned()];
+    let mut lines = vec![
+        "{\"corpus\":\"gsx-media\"}".to_owned(),
+        "{\"id\":\"media-rule\",\"mediaRule\":true}".to_owned(),
+        "{\"id\":\"targets\",\"targets\":true}".to_owned(),
+    ];
     for (index, id) in samples.iter().enumerate() {
         lines.push(format!(
             "{{\"id\":\"media-id-{index}\",\"mediaId\":{}}}",
@@ -492,11 +500,13 @@ pub fn compare(binding: &str, cases: &[Case], out: &Path, skips_ill_formed: bool
         cases.iter().filter(|case| case.operation == operation && (case.well_formed || !skips_ill_formed)).count()
     };
     println!(
-        "{binding}: {} parse, {} serialize, {} projection and {} media rule cases byte-identical to Rust{}",
+        "{binding}: {} parse, {} serialize, {} projection, {} media rule and {} target listing cases byte-identical to \
+         Rust{}",
         count(Operation::Parse),
         count(Operation::Serialize),
         count(Operation::Project),
         count(Operation::Media),
+        count(Operation::Targets),
         if skipped > 0 { format!(", {skipped} ill-formed lines skipped") } else { String::new() }
     );
     Ok(())

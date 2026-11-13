@@ -308,6 +308,78 @@ export interface Target {
   codes: string[];
   /** Whether `overflow: 'thread'` applies. */
   threads: boolean;
+  /** Facts that can change this target's projection, in the order of `Facts`. */
+  facts: (keyof Facts)[];
+  fields: TargetField[];
+  /** At most one limit applies to one field, unit, placement and media kind. */
+  limits: Limit[];
+  features: Rule[];
+  media: MediaCapabilities;
+}
+
+export interface TargetField {
+  name: FieldName;
+  required: boolean;
+  /** The media kind the field needs. */
+  media: 'any' | 'image' | 'video';
+}
+
+/** A fixed limit has `maximum` and no `fact`; a fact with a default has both; a fact without a default has `fact` only; an unlimited count has neither. */
+export interface Limit {
+  field: FieldName;
+  unit: Unit;
+  maximum: number | null;
+  fact: 'maxCharacters' | 'captionLimit' | 'descriptionLimit' | 'hashtagLimit' | null;
+  /** `null` means every placement. */
+  placements: ('post' | 'reel' | 'story')[] | null;
+  media: 'any' | 'with' | 'without' | 'image' | 'video' | 'gif' | 'audio';
+  rendering: 'payload' | 'visible';
+}
+
+export type When =
+  | 'label_is_href'
+  | 'label_invisible'
+  | 'title_source'
+  | 'empty'
+  | 'overflow'
+  | 'capped'
+  | 'nested'
+  | 'info'
+  | 'blocks'
+  | 'depth'
+  | 'columns'
+  | 'group'
+  | 'cut'
+  | 'inline'
+  | 'missing'
+  | 'count'
+  | 'spoiler'
+  | 'truncated'
+  | 'refused'
+  | 'thread'
+  | 'code'
+  | 'post';
+
+/** A feature's default outcome and the conditional outcomes that replace it. */
+export interface Rule {
+  feature: Feature;
+  class: Class;
+  reason: string;
+  conditions: { when: When; class: Class; reason: string }[];
+}
+
+export type Format = MediaFact['format'];
+
+export interface MediaCapabilities {
+  /** Item formats published as media; where `inline` is read, only inline items of these formats are placed. */
+  formats: Format[];
+  /** Item formats whose alt the projection publishes. */
+  alt: Format[];
+  spoiler: { mode: 'carried' | 'widened' | 'omitted'; formats: Format[] };
+  /** Whether `items[].inline` is read. */
+  inline: boolean;
+  /** Group layouts rendered as a group; empty when none. */
+  groups: { layout: Layout; formats: Format[]; minimum: number; maximum: number }[];
 }
 
 export declare class ParseError extends Error {

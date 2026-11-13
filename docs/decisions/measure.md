@@ -22,7 +22,7 @@ Hashtag characters are Unicode alphanumerics or `_`; mention characters are ASCI
 
 ## Limit selection
 
-[`Target::limits`](../../crates/gsx-core/src/project/table.rs) is the source of field limits; `targets().manifest` exposes the target configuration for inspection. Each limit declares field, placements, media condition, rendering, unit and maximum. A projection reports every applicable measurement, including unlimited counts with `maximum: null`.
+[`Target::limits`](../../crates/gsx-core/src/project/table.rs) is the source of field limits; `targets().limits` lists them, and `targets().manifest` exposes the target configuration for inspection. Each limit declares field, placements, media condition, rendering, unit and maximum. A projection reports every applicable measurement, including unlimited counts with `maximum: null`.
 
 | Property | Selection |
 | --- | --- |

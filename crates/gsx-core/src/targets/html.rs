@@ -1,6 +1,7 @@
 use super::limits::{CodePoints, Limit, Post, Reel, Story, Text, With, Without, limit};
 use super::plain::BODY;
 use super::{DATE_BOUNDS, DEFAULT, TEXT, rule};
+use crate::document::Layout;
 use crate::forms::html::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
@@ -71,6 +72,7 @@ static TELEGRAM_FORM: HtmlForm = HtmlForm {
         (Feature::Datetime, "tg-time"),
     ],
     exclusive: &[Feature::Link, Feature::Datetime],
+    groups: &[],
     code_contained: false,
     quote_nests: false,
     quote_contains_code: false,
@@ -141,6 +143,7 @@ static RICH_FORM: HtmlForm = HtmlForm {
         (Feature::Datetime, "tg-time"),
     ],
     exclusive: &[],
+    groups: &[(Layout::Collage, &[Format::Image, Format::Video]), (Layout::Slideshow, &[Format::Image])],
     code_contained: true,
     quote_nests: true,
     quote_contains_code: true,
@@ -194,6 +197,7 @@ static MAX_FORM: HtmlForm = HtmlForm {
     structure: None,
     tags: &[INLINE[0], INLINE[1], INLINE[2], INLINE[3], INLINE[4], INLINE[6], INLINE[7], (Feature::Highlight, "mark")],
     exclusive: &[],
+    groups: &[],
     code_contained: true,
     quote_nests: true,
     quote_contains_code: true,

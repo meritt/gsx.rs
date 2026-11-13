@@ -493,11 +493,8 @@ impl Html {
         if let Kind::MediaGroup { layout, .. } = node.kind
             && indices.len() > 1
         {
-            let grouped = indices.iter().all(|&index| match self.media[index].format {
-                Format::Image => true,
-                Format::Video => layout == Layout::Collage,
-                Format::Gif | Format::Audio => false,
-            });
+            let formats = self.form.groups(layout);
+            let grouped = indices.iter().all(|&index| formats.contains(&self.media[index].format));
             if grouped {
                 let name = match layout {
                     Layout::Collage => "tg-collage",

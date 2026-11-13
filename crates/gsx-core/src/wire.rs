@@ -4,9 +4,10 @@ use crate::document::{
     self, Align, Code, Details, Diagnostic, Document, Error, Kind, Layout, Marker, MarkerKind, Media, Node, Provenance,
     Range, Severity,
 };
+use crate::measure::{Fact, Limit, Maximum, Placement};
 use crate::project::{
-    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, MediaFact, Offsets, Part, Projection,
-    Slot, Target, Truncated,
+    self, Attachment, Block, Change, Entity, Facts, Field, Format, Item, Measurement, MediaFact, MediaShape, Offsets,
+    Part, Projection, Slot, Target, Truncated,
 };
 use crate::source;
 use crate::targets::TARGETS;
@@ -109,7 +110,68 @@ pub fn targets() -> String {
         out.list(&target.codes(), |out, code| out.string(code));
         out.key("threads");
         out.raw(if target.threads() { "true" } else { "false" });
+        out.key("facts");
+        out.list(&target.facts(), |out, fact| out.string(fact));
+        out.key("fields");
+        out.list(target.fields, |out, field| {
+            out.raw("{\"name\":");
+            out.string(field.name.name());
+            out.key("required");
+            out.bool(field.required);
+            out.key("media");
+            out.string(field.media.name());
+            out.0.push('}');
+        });
+        out.key("limits");
+        out.list(target.limits, Out::limit);
+        out.key("features");
+        out.list(target.rules, |out, rule| {
+            out.raw("{\"feature\":");
+            out.string(rule.feature.name());
+            out.key("class");
+            out.string(rule.class.name());
+            out.key("reason");
+            out.string(rule.reason);
+            out.key("conditions");
+            out.list(rule.conditions, |out, condition| {
+                out.raw("{\"when\":");
+                out.string(condition.when.name());
+                out.key("class");
+                out.string(condition.class.name());
+                out.key("reason");
+                out.string(condition.reason);
+                out.0.push('}');
+            });
+            out.0.push('}');
+        });
+        let MediaShape { formats, alt, spoiler: (mode, spoiled), inline, groups } = target.media();
+        let names = |out: &mut Out, formats: &[Format]| out.list(formats, |out, format| out.string(format.name()));
+        out.key("media");
+        out.raw("{\"formats\":");
+        names(out, formats);
+        out.key("alt");
+        names(out, alt);
+        out.key("spoiler");
+        out.raw("{\"mode\":");
+        out.string(mode.name());
+        out.key("formats");
+        names(out, spoiled);
         out.0.push('}');
+        out.key("inline");
+        out.bool(inline);
+        out.key("groups");
+        out.list(&groups, |out, group| {
+            out.raw("{\"layout\":");
+            out.string(group.layout.as_str());
+            out.key("formats");
+            names(out, group.formats);
+            out.key("minimum");
+            out.number(group.minimum);
+            out.key("maximum");
+            out.number(group.maximum);
+            out.0.push('}');
+        });
+        out.raw("}}");
     });
     out.0.push('}');
     out.0
@@ -440,6 +502,37 @@ impl Out {
         self.optional(alt.as_deref());
         self.key("spoiler");
         self.bool(*spoiler);
+        self.0.push('}');
+    }
+
+    fn limit(&mut self, limit: &Limit) {
+        let (maximum, fact) = match limit.maximum {
+            Maximum::Fixed(value) => (Some(value), None),
+            Maximum::Resolved(fact, value) => (Some(value), Some(fact)),
+            Maximum::Given(fact) => (None, Some(fact)),
+            Maximum::Unlimited => (None, None),
+        };
+        self.raw("{\"field\":");
+        self.string(limit.field.name());
+        self.key("unit");
+        self.string(limit.unit.name());
+        self.key("maximum");
+        match maximum {
+            Some(value) => self.number(value),
+            None => self.raw("null"),
+        }
+        self.key("fact");
+        self.optional(fact.map(Fact::name));
+        self.key("placements");
+        if limit.placements == Placement::ALL {
+            self.raw("null");
+        } else {
+            self.list(limit.placements, |out, placement| out.string(placement.name()));
+        }
+        self.key("media");
+        self.string(limit.media.name());
+        self.key("rendering");
+        self.string(limit.rendering.name());
         self.0.push('}');
     }
 

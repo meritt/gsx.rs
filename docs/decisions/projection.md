@@ -15,14 +15,14 @@
 | `items` | Selected media with ID, format, alt, spoiler and inline availability |
 | `overflow` | `truncate` by default; `thread` on supporting targets |
 
-Facts affect only targets that declare the corresponding behavior. Supply media context explicitly; `items` does not infer `media` or `mediaCount`. Discover capabilities through `targets()`:
+Facts affect only targets that declare the corresponding behavior; `targets()` lists them per target in `facts`. Supply media context explicitly; `items` does not infer `media` or `mediaCount`. Discover capabilities through `targets()`, described in [bindings](bindings.md#wire-format):
 
 ```js
-const target = gsx.targets().find(({ name }) => name === 'bluesky-entities');
+const target = gsx.targets().find(({ name }) => name === 'telegram-html');
 
-console.log(target.threads);
-console.log(target.codes);
-console.log(target.manifest);
+console.log(target.facts);
+console.log(target.limits.filter(({ field }) => field === 'text'));
+console.log(target.media.spoiler);
 ```
 
 ## Output
