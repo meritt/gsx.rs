@@ -22,7 +22,7 @@ use crate::measure::{self, Fact};
 pub use crate::measure::{MediaKind, Placement, Unit};
 pub use change::{Change, Class, Feature, FieldName, Slot, Truncated};
 pub use entities::Entity;
-pub use facts::{Facts, Format, MediaFact, Overflow};
+pub use facts::{FACT_MAX_ITEMS, FACT_MAX_UNITS, Facts, Format, MediaFact, Overflow};
 pub use fit::WINDOW;
 pub(crate) use layout::blank;
 pub use layout::{CELL, ELLIPSIS, QUOTE, RULE, Writer, marker, single_line};

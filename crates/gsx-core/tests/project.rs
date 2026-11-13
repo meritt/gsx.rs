@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use gsx_core::document::{Document, parse};
 use gsx_core::project::{
-    Boundary, Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Part, Placement,
-    Projection, Style, Target, Unit, project, project_with,
+    Block, Boundary, Class, Facts, Feature, FieldName, Format, MediaFact, MediaKind, Options, Overflow, Part,
+    Placement, Projection, Style, Target, Unit, project, project_with,
 };
 use gsx_core::targets::{TARGETS, target};
 
@@ -137,6 +137,37 @@ fn threads_far_below_a_large_maximum_split_linearly() {
     let (short, long) = (fastest(&small), fastest(&large));
     let floor = short.max(std::time::Duration::from_millis(2));
     assert!(long < floor * 16, "{short:?} for 200, {long:?} for 1600");
+}
+
+fn seconds_per_byte(markdown: &str, name: &str, facts: &Facts) -> f64 {
+    let document = parse(markdown, &[]).unwrap();
+    let target = target(name).unwrap();
+    let mut best = f64::MAX;
+    for _ in 0..3 {
+        let start = std::time::Instant::now();
+        let mut runs = 0_u32;
+        while runs == 0 || start.elapsed() < std::time::Duration::from_millis(5) {
+            let _ = project_with(&document, target, facts, &Options::default());
+            runs += 1;
+        }
+        best = best.min(start.elapsed().as_secs_f64() / f64::from(runs) / markdown.len() as f64);
+    }
+    best
+}
+
+#[test]
+fn fits_a_repeatedly_placed_alt_once() {
+    let markdown = "::media{id=\"m\"}\n\nText.\n\n".repeat(2000);
+    let seconds = |length: usize| {
+        let alt = "word ".repeat(length / 5);
+        let items = [MediaFact { id: "m", format: Format::Image, alt: Some(&alt), spoiler: false, inline: true }];
+        let facts = Facts { media: Some(MediaKind::Image), media_count: 1, items: Some(&items), ..Facts::default() };
+        let projection = project(&parse(&markdown, &[]).unwrap(), target("discord-blocks").unwrap(), &facts);
+        assert_eq!(projection.blocks.iter().filter(|block| matches!(block, Block::Media { .. })).count(), 2000);
+        seconds_per_byte(&markdown, "discord-blocks", &facts)
+    };
+    let growth = seconds(65_536) / seconds(4096);
+    assert!(growth <= 3.0, "placements cost {growth:.1} times more with a sixteen times longer alt");
 }
 
 fn reasons(projection: &Projection) -> Vec<(Class, Feature, &'static str)> {

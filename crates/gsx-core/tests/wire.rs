@@ -1,21 +1,50 @@
 use gsx_core::document::{Limit, Media};
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow};
+use gsx_core::project::{FACT_MAX_ITEMS, FACT_MAX_UNITS, Facts, Format, MediaFact, MediaKind, Overflow};
 use gsx_core::targets::{TARGETS, target};
-use gsx_core::wire::{invalid_text, parse, project, refused_item, serialize, targets};
+use gsx_core::wire::{invalid_text, parse, project, refused, serialize, targets};
+
+fn refused_items(items: &[MediaFact]) -> Option<String> {
+    refused(&Facts { items: Some(items), ..Facts::default() })
+}
 
 #[test]
 fn refuses_item_ids_outside_the_media_id_rule() {
     let item = |id| MediaFact { id, format: Format::Image, alt: None, spoiler: false, inline: false };
-    assert_eq!(refused_item(&[]), None);
-    assert_eq!(refused_item(&[item("a"), item("b.c:d-e_f")]), None);
+    assert_eq!(refused_items(&[]), None);
+    assert_eq!(refused_items(&[item("a"), item("b.c:d-e_f")]), None);
     assert_eq!(
-        refused_item(&[item("a"), item("x\"/><img src=\"media:evil")]).as_deref(),
+        refused_items(&[item("a"), item("x\"/><img src=\"media:evil")]).as_deref(),
         Some("item 1 id is not a media ID")
     );
-    assert_eq!(refused_item(&[item(""), item("-a")]).as_deref(), Some("item 0 id is not a media ID"));
+    assert_eq!(refused_items(&[item(""), item("-a")]).as_deref(), Some("item 0 id is not a media ID"));
     let long = "a".repeat(129);
-    assert_eq!(refused_item(&[item(&long[1..])]), None);
-    assert_eq!(refused_item(&[item(&long)]).as_deref(), Some("item 0 id is not a media ID"));
+    assert_eq!(refused_items(&[item(&long[1..])]), None);
+    assert_eq!(refused_items(&[item(&long)]).as_deref(), Some("item 0 id is not a media ID"));
+}
+
+#[test]
+fn refuses_facts_over_their_ceilings() {
+    assert_eq!((FACT_MAX_UNITS, FACT_MAX_ITEMS), (65_536, 1024));
+    let at = format!("{}😀", "a".repeat(FACT_MAX_UNITS - 2));
+    let over = format!("a{at}");
+    let wide = "€".repeat(FACT_MAX_UNITS);
+    let item = |alt| MediaFact { id: "a", format: Format::Image, alt, spoiler: false, inline: false };
+    assert_eq!(refused(&Facts::default()), None);
+    for text in [&at, &wide] {
+        let facts = Facts { title: Some(text), target_url: Some(text), spoiler_text: Some(text), ..Facts::default() };
+        assert_eq!(refused(&facts), None);
+        assert_eq!(refused_items(&[item(None), item(Some(text))]), None);
+    }
+    let units = |name: &str| Some(format!("{name} is over 65536 UTF-16 units"));
+    assert_eq!(refused(&Facts { title: Some(&over), ..Facts::default() }), units("title"));
+    assert_eq!(refused(&Facts { target_url: Some(&over), ..Facts::default() }), units("targetUrl"));
+    assert_eq!(refused(&Facts { spoiler_text: Some(&over), ..Facts::default() }), units("spoilerText"));
+    assert_eq!(refused_items(&[item(None), item(Some(&over))]), units("item 1 alt"));
+    let items = vec![item(None); FACT_MAX_ITEMS + 1];
+    assert_eq!(refused_items(&items[1..]), None);
+    assert_eq!(refused_items(&items).as_deref(), Some("items has 1025 entries, over 1024"));
+    let first = Facts { title: Some(&over), items: Some(&[item(Some(&over))]), ..Facts::default() };
+    assert_eq!(refused(&first), units("item 0 alt"));
 }
 
 #[test]

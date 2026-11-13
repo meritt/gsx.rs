@@ -180,7 +180,7 @@ impl Facts {
             };
             list.push(CoreMediaFact { id, format, alt, spoiler: entry.spoiler, inline: entry.inline });
         }
-        wire::refused_item(&list).map_or(Ok(Some(list)), Err)
+        Ok(Some(list))
     }
 
     /// # Safety
@@ -290,7 +290,8 @@ pub unsafe extern "C" fn gsx_project(
                 return Ok(wire::project(text, &media, target, &CoreFacts::default()));
             };
             let items = facts.items()?;
-            Ok(wire::project(text, &media, target, &facts.core(items.as_deref())?))
+            let facts = facts.core(items.as_deref())?;
+            wire::refused(&facts).map_or_else(|| Ok(wire::project(text, &media, target, &facts)), Err)
         })
     }
 }
@@ -572,6 +573,9 @@ mod tests {
         let bad = [item, MediaFact { id: hostile.as_ptr(), id_len: hostile.len(), ..item }];
         let bad = Facts { items: bad.as_ptr(), items_len: 2, ..facts };
         assert_eq!(project(b"", "telegram-html-rich", Some(&bad)).unwrap_err(), "item 1 id is not a media ID");
+        let long = "a".repeat(65_537);
+        let bad = Facts { title: long.as_ptr(), title_len: long.len(), ..facts };
+        assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "title is over 65536 UTF-16 units");
         let bad = Facts { items: ptr::null(), ..facts };
         assert_eq!(project(b"", "x-plain", Some(&bad)).unwrap_err(), "items is NULL");
         let none: [MediaFact; 0] = [];

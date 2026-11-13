@@ -1,5 +1,8 @@
 use crate::measure::{MediaKind, Placement};
 
+pub const FACT_MAX_UNITS: usize = 65_536;
+pub const FACT_MAX_ITEMS: usize = 1024;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Facts<'a> {
     pub media: Option<MediaKind>,

@@ -113,9 +113,6 @@ pub fn project(
         };
         items.push(MediaFact { id, format, alt: alt.as_deref(), spoiler: flags & 1 != 0, inline: flags & 2 != 0 });
     }
-    if let Some(error) = wire::refused_item(&items) {
-        return Err(JsError::new(&error));
-    }
     let facts = Facts {
         media: match kind {
             0 => None,
@@ -149,6 +146,9 @@ pub fn project(
         entities_allowed,
         items: listed.then_some(&items[..]),
     };
+    if let Some(error) = wire::refused(&facts) {
+        return Err(JsError::new(&error));
+    }
     let media = media(&ids, &covers)?;
     text(len, |text| Ok(wire::project(text, &media, target, &facts)))
 }

@@ -4,7 +4,9 @@ use std::fs;
 use std::path::Path;
 
 use gsx_core::document::{MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, MEDIA_ID_MAX_BYTES, MEDIA_ID_PATTERN, Media, is_media_id};
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target};
+use gsx_core::project::{
+    FACT_MAX_ITEMS, FACT_MAX_UNITS, Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target,
+};
 use gsx_core::source::Limit;
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire;
@@ -143,8 +145,55 @@ pub fn sizes(out: &Path) -> Result {
         ));
         lines.push(format!(
             "{{\"id\":\"size-{id}-refused\",\"markdown\":{markdown},\"media\":[],\"target\":\"x-plain\",\
-             \"facts\":{{\"items\":[{{\"id\":\"not an id\",\"format\":\"image\"}}]}}}}"
+             \"facts\":{{\"items\":[{{\"id\":\"not an id\",\"format\":\"image\",\"spoiler\":false,\"inline\":true}}]}}}}"
         ));
+    }
+    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+}
+
+pub fn ceilings(out: &Path) -> Result {
+    const MARKDOWN: &str = "Before the photo.\n\n::media{id=\"a\"}\n\nAfter the photo.";
+    let units = FACT_MAX_UNITS;
+    let string = |count: usize| json(&[vec![0x61; count - 2], vec![0xd83d, 0xde00]].concat());
+    let url = |count: usize| {
+        let url = format!("https://example.com/{}", "a".repeat(count - 20));
+        json(&url.encode_utf16().collect::<Vec<_>>())
+    };
+    let item = |id: &str, alt: Option<&str>| match alt {
+        Some(alt) => {
+            format!("{{\"id\":\"{id}\",\"format\":\"image\",\"alt\":{alt},\"spoiler\":false,\"inline\":true}}")
+        }
+        None => format!("{{\"id\":\"{id}\",\"format\":\"image\",\"spoiler\":false,\"inline\":true}}"),
+    };
+    let many = |count: usize| {
+        let items: Vec<String> = (0..count).map(|index| item(&format!("i{index}"), None)).collect();
+        format!("[{},{}]", item("a", None), items[1..].join(","))
+    };
+    let mut samples = vec![];
+    for (name, size) in [("at", units), ("over", units + 1)] {
+        samples.push((format!("title-{name}"), format!("\"title\":{}", string(size))));
+        samples.push((format!("target-url-{name}"), format!("\"targetUrl\":{}", url(size))));
+        samples.push((format!("spoiler-text-{name}"), format!("\"spoilerText\":{}", string(size))));
+        let alt = string(size);
+        samples.push((format!("alt-{name}"), format!("\"items\":[{},{}]", item("a", None), item("b", Some(&alt)))));
+    }
+    samples.push(("items-at".to_owned(), format!("\"items\":{}", many(FACT_MAX_ITEMS))));
+    samples.push(("items-over".to_owned(), format!("\"items\":{}", many(FACT_MAX_ITEMS + 1))));
+    let over = string(units + 1);
+    samples.push((
+        "order".to_owned(),
+        format!("\"title\":{over},\"items\":[{},{}]", item("a", Some(&over)), item("-b", None)),
+    ));
+    let markdown = json(&MARKDOWN.encode_utf16().collect::<Vec<_>>());
+    let mut lines = vec!["{\"corpus\":\"gsx-ceilings\"}".to_owned()];
+    for target in TARGETS {
+        for (name, facts) in &samples {
+            lines.push(format!(
+                "{{\"id\":\"ceiling-{name}\",\"markdown\":{markdown},\"media\":[{{\"id\":\"a\"}}],\
+                 \"target\":\"{}\",\"facts\":{{\"media\":\"image\",\"mediaCount\":1,{facts}}}}}",
+                target.name
+            ));
+        }
     }
     fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
 }
@@ -326,7 +375,7 @@ fn outcome(
         entities_allowed: matches!(facts.get("entitiesAllowed"), Json::Bool(true)),
         items: matches!(facts.get("items"), Json::Array(_)).then_some(&items[..]),
     };
-    if let (Operation::Project, Some(refusal)) = (operation, wire::refused_item(facts.items.unwrap_or_default())) {
+    if let (Operation::Project, Some(refusal)) = (operation, wire::refused(&facts)) {
         return Ok(format!("{{\"refused\":{}}}", json(&refusal.encode_utf16().collect::<Vec<_>>())));
     }
     Ok(match (String::from_utf16(units).ok(), operation, target) {

@@ -6,8 +6,8 @@ use crate::document::{
 };
 use crate::measure::{Fact, Limit, Maximum, Placement};
 use crate::project::{
-    self, Attachment, Block, Change, Entity, Facts, Field, Format, Item, Measurement, MediaFact, MediaShape, Part,
-    Projection, Slot, Target, Truncated,
+    self, Attachment, Block, Change, Entity, FACT_MAX_ITEMS, FACT_MAX_UNITS, Facts, Field, Format, Item, Measurement,
+    MediaShape, Part, Projection, Slot, Target, Truncated,
 };
 use crate::source;
 use crate::targets::TARGETS;
@@ -190,9 +190,24 @@ fn decode(input: &[u8]) -> Result<&str, String> {
     })
 }
 
-pub fn refused_item(items: &[MediaFact]) -> Option<String> {
-    let index = items.iter().position(|item| !document::is_media_id(item.id))?;
-    Some(format!("item {index} id is not a media ID"))
+pub fn refused(facts: &Facts) -> Option<String> {
+    let over = |text: &str| text.len() > FACT_MAX_UNITS && text.encode_utf16().nth(FACT_MAX_UNITS).is_some();
+    let items = facts.items.unwrap_or_default();
+    if items.len() > FACT_MAX_ITEMS {
+        return Some(format!("items has {} entries, over {FACT_MAX_ITEMS}", items.len()));
+    }
+    for (index, item) in items.iter().enumerate() {
+        if !document::is_media_id(item.id) {
+            return Some(format!("item {index} id is not a media ID"));
+        }
+        if item.alt.is_some_and(over) {
+            return Some(format!("item {index} alt is over {FACT_MAX_UNITS} UTF-16 units"));
+        }
+    }
+    [("title", facts.title), ("targetUrl", facts.target_url), ("spoilerText", facts.spoiler_text)]
+        .into_iter()
+        .find(|(_, text)| text.is_some_and(over))
+        .map(|(name, _)| format!("{name} is over {FACT_MAX_UNITS} UTF-16 units"))
 }
 
 pub fn oversized(units: u64, code_point: u32) -> Option<String> {

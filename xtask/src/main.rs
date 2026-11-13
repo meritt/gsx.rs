@@ -40,6 +40,7 @@ const PROJECTION: &str = "target/staging/projection.jsonl";
 const MEDIA: &str = "target/staging/media.jsonl";
 const SIZES: &str = "target/staging/sizes.jsonl";
 const LIMITS: &str = "target/staging/limits.jsonl";
+const CEILINGS: &str = "target/staging/ceilings.jsonl";
 
 type Result<T = ()> = std::result::Result<T, String>;
 
@@ -584,7 +585,7 @@ fn corpus_args(command: &mut Command) -> &mut Command {
 
 fn corpus_files() -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = CORPUS.iter().map(|file| root().join(file)).collect();
-    files.extend([root().join(PROJECTION), root().join(MEDIA), root().join(SIZES), root().join(LIMITS)]);
+    files.extend([PROJECTION, MEDIA, SIZES, LIMITS, CEILINGS].map(|file| root().join(file)));
     files
 }
 
@@ -596,6 +597,7 @@ fn cases() -> Result<Vec<corpus::Case>> {
     corpus::media(&root().join(MEDIA))?;
     corpus::sizes(&root().join(SIZES))?;
     corpus::limits(&root().join(LIMITS))?;
+    corpus::ceilings(&root().join(CEILINGS))?;
     corpus::load(&corpus_files())
 }
 
