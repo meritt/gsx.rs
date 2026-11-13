@@ -91,6 +91,17 @@ const SPOILER_OMITTED: Condition = Condition { when: When::Spoiler, class: Omitt
 
 const SPOILERS_CARRIED: Rule = Rule { conditions: &ATTACHED, ..DEFAULT.media };
 
+const ALT_REFUSED: Rule = Rule {
+    conditions: &[
+        ATTACHED[0],
+        ATTACHED[1],
+        ATTACHED[2],
+        SPOILER_OMITTED,
+        Condition { when: When::Refused, class: Omitted, reason: "media_alt_omitted" },
+    ],
+    ..DEFAULT.media
+};
+
 const SPOILERS_PER_POST: Rule = Rule {
     conditions: &[
         ATTACHED[0],

@@ -20,6 +20,7 @@ const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlFor
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
+        alt: Format::ALL,
     }
 }
 

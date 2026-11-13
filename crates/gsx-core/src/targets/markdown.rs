@@ -23,6 +23,7 @@ const fn markdown(
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
+        alt: Format::ALL,
     }
 }
 

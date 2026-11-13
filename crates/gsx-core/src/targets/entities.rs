@@ -6,8 +6,8 @@ use super::{DATE_BOUNDS, DEFAULT, LINK, Rules, SPOILERS_PER_POST, TELEGRAM_TIME_
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
-    Condition, Detection, EntityForm, Feature, Form, Normalization, Offsets, Rule, Search, Spoilers, Style, Target,
-    When,
+    Condition, Detection, EntityForm, Feature, Form, Format, Normalization, Offsets, Rule, Search, Spoilers, Style,
+    Target, When,
 };
 
 const fn entities(
@@ -26,6 +26,7 @@ const fn entities(
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
+        alt: Format::ALL,
     }
 }
 

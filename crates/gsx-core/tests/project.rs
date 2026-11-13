@@ -180,6 +180,42 @@ fn mastodon_limit_follows_instance_fact() {
 }
 
 #[test]
+fn instagram_publishes_alt_for_images_only() {
+    let long = "a".repeat(1001);
+    let item = |id, format| MediaFact { id, format, alt: Some(&long), spoiler: false, inline: false };
+    let items = [item("i", Format::Image), item("g", Format::Gif), item("v", Format::Video), item("a", Format::Audio)];
+    let facts = Facts { media: Some(MediaKind::Image), media_count: 4, items: Some(&items), ..Facts::default() };
+    let projection = run("instagram-plain", "Look", &facts);
+    let image = projection.items[0].alt.as_deref().unwrap();
+    assert_eq!((image.chars().count(), image.ends_with('…')), (1000, true));
+    assert!(projection.items[1..].iter().all(|item| item.alt.is_none()));
+    let alt: Vec<_> = projection
+        .changes
+        .iter()
+        .filter(|change| change.field == FieldName::Alt)
+        .map(|change| (change.class, change.reason, change.slot.unwrap().item))
+        .collect();
+    assert_eq!(
+        alt,
+        [
+            (Class::Approximated, "media_alt_truncated", 0),
+            (Class::Omitted, "media_alt_omitted", 1),
+            (Class::Omitted, "media_alt_omitted", 2),
+            (Class::Omitted, "media_alt_omitted", 3),
+        ]
+    );
+    assert!(
+        projection
+            .changes
+            .iter()
+            .filter(|change| change.slot.is_some_and(|slot| slot.item > 0))
+            .all(|change| change.truncated.is_none())
+    );
+    assert_eq!(projection.measurements.iter().filter(|measured| measured.field == FieldName::Alt).count(), 1);
+    assert_eq!(target("instagram-plain").unwrap().media().alt, [Format::Image]);
+}
+
+#[test]
 fn attached_media_report_only_listed_items() {
     let markdown = "Look\n\n::media{id=\"a\"}\n\n::media{ids=\"b,c\" layout=\"collage\"}\n\n::media{id=\"c\"}";
     let items = [MediaFact { id: "c", format: Format::Image, alt: None, spoiler: false, inline: false }];

@@ -678,6 +678,7 @@ pub struct Target {
     pub renderer: Renderer,
     pub limits: &'static [measure::Limit],
     pub spoilers: Spoilers,
+    pub alt: &'static [Format],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -816,7 +817,7 @@ impl Target {
         match self.form {
             Form::Blocks(form) => MediaShape {
                 formats: form.formats,
-                alt: form.formats,
+                alt: self.alt,
                 spoiler: if form.spoiler { (SpoilerMode::Carried, Format::ALL) } else { (SpoilerMode::Omitted, &[]) },
                 inline: true,
                 groups: form
@@ -832,7 +833,7 @@ impl Target {
             },
             _ => MediaShape {
                 formats: Format::ALL,
-                alt: Format::ALL,
+                alt: self.alt,
                 spoiler: match self.spoilers {
                     Spoilers::None => (SpoilerMode::Omitted, &[]),
                     Spoilers::Items(formats) => (SpoilerMode::Carried, formats),
@@ -886,6 +887,9 @@ impl Target {
                 let _ = writeln!(out, "spoilers items {}", join(formats.iter().map(|format| format.name())));
             }
             Spoilers::Post => out.push_str("spoilers post\n"),
+        }
+        if self.alt != self.form.blocks().map_or(Format::ALL, |form| form.formats) {
+            let _ = writeln!(out, "alt {}", join(self.alt.iter().map(|format| format.name())));
         }
         for rule in self.rules {
             let _ = writeln!(out, "feature {} {} {}", rule.feature.name(), rule.class.name(), rule.reason);

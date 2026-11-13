@@ -26,6 +26,7 @@ const fn blocks(
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
+        alt: form.formats,
     }
 }
 

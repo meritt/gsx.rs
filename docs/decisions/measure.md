@@ -61,7 +61,7 @@ The following are the configured limits of this release. Semicolon-separated fie
 | `mastodon-plain` | `alt` | code points | `descriptionLimit`, otherwise unlimited |
 | `linkedin-plain` | `text`; `alt` | code points | 3000; 4086 |
 | `facebook-plain` | `text` | code points | 63206 |
-| `instagram-plain` | `text`; `alt` | code points | 2200; 1000 |
+| `instagram-plain` | `text`; image `alt` | code points | 2200; 1000 |
 | `instagram-plain` | `text` | hashtags; mentions | `hashtagLimit`, default 5; 20 |
 | `vk-plain` | `text`; video `title`; video `alt`; image `alt` | code points | unlimited; 128; 5000; 2048 |
 | `youtube-plain` | `title`; `description` | code points; UTF-8 bytes | 100; 5000 |

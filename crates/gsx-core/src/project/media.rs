@@ -65,6 +65,13 @@ fn fit_alt(
     resolved: &[(Fact, u32)],
     (block, item): (Option<usize>, usize),
 ) -> Alt {
+    let slot = Slot { block: block.map(|block| block as u32), item: item as u32 };
+    if !target.alt.contains(&format) {
+        let (class, reason) = target.rule(Feature::Media).outcome(Some(When::Refused));
+        let field = FieldName::Alt;
+        let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None, slot: Some(slot) };
+        return Alt { text: None, measurements: vec![], change: Some(change) };
+    }
     let context = measure::Context { placement: Placement::Post, media: kind(format) };
     let facts = measure::Facts { resolved, ..measure::Facts::default() };
     let limits: Vec<_> = target.applicable(FieldName::Alt, context).collect();
@@ -100,7 +107,7 @@ fn fit_alt(
             field: FieldName::Alt,
             range,
             truncated: Some(truncated),
-            slot: Some(Slot { block: block.map(|block| block as u32), item: item as u32 }),
+            slot: Some(slot),
         }
     });
     Alt { text, measurements, change }
