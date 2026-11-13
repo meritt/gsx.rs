@@ -1,8 +1,8 @@
-use super::{media, underlined, wrapper};
-use crate::document::{Align, Kind, Node, Provenance};
+use super::{closing_bidi, dropped, language, math_block, media, spelled, underlined, wrapper};
+use crate::document::{Align, Kind, Node, Provenance, TimeFormat};
 use crate::project::links::accepted;
 use crate::project::{
-    CELL, Class, Context, Feature, LineStart, MarkdownForm, Piece, RULE, Renderer, Style, When, href,
+    CELL, Class, Context, Feature, LineStart, MarkdownForm, RULE, Renderer, Style, When, href, time_format,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
@@ -18,7 +18,7 @@ pub fn blocks(context: &mut Context, nodes: &[Node]) {
 }
 
 fn blocks_at(context: &mut Context, nodes: &[Node], depth: u32) {
-    let mut first = true;
+    let mut previous: Option<&Node> = None;
     for node in nodes {
         if media(node) {
             context.report_media(node);
@@ -27,11 +27,30 @@ fn blocks_at(context: &mut Context, nodes: &[Node], depth: u32) {
         if context.done() {
             continue;
         }
-        if !first {
-            context.writer().newlines(node.gap_before.unwrap_or(1));
+        if let Some(previous) = previous {
+            let gap = context.gap(Some(previous.range.end), node, node.gap_before.unwrap_or(1));
+            separate(context, previous, node, gap);
         }
-        first = false;
+        previous = Some(node);
         block(context, node, depth);
+    }
+}
+
+pub(crate) fn separate(context: &mut Context, previous: &Node, next: &Node, gap: u32) {
+    let form = form(context);
+    if gap != 1 || form.line_break == "\n" {
+        context.writer().newlines(gap);
+        return;
+    }
+    let rule = matches!(next.kind, Kind::ThematicBreak);
+    let interrupts = matches!(next.kind, Kind::Code { .. } | Kind::Blockquote | Kind::List { .. } | Kind::Table { .. });
+    match previous.kind {
+        Kind::ThematicBreak | Kind::Code { .. } => context.writer().push("\n"),
+        Kind::Blockquote | Kind::List { .. } | Kind::Table { .. } if rule || interrupts => context.writer().push("\n"),
+        Kind::Blockquote | Kind::List { .. } | Kind::Table { .. } => context.writer().newlines(2),
+        _ if rule => context.writer().newlines(2),
+        _ if interrupts => context.writer().push("\n"),
+        _ => context.writer().push(form.line_break),
     }
 }
 
@@ -63,6 +82,9 @@ pub(crate) fn block(context: &mut Context, node: &Node, depth: u32) {
             }
         }
         Kind::Code { lang, meta, value } => {
+            if math_block(lang.as_deref()) {
+                context.report(Feature::Math, node.range);
+            }
             let language = language(lang.as_deref());
             if meta.is_some() || lang.is_some() && language.is_empty() {
                 context.report_when(Feature::CodeBlock, Some(node.range), Some(When::Info));
@@ -114,7 +136,8 @@ fn list(context: &mut Context, node: &Node, ordered: bool, start: Option<u32>, d
             break;
         }
         if index > 0 {
-            context.writer().push("\n");
+            let after = Some(node.children[index - 1].range.end);
+            context.break_before(after, item);
         }
         let marker =
             if ordered { format!("{}. ", u64::from(start.unwrap_or(1)) + index as u64) } else { "- ".to_owned() };
@@ -187,7 +210,8 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
         match &node.kind {
             Kind::Text { value } => {
                 let literal = node.provenance == Provenance::Literal;
-                context.leaf_with(node, value, |piece, _| text(form, piece, literal));
+                let live = form.owned && !context.linked();
+                context.leaf_with(node, value, |piece, _| text(form, piece, literal, live));
             }
             Kind::InlineCode { value } => {
                 let shown = code(form, context.rendered(node, value), false);
@@ -198,7 +222,11 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                 context.leaf_with(node, value, |piece, _| code(form, piece, cell));
                 context.writer().push(&format!("{padding}{fence}"));
             }
-            Kind::Break => context.writer().push("\n"),
+            Kind::Math { value } => {
+                context.report(Feature::Math, node.range);
+                context.leaf_with(node, value, |piece, kind| text(form, &spelled(piece, kind), true, false));
+            }
+            Kind::Break => context.writer().push(form.line_break),
             Kind::Link { url, title, .. } => {
                 if title.is_some() {
                     context.report(Feature::LinkTitle, node.range);
@@ -206,16 +234,18 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                 let href = href(url);
                 if !form.url_labels {
                     let mut label = String::new();
-                    plain(&node.children, &mut label);
+                    super::label(&node.children, &mut label, true);
                     if let Some(label) = accepted(&label) {
                         let bare = !context.contains_cut(node) && label == href;
                         context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
+                        let mark = context.writer().mark();
                         if !bare {
                             inline_at(context, &node.children, cell);
                         }
+                        let closing = closing_bidi(context.writer().since(mark));
                         context.writer().source(node.range);
                         let shown = raw(href, cell);
-                        context.writer().push(&if bare { shown } else { format!(" ({shown})") });
+                        context.writer().push(&if bare { shown } else { format!("{closing} ({shown})") });
                         continue;
                     }
                 }
@@ -225,11 +255,11 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                     .unwrap_or_default();
                 context.writer().source(node.range);
                 context.writer().push(&format!("{underline}["));
-                inline_at(context, &node.children, cell);
+                context.within_link(|context| inline_at(context, &node.children, cell));
                 context.writer().source(node.range);
                 context.writer().push(&format!("]({}){underline}", raw(destination(&href), cell)));
             }
-            Kind::Datetime { unix, .. } => datetime(context, node, *unix, cell),
+            Kind::Datetime { unix, format, .. } => datetime(context, node, *unix, *format, cell),
             kind => match wrapper(kind) {
                 Some(Feature::Underline) if let Some(delimiter) = form.delimiter(Feature::Underline) => {
                     context.writer().source(node.range);
@@ -255,9 +285,10 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
     }
 }
 
-fn datetime(context: &mut Context, node: &Node, unix: i64, cell: bool) {
+fn datetime(context: &mut Context, node: &Node, unix: i64, format: Option<TimeFormat>, cell: bool) {
     let form = form(context);
-    let template = form.datetime.replace("$unix", &unix.to_string());
+    let format = time_format(form.time_formats, format).unwrap_or(form.time_format);
+    let template = form.datetime.replace("$unix", &unix.to_string()).replace("$format", format);
     let Some((before, after)) = template.split_once("$label") else {
         if !node.children.is_empty() {
             context.report(Feature::Datetime, node.range);
@@ -268,7 +299,7 @@ fn datetime(context: &mut Context, node: &Node, unix: i64, cell: bool) {
         return;
     };
     let mut label = String::new();
-    plain(&node.children, &mut label);
+    super::label(&node.children, &mut label, true);
     if label.contains(|char| form.separators.contains(char)) {
         context.report(Feature::Datetime, node.range);
         inline_at(context, &node.children, cell);
@@ -287,30 +318,10 @@ fn skip(context: &mut Context, nodes: &[Node]) {
             continue;
         }
         match &node.kind {
-            Kind::Text { value } | Kind::InlineCode { value } => {
-                context.leaf_with(
-                    node,
-                    value,
-                    |piece, kind| {
-                        if kind == Piece::Suffix { piece.to_owned() } else { String::new() }
-                    },
-                );
+            Kind::Text { value } | Kind::InlineCode { value } | Kind::Math { value } => {
+                context.leaf_with(node, value, dropped);
             }
             _ => skip(context, &node.children),
-        }
-    }
-}
-
-fn plain(nodes: &[Node], out: &mut String) {
-    for node in nodes {
-        match &node.kind {
-            Kind::Text { value } | Kind::InlineCode { value } => out.push_str(value),
-            Kind::Break => out.push('\n'),
-            Kind::Link { url, .. } => {
-                plain(&node.children, out);
-                out.push_str(&href(url));
-            }
-            _ => plain(&node.children, out),
         }
     }
 }
@@ -328,18 +339,24 @@ fn flat(context: &mut Context, nodes: &[Node], cell: bool) {
                 }
                 context.leaf_with(node, value, |piece, _| code(form, piece, cell));
             }
+            Kind::Math { value } => {
+                context.report(Feature::Math, node.range);
+                context.leaf_with(node, value, |piece, kind| code(form, &spelled(piece, kind), cell));
+            }
             Kind::Break => context.writer().push("\n"),
             Kind::Link { url, .. } => {
                 let href = href(url);
                 let mut label = String::new();
-                plain(&node.children, &mut label);
+                super::label(&node.children, &mut label, true);
                 let bare = !context.contains_cut(node) && accepted(&label).is_some_and(|label| label == href);
                 context.report_when(Feature::Link, Some(node.range), bare.then_some(When::LabelIsHref));
                 if bare {
                     context.writer().push(&code(form, &href, cell));
                 } else {
+                    let mark = context.writer().mark();
                     flat(context, &node.children, cell);
-                    context.writer().push(&format!(" ({})", code(form, &href, cell)));
+                    let closing = closing_bidi(context.writer().since(mark));
+                    context.writer().push(&format!("{closing} ({})", code(form, &href, cell)));
                 }
             }
             kind => {
@@ -351,14 +368,6 @@ fn flat(context: &mut Context, nodes: &[Node], cell: bool) {
             }
         }
     }
-}
-
-pub fn language(lang: Option<&str>) -> &str {
-    lang.filter(|lang| {
-        (1..=32).contains(&lang.len())
-            && lang.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'+' | b'.' | b'-'))
-    })
-    .unwrap_or("")
 }
 
 fn longest_run(value: &str) -> usize {
@@ -395,9 +404,9 @@ fn raw(value: String, cell: bool) -> String {
     let mut chars = value.chars().peekable();
     while let Some(char) = chars.next() {
         match char {
-            '\\' if matches!(chars.peek(), Some('\\' | '|')) => {
+            '\\' => {
                 out.push('\\');
-                out.push(chars.next().unwrap());
+                out.extend(chars.next_if(|next| matches!(next, '\\' | '|')));
             }
             '|' => out.push_str("\\|"),
             char => out.push(char),
@@ -407,16 +416,19 @@ fn raw(value: String, cell: bool) -> String {
 }
 
 fn escape(out: &mut String, value: &str, set: &str) {
-    for char in value.chars() {
-        if char.is_ascii() && set.contains(char) {
-            out.push('\\');
-        }
-        out.push(char);
+    let mask = set.bytes().filter(u8::is_ascii).fold(0u128, |mask, byte| mask | (1 << byte));
+    let mut rest = value;
+    while let Some(at) = rest.bytes().position(|byte| byte.is_ascii() && (mask >> byte) & 1 == 1) {
+        out.push_str(&rest[..at]);
+        out.push('\\');
+        out.push(char::from(rest.as_bytes()[at]));
+        rest = &rest[at + 1..];
     }
+    out.push_str(rest);
 }
 
-fn spans(out: &mut String, line: &str, form: &MarkdownForm) {
-    if !form.owned {
+fn spans(out: &mut String, line: &str, form: &MarkdownForm, live: bool) {
+    if !live {
         escape(out, line, form.escaped);
         return;
     }
@@ -429,19 +441,19 @@ fn spans(out: &mut String, line: &str, form: &MarkdownForm) {
     escape(out, &line[cursor..], form.escaped);
 }
 
-fn text(form: &MarkdownForm, value: &str, literal: bool) -> String {
+fn text(form: &MarkdownForm, value: &str, literal: bool, live: bool) -> String {
     let mut out = String::with_capacity(value.len() + value.len() / 4 + 2);
     for (index, line) in value.split('\n').enumerate() {
         if index > 0 {
-            out.push('\n');
+            out.push_str(form.line_break);
         }
         if literal {
             escape(&mut out, line, form.escaped);
         } else if form.neutralised.contains(&LineStart::Ordered) && escaped_ordered(line) {
             out.push('\\');
-            spans(&mut out, &line[1..], form);
+            spans(&mut out, &line[1..], form, live);
         } else {
-            spans(&mut out, line, form);
+            spans(&mut out, line, form, live);
         }
     }
     out
@@ -498,12 +510,17 @@ pub fn owned(line: &str) -> Vec<(usize, usize)> {
     let mail = line.contains('@');
     let mut at = 0;
     while at < line.len() {
+        if !mail {
+            match line.as_bytes()[at..].iter().position(|byte| matches!(byte, b'h' | b'#' | b'$')) {
+                Some(skip) => at += skip,
+                None => break,
+            }
+        }
         let rest = &line[at..];
-        match url(rest).or_else(|| mail.then(|| email(rest)).flatten()).or_else(|| name(rest)) {
-            Some(length) => {
-                let kept = rest[..length].trim_end_matches('\\').len();
-                if kept > 0 {
-                    found.push((at, at + kept));
+        match span(rest, mail) {
+            Some((length, start, end)) => {
+                if end > start {
+                    found.push((at + start, at + end));
                 }
                 at += length;
             }
@@ -513,14 +530,24 @@ pub fn owned(line: &str) -> Vec<(usize, usize)> {
     found
 }
 
+fn span(rest: &str, mail: bool) -> Option<(usize, usize, usize)> {
+    if let Some(length) = url(rest) {
+        return Some((length, 0, rest[..length].trim_end_matches('\\').len()));
+    }
+    let length = mail.then(|| email(rest)).flatten().or_else(|| name(rest))?;
+    let span = &rest[..length];
+    let body = span.strip_prefix(['@', '#', '$']).unwrap_or(span);
+    let start = if body.starts_with('_') { length - body.trim_start_matches('_').len() } else { 0 };
+    Some((length, start, span.trim_end_matches('_').len()))
+}
+
 fn url(rest: &str) -> Option<usize> {
     let scheme = ["https://", "http://"].into_iter().find(|scheme| rest.starts_with(scheme))?.len();
-    let body: usize = rest[scheme..]
+    let (count, body) = rest[scheme..]
         .chars()
-        .take_while(|&char| !space(char) && !matches!(char, '<' | '>' | '(' | ')'))
-        .map(char::len_utf8)
-        .sum();
-    (body > 0).then_some(scheme + body)
+        .take_while(|&char| !space(char) && !matches!(char, '<' | '>' | '(' | ')' | '[' | ']' | '`'))
+        .fold((0, 0), |(count, body), char| (count + 1, body + char.len_utf8()));
+    (count > 1).then_some(scheme + body)
 }
 
 fn email(rest: &str) -> Option<usize> {
@@ -581,5 +608,6 @@ mod tests {
         assert_eq!(spans("@\\ x\\"), Vec::<&str>::new());
         assert_eq!(spans("#a\\\\"), ["#a"]);
         assert_eq!(spans("x@y"), ["@y"]);
+        assert_eq!(spans("@__a_ x_y@a.bc https://_ https://ab]`"), ["a", "x_y@a.bc", "https://ab"]);
     }
 }

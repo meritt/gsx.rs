@@ -35,11 +35,21 @@ export type Node =
   | (NodeBase & { type: 'listItem'; spread: boolean; checked: boolean | null })
   | (NodeBase & { type: 'code'; lang: string | null; meta: string | null; value: string })
   | (NodeBase & { type: 'table'; align: Align[] })
-  | (NodeBase & { type: 'text' | 'inlineCode'; value: string })
+  | (NodeBase & { type: 'text' | 'inlineCode' | 'math'; value: string })
   | (NodeBase & { type: 'link'; url: string; source: string; title: string | null })
-  | (NodeBase & { type: 'datetime'; datetime: string | null; unix: number })
+  | (NodeBase & { type: 'datetime'; datetime: string | null; unix: number; format: TimeFormat | null })
   | (NodeBase & { type: 'mediaReference'; mediaId: string })
   | (NodeBase & { type: 'mediaGroup'; mediaIds: string[]; layout: Layout });
+
+export type TimeFormat =
+  | 'time'
+  | 'time-seconds'
+  | 'date-short'
+  | 'date'
+  | 'datetime-short'
+  | 'datetime'
+  | 'full'
+  | 'relative';
 
 export type Layout = 'collage' | 'slideshow';
 
@@ -193,6 +203,7 @@ export type Feature =
   | 'highlight'
   | 'spoiler'
   | 'inline_code'
+  | 'math'
   | 'link'
   | 'link_title'
   | 'datetime'
@@ -208,6 +219,7 @@ export interface Entity {
   style: Style;
   range: Range;
   value: string | null;
+  format?: 't' | 'T' | 'd' | 'D' | 'dt' | 'Dt' | 'wDt' | 'r';
 }
 
 export interface Field {
@@ -265,6 +277,8 @@ export interface Projection {
   fields: Field[];
   measurements: Measurement[];
   changes: Change[];
+  /** Diagnostics of the parsed document, as in `Document.diagnostics`. */
+  diagnostics: Diagnostic[];
   media: string[];
   /** Present for targets of the `blocks/1` form only. */
   blocks?: Block[];
@@ -279,6 +293,10 @@ export interface Part {
   measurements: Measurement[];
   media: string[];
   items: Attachment[];
+  /** UTF-16 range of the part's source in the original input; exact where the rendered text matches its source, otherwise covering and possibly overlapping a neighbor. */
+  range: Range;
+  /** Where the split after this part falls; null on the last part. */
+  boundary: 'paragraph' | 'sentence' | 'word' | 'grapheme' | null;
 }
 
 export interface Attachment {
@@ -302,6 +320,79 @@ export interface Target {
   codes: string[];
   /** Whether `overflow: 'thread'` applies. */
   threads: boolean;
+  /** Facts that can change this target's projection, in the order of `Facts`. */
+  facts: (keyof Facts)[];
+  fields: TargetField[];
+  /** At most one limit applies to one field, unit, placement and media kind. */
+  limits: Limit[];
+  features: Rule[];
+  media: MediaCapabilities;
+}
+
+export interface TargetField {
+  name: FieldName;
+  required: boolean;
+  /** The media kind the field needs. */
+  media: 'any' | 'image' | 'video';
+}
+
+/** A fixed limit has `maximum` and no `fact`; a fact with a default has both; a fact without a default has `fact` only; an unlimited count has neither. */
+export interface Limit {
+  field: FieldName;
+  unit: Unit;
+  maximum: number | null;
+  fact: 'maxCharacters' | 'captionLimit' | 'descriptionLimit' | 'hashtagLimit' | null;
+  /** `null` means every placement. */
+  placements: ('post' | 'reel' | 'story')[] | null;
+  media: 'any' | 'with' | 'without' | 'image' | 'video' | 'gif' | 'audio';
+  rendering: 'payload' | 'visible';
+}
+
+export type When =
+  | 'label_is_href'
+  | 'label_invisible'
+  | 'title_source'
+  | 'empty'
+  | 'overflow'
+  | 'capped'
+  | 'nested'
+  | 'info'
+  | 'blocks'
+  | 'depth'
+  | 'columns'
+  | 'group'
+  | 'cut'
+  | 'inline'
+  | 'missing'
+  | 'count'
+  | 'spoiler'
+  | 'truncated'
+  | 'refused'
+  | 'thread'
+  | 'code'
+  | 'post'
+  | 'blank_lines';
+
+/** A feature's default outcome and the conditional outcomes that replace it. */
+export interface Rule {
+  feature: Feature;
+  class: Class;
+  reason: string;
+  conditions: { when: When; class: Class; reason: string }[];
+}
+
+export type Format = MediaFact['format'];
+
+export interface MediaCapabilities {
+  /** Item formats published as media; where `inline` is read, only inline items of these formats are placed. */
+  formats: Format[];
+  /** Item formats whose alt the projection publishes. */
+  alt: Format[];
+  spoiler: { mode: 'carried' | 'widened' | 'omitted'; formats: Format[] };
+  /** Whether `items[].inline` is read. */
+  inline: boolean;
+  /** Group layouts rendered as a group; empty when none. */
+  groups: { layout: Layout; formats: Format[]; minimum: number; maximum: number }[];
 }
 
 export declare class ParseError extends Error {
@@ -317,6 +408,10 @@ export declare class VersionError extends Error {
 
 export interface GSX {
   readonly VERSION: string;
+  readonly MEDIA_ID_MAX_BYTES: number;
+  readonly MEDIA_ID_PATTERN: string;
+  readonly MEDIA_GROUP_MIN: number;
+  readonly MEDIA_GROUP_MAX: number;
   readonly ParseError: typeof ParseError;
   readonly VersionError: typeof VersionError;
   parse(text: string, media?: Iterable<Media>): Document;
@@ -326,6 +421,7 @@ export interface GSX {
   project(text: string, target: string, facts?: Facts, media?: Iterable<Media>): Projection;
   projectJSON(text: string, target: string, facts?: Facts, media?: Iterable<Media>): string;
   targets(): readonly Readonly<Target>[];
+  isMediaId(id: string): boolean;
 }
 
 export declare function load(

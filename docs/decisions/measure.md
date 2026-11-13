@@ -22,7 +22,7 @@ Hashtag characters are Unicode alphanumerics or `_`; mention characters are ASCI
 
 ## Limit selection
 
-[`Target::limits`](../../crates/gsx-core/src/project/table.rs) is the source of field limits; `targets().manifest` exposes the target configuration for inspection. Each limit declares field, placements, media condition, rendering, unit and maximum. A projection reports every applicable measurement, including unlimited counts with `maximum: null`.
+[`Target::limits`](../../crates/gsx-core/src/project/table.rs) is the source of field limits; `targets().limits` lists them, and `targets().manifest` exposes the target configuration for inspection. Each limit declares field, placements, media condition, rendering, unit and maximum. A projection reports every applicable measurement, including unlimited counts with `maximum: null`.
 
 | Property | Selection |
 | --- | --- |
@@ -37,7 +37,7 @@ Defaults describe the selected publishing surface; they do not discover account 
 
 ## Field limits
 
-The following are the configured limits of this release. Semicolon-separated fields, units and maxima correspond in order; `+` means simultaneous limits. Unless stated otherwise, limits measure payload text and apply in every placement. GIF alt follows image limits.
+The following are the configured limits of this release. Semicolon-separated fields, units and maxima correspond in order; `+` means simultaneous limits. Unless stated otherwise, limits measure payload text and apply in every placement. GIF alt follows image limits. The [platform record](platforms.md) names the API version and primary source behind each limit and marks the limits that are assumptions.
 
 | Target | Field and context | Unit | Maximum |
 | --- | --- | --- | --- |
@@ -61,11 +61,11 @@ The following are the configured limits of this release. Semicolon-separated fie
 | `mastodon-plain` | `alt` | code points | `descriptionLimit`, otherwise unlimited |
 | `linkedin-plain` | `text`; `alt` | code points | 3000; 4086 |
 | `facebook-plain` | `text` | code points | 63206 |
-| `instagram-plain` | `text`; `alt` | code points | 2200; 1000 |
+| `instagram-plain` | `text`; image `alt` | code points | 2200; 1000 |
 | `instagram-plain` | `text` | hashtags; mentions | `hashtagLimit`, default 5; 20 |
 | `vk-plain` | `text`; video `title`; video `alt`; image `alt` | code points | unlimited; 128; 5000; 2048 |
 | `youtube-plain` | `title`; `description` | code points; UTF-8 bytes | 100; 5000 |
-| `youtube-plain` | `description` | hashtags | 60 |
+| `youtube-plain` | `title` and `description` together | hashtags | 60 |
 | `tiktok-plain` | video `text`; photo-post `text`; photo-post `title` | UTF-16 code units | 2200; 4000; 90 |
 | `tiktok-plain` | `text` | mentions | unlimited |
 

@@ -1,5 +1,5 @@
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
-use crate::project::{Class, Condition, Feature, Rule, Target, When};
+use crate::project::{Class, Condition, Feature, Rule, Target, TimeFormats, When};
 
 const fn rule(feature: Feature, class: Class, reason: &'static str) -> Rule {
     Rule { feature, class, reason, conditions: &[] }
@@ -18,16 +18,27 @@ const TEXT: Rule = Rule {
     conditions: &[
         Condition { when: When::Empty, class: Blocked, reason: "text_empty" },
         Condition { when: When::Overflow, class: Blocked, reason: "text_too_long" },
+        Condition { when: When::BlankLines, class: Approximated, reason: "blank_lines_collapsed" },
     ],
 };
 const THREADED_TEXT: Rule = Rule {
     conditions: &[
         TEXT.conditions[0],
         TEXT.conditions[1],
+        TEXT.conditions[2],
         Condition { when: When::Thread, class: Approximated, reason: "text_threaded" },
     ],
     ..TEXT
 };
+
+const MATH: Rule = rule(Feature::Math, TextualFallback, "math_as_text");
+
+const TELEGRAM_TIME_FORMATS: TimeFormats = &["t", "T", "d", "D", "dt", "Dt", "wDt", "r"];
+
+const DATE_BOUNDS: [Condition; 2] = [
+    Condition { when: When::Overflow, class: Unwrapped, reason: "datetime_label_too_long" },
+    Condition { when: When::Refused, class: Unwrapped, reason: "datetime_out_of_range" },
+];
 
 struct Rules {
     heading: Rule,
@@ -80,6 +91,17 @@ const SPOILER_OMITTED: Condition = Condition { when: When::Spoiler, class: Omitt
 
 const SPOILERS_CARRIED: Rule = Rule { conditions: &ATTACHED, ..DEFAULT.media };
 
+const ALT_REFUSED: Rule = Rule {
+    conditions: &[
+        ATTACHED[0],
+        ATTACHED[1],
+        ATTACHED[2],
+        SPOILER_OMITTED,
+        Condition { when: When::Refused, class: Omitted, reason: "media_alt_omitted" },
+    ],
+    ..DEFAULT.media
+};
+
 const SPOILERS_PER_POST: Rule = Rule {
     conditions: &[
         ATTACHED[0],
@@ -111,6 +133,7 @@ macro_rules! rules {
             RULES.highlight,
             RULES.spoiler,
             RULES.inline_code,
+            $crate::targets::MATH,
             RULES.link,
             RULES.link_title,
             RULES.datetime,

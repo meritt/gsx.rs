@@ -17,6 +17,15 @@ const MEDIA: [Media<'static>; 4] = [
     Media { id: "v", cover: None },
 ];
 
+const CAPTIONED: [MediaFact<'static>; 1] =
+    [MediaFact { id: "m", format: Format::Image, alt: Some("b"), spoiler: false, inline: false }];
+
+struct Shape {
+    document: Document,
+    target: &'static Target,
+    facts: Facts<'static>,
+}
+
 struct Publication {
     document: Document,
     target: &'static Target,
@@ -30,6 +39,14 @@ fn case(id: &str) -> String {
 
 fn document(id: &str) -> Document {
     parse(&case(id), &[]).expect("fitting cases are accepted")
+}
+
+fn shape(id: &str, name: &str, facts: Facts<'static>) -> Shape {
+    Shape { document: document(id), target: target(name).expect("shapes name targets"), facts }
+}
+
+fn captioned() -> Facts<'static> {
+    Facts { media: Some(MediaKind::Image), media_count: 1, items: Some(&CAPTIONED), ..Facts::default() }
 }
 
 fn publication(target: &'static Target) -> Publication {
@@ -62,6 +79,11 @@ fn typical(markdowns: Vec<String>) {
         "container-depth",
         "table-cells",
         "nested-list-items",
+        "definition-references",
+        "footnote-references",
+        "label-normalization",
+        "autolink-trail-path",
+        "autolink-trail-domain",
         "reject-lines",
     ],
     setup = case
@@ -74,6 +96,19 @@ fn cases(markdown: String) {
 #[bench::tiktok_long_32k(setup = document, args = ("long-32k"))]
 fn fitting(document: Document) {
     drop(black_box(project(black_box(&document), target("tiktok-plain").unwrap(), &Facts::default())));
+}
+
+#[library_benchmark]
+#[bench::rich_captions(setup = shape, args = ("rich-captions", "telegram-html-rich", captioned()))]
+#[bench::bluesky_parens(setup = shape, args = ("bluesky-parens", "bluesky-entities", Facts::default()))]
+#[bench::entity_cap(
+    setup = shape,
+    args = ("entity-cap", "telegram-entities", Facts { entities_allowed: true, ..Facts::default() })
+)]
+#[bench::bluesky_tags(setup = shape, args = ("bluesky-tags", "bluesky-entities", Facts::default()))]
+#[bench::bluesky_mentions(setup = shape, args = ("bluesky-mentions", "bluesky-entities", Facts::default()))]
+fn shapes(shape: Shape) {
+    drop(black_box(project(black_box(&shape.document), shape.target, &shape.facts)));
 }
 
 #[library_benchmark]
@@ -105,6 +140,6 @@ fn targets(publication: Publication) {
 }
 
 library_benchmark_group!(name = parse_group, benchmarks = [typical, cases]);
-library_benchmark_group!(name = project_group, benchmarks = [fitting, targets]);
+library_benchmark_group!(name = project_group, benchmarks = [fitting, shapes, targets]);
 
 main!(library_benchmark_groups = parse_group, project_group);

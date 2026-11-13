@@ -51,8 +51,8 @@ pub fn value(tokenizer: &mut Tokenizer) -> State {
         if tokenizer.tokenize_state.marker == b'&' {
             let slice = Slice::from_indices(
                 tokenizer.parse_state.bytes,
-                tokenizer.point.index - tokenizer.tokenize_state.size,
-                tokenizer.point.index,
+                tokenizer.point.index as usize - tokenizer.tokenize_state.size,
+                tokenizer.point.index as usize,
             );
 
             if decode_named(slice.as_str(), true).is_none() {

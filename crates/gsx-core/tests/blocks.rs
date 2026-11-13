@@ -35,19 +35,47 @@ fn reasons(projection: &Projection) -> Vec<(Class, Feature, &'static str)> {
 }
 
 #[test]
-fn text_segments_carry_the_gaps_around_media() {
+fn text_blocks_have_no_line_breaks_at_their_edges() {
     let projection = run("discord-blocks", "a *b*\n\n::media{id=\"p\"}\n\nc", &[image("p")]);
-    assert_eq!(projection.blocks, [text("a *b*\n\n"), single("p"), text("\n\nc")]);
+    assert_eq!(projection.blocks, [text("a *b*"), single("p"), text("c")]);
+    assert_eq!(projection.fields[0].text, "a *b*\n\nc");
     let measured = projection.measurements.iter().find(|measured| measured.field == FieldName::Text).unwrap();
-    assert_eq!(measured.value, "a *b*\n\n\n\nc".chars().count());
+    assert_eq!(measured.value, "a *b*\n\nc".chars().count());
     assert_eq!(measured.maximum, Some(4000));
     assert_eq!(reasons(&projection), NONE);
 }
 
 #[test]
+fn rich_html_writes_each_paragraph_as_its_own_block() {
+    let rich = |markdown: &str, items: &[MediaFact]| run("telegram-html-rich", markdown, items).fields[0].text.clone();
+    assert_eq!(rich("One.\n\nTwo.\n\nThree.", &[]), "<p>One.</p><p>Two.</p><p>Three.</p>");
+    assert_eq!(rich("Line one\nline two.\n\nNext.", &[]), "<p>Line one<br>line two.</p><p>Next.</p>");
+    assert_eq!(
+        rich("Before.\n\n- one\n- two\n\nAfter.", &[]),
+        "<p>Before.</p><ul><li><p>one</p></li><li><p>two</p></li></ul><p>After.</p>"
+    );
+    assert_eq!(rich("## Heading\nText.", &[]), "<p><b>Heading</b></p><p>Text.</p>");
+    assert_eq!(
+        rich("Before.\n\n> Quote.\n\n```\ncode\n```\n\n---\n\nAfter.", &[]),
+        "<p>Before.</p><blockquote><p>Quote.</p></blockquote><pre>code</pre><hr/><p>After.</p>"
+    );
+    assert_eq!(
+        rich("Before.\n\n::media{id=\"p\"}\n\nAfter.", &[image("p")]),
+        "<p>Before.</p><img src=\"media:p\"/><p>After.</p>"
+    );
+    assert_eq!(
+        rich(
+            "::media{ids=\"p,q\" layout=\"slideshow\"}",
+            &[image("p"), MediaFact { format: Format::Video, ..image("q") }]
+        ),
+        "<img src=\"media:p\"/><video src=\"media:q\"></video>"
+    );
+}
+
+#[test]
 fn slack_segments_use_slack_markdown() {
     let projection = run("slack-blocks", "a.b\n\n***\n\n::media{id=\"p\"}", &[image("p")]);
-    assert_eq!(projection.blocks, [text("a.b\n\n---\n\n"), single("p")]);
+    assert_eq!(projection.blocks, [text("a.b\n\n---"), single("p")]);
 }
 
 #[test]
@@ -70,7 +98,7 @@ fn other_group_layouts_split_into_single_items() {
 #[test]
 fn unplaced_media_lead() {
     let projection = run("discord-blocks", "a\n\n::media{id=\"q\"}", &[image("p"), image("q")]);
-    assert_eq!(projection.blocks, [single("p"), text("\n\na\n\n"), single("q")]);
+    assert_eq!(projection.blocks, [single("p"), text("a"), single("q")]);
 }
 
 fn attachment(id: &str) -> Attachment {
@@ -113,7 +141,7 @@ fn discord_shows_media_outside_galleries_as_files_in_place() {
     let audio = MediaFact { format: Format::Audio, alt: Some("Theme"), spoiler: true, ..image("a") };
     let discord = run("discord-blocks", "Listen\n\n::media{id=\"a\"}\n\nEnd", &[audio]);
     let file = Item { reference: "media:a".into(), alt: None, spoiler: true };
-    assert_eq!(discord.blocks, [text("Listen\n\n"), Block::File(file), text("\n\nEnd")]);
+    assert_eq!(discord.blocks, [text("Listen"), Block::File(file), text("End")]);
     assert_eq!(discord.items, []);
     assert_eq!(
         reasons(&discord),
@@ -178,7 +206,7 @@ fn media_dropped_by_the_item_limit_leave_the_text_whole() {
     let items: Vec<_> = ids.iter().map(|id| image(id)).collect();
     let projection = run("discord-blocks", "a\n\n::media{id=\"m10\"}\n\nb", &items);
     let mut expected: Vec<_> = ids[..10].iter().map(|id| single(id)).collect();
-    expected.push(text("\n\na\n\nb"));
+    expected.push(text("a\n\nb"));
     assert_eq!(projection.blocks, expected);
     assert_eq!(reasons(&projection), [(Class::Omitted, Feature::Media, "media_count_exceeded")]);
 }
@@ -204,7 +232,7 @@ fn missing_media_drop_their_anchor() {
         assert_eq!(run(name, "a\n\n::media{id=\"x\"}", &[]).blocks, [text("a")]);
         let layout = if name == "slack-blocks" { "slideshow" } else { "collage" };
         let singleton = run(name, &format!("a\n\n::media{{ids=\"p,x\" layout=\"{layout}\"}}"), &[image("p")]);
-        assert_eq!(singleton.blocks, [text("a\n\n"), single("p")]);
+        assert_eq!(singleton.blocks, [text("a"), single("p")]);
         assert_eq!(reasons(&singleton), MISSING);
         let empty = run(name, &format!("a\n\n::media{{ids=\"x,y\" layout=\"{layout}\"}}\n\nb"), &[]);
         assert_eq!(empty.blocks, [text("a\n\nb")]);

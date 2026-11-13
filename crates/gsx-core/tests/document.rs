@@ -112,7 +112,7 @@ fn binds_math_literals_before_other_inline_constructs() {
         let math: Vec<&str> = document.children()[0]
             .children
             .iter()
-            .filter(|node| node.provenance == Provenance::Literal)
+            .filter(|node| matches!(node.kind, Kind::Math { .. }))
             .map(|node| document.source(node.range))
             .collect();
         let start = text.find('$').unwrap();
@@ -269,12 +269,13 @@ fn validates_link_destinations_as_whatwg_urls() {
 }
 
 #[test]
-fn literalizes_spans_across_nodes() {
-    let document = parse("> a $x `b\n> c` **d**$ e", &[]).unwrap();
+fn keeps_math_bodies_raw_across_nodes_without_container_prefixes() {
+    let document = parse("> a $x `b\n> c` **d** \\{ &amp;$ e", &[]).unwrap();
     let paragraph = &document.children()[0].children[0];
-    let literal = paragraph.children.iter().find(|node| node.provenance == Provenance::Literal).unwrap();
-    assert_eq!(document.source(literal.range), "$x `b\n> c` **d**$");
-    assert_eq!(literal.kind, Kind::Text { value: "$x `b\nc` **d**$".into() });
+    let math = paragraph.children.iter().find(|node| matches!(node.kind, Kind::Math { .. })).unwrap();
+    assert_eq!(document.source(math.range), "$x `b\n> c` **d** \\{ &amp;$");
+    assert_eq!(math.kind, Kind::Math { value: "x `b\nc` **d** \\{ &amp;".into() });
+    assert_eq!(math.provenance, Provenance::Authored);
 }
 
 #[test]
@@ -341,14 +342,14 @@ fn parses_labels_across_lines_and_bare_references() {
         ("::x[a\na@b.com]", "::x[a\na@b.com]"),
         ("::x[\na\n  b]", "::x[\na\n  b]"),
         ("&#;\\", "&#;\\"),
-        ("$a &#; = &#x; = &#12345678; = &#x110000;$", "$a &#; = &#x; = &#12345678; = \u{fffd}$"),
+        ("$a &#; = &#x; = &#12345678; = &#x110000;$", "a &#; = &#x; = &#12345678; = &#x110000;"),
     ] {
         let document = parse(text, &[]).unwrap_or_else(|error| panic!("{text:?}: {error}"));
         let values: String = document.children()[0]
             .children
             .iter()
             .map(|node| match &node.kind {
-                Kind::Text { value } => value.as_str(),
+                Kind::Text { value } | Kind::Math { value } => value.as_str(),
                 _ => "",
             })
             .collect();
@@ -375,6 +376,127 @@ fn parses_unmatched_paired_sequences_in_linear_time() {
     let text = |times: usize| "==a ".repeat(times) + &"b|| ".repeat(times);
     let growth = seconds_per_byte(&text(8000)) / seconds_per_byte(&text(2000));
     assert!(growth <= 2.5, "{growth:.1}");
+}
+
+#[test]
+fn pairs_html_blocks_in_linear_time() {
+    let blocks = |times: usize| "<a>\n\n<B>\n\n</c>\n\n</b>\n\n</c>\n\n".repeat(times);
+    assert!(parse(&blocks(1600), &[]).is_ok());
+    let growth = seconds_per_byte(&blocks(1600)) / seconds_per_byte(&blocks(400));
+    assert!(growth <= 2.5, "pairing costs {growth:.1} times more per byte at four times the size");
+
+    let media = |pair: &str| pair.repeat(2000) + &"::media{id=\"x\"}\n".repeat(8000);
+    let (paired, unpaired) = (media("<a>\n\n</A>\n\n"), media("</a>\n\n</A>\n\n"));
+    assert!(parse(&paired, &[]).is_ok() && parse(&unpaired, &[]).is_ok());
+    let ratio = seconds_per_byte(&paired) / seconds_per_byte(&unpaired);
+    assert!(ratio <= 2.0, "media directives after paired blocks cost {ratio:.1} times more per byte");
+}
+
+#[test]
+fn resolves_media_directives_on_one_line_in_linear_time() {
+    let line = |name: &str, directive: &str, times: usize| match name {
+        "joined" => directive.repeat(times),
+        "separated" => format!("{directive} ").repeat(times),
+        _ => "a ".repeat(times) + &directive.repeat(times / 2),
+    };
+    for name in ["joined", "separated", "after text"] {
+        let (valid, invalid) = (line(name, "::media{id=\"x\"}", 16000), line(name, "::media{id=\"\"}", 16000));
+        let codes: Vec<Code> =
+            parse(&valid, &[]).unwrap().diagnostics().iter().map(|diagnostic| diagnostic.code).collect();
+        assert_eq!(codes, vec![Code::MediaReferenceContextUnsupported; valid.matches("::").count()], "{name}");
+        let cost = seconds_per_byte(&valid);
+        let growth = cost / seconds_per_byte(&line(name, "::media{id=\"x\"}", 4000));
+        let ratio = cost / seconds_per_byte(&invalid);
+        assert!(growth <= 2.5, "{name} directives cost {growth:.1} times more per byte at four times the size");
+        assert!(ratio <= 2.0, "{name} directives cost {ratio:.1} times more per byte than invalid ones");
+    }
+}
+
+#[test]
+fn literalizes_labels_across_nodes_in_linear_time() {
+    let shape = |name: &str, times: usize, open: bool| match name {
+        "ending in code" => "[`c`".repeat(times) + if open { "  `]`" } else { "][`]`" },
+        "before unaligned text" => {
+            "[`c`".repeat(times) + if open { "  x &#10;" } else { "][x]&#10;" } + &"a".repeat(times * 16)
+        }
+        _ => "&#10;[`c`".repeat(times) + if open { "  x " } else { "][x]" } + &"a".repeat(times * 16),
+    };
+    for name in ["ending in code", "before unaligned text", "after unaligned text"] {
+        let (labels, open) = (shape(name, 4000, false), shape(name, 4000, true));
+        assert!(parse(&labels, &[]).is_ok() && parse(&open, &[]).is_ok(), "{name}");
+        let cost = seconds_per_byte(&labels);
+        let growth = cost / seconds_per_byte(&shape(name, 1000, false));
+        let ratio = cost / seconds_per_byte(&open);
+        assert!(growth <= 2.5, "labels {name} cost {growth:.1} times more per byte at four times the size");
+        assert!(ratio <= 2.0, "labels {name} cost {ratio:.1} times more per byte than unclosed ones");
+    }
+}
+
+#[test]
+fn refuses_reserved_time_directives_in_linear_time() {
+    let line = |name: &str, form: &str, times: usize| match form {
+        "labels" => format!("::{name}[a").repeat(times),
+        "quoted labels" => format!("::{name}[' ").repeat(times),
+        "attributes" => format!("::{name}[a]{{").repeat(times),
+        _ => format!("::{name}[").repeat(times) + &"a".repeat(times * 16),
+    };
+    for form in ["labels", "quoted labels", "attributes", "labels before text"] {
+        let (time, other) = (line("time", form, 4000), line("tame", form, 4000));
+        let ends: Vec<(Code, u32)> = parse(&time, &[])
+            .unwrap()
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| (diagnostic.code, diagnostic.range.end))
+            .collect();
+        assert_eq!(ends, vec![(Code::MarkdownMalformed, time.len() as u32); 4000], "{form}");
+        let cost = seconds_per_byte(&time);
+        let growth = cost / seconds_per_byte(&line("time", form, 1000));
+        let ratio = cost / seconds_per_byte(&other);
+        assert!(growth <= 2.5, "{form} cost {growth:.1} times more per byte at four times the size");
+        assert!(ratio <= 2.0, "{form} cost {ratio:.1} times more per byte than other directives");
+    }
+}
+
+#[test]
+fn scans_autolink_literal_punctuation_runs_in_linear_time() {
+    for (name, prefix, run) in [("path", "http://a.b/", ","), ("domain", "http://a", "."), ("www", "www.a", ".")] {
+        let line = |run: &str, times: usize| format!("{prefix}{}x", run.repeat(times));
+        let link_end = |text: &str| parse(&format!("{text} y"), &[]).unwrap().children()[0].children[0].range.end;
+        assert_eq!(link_end(&line(run, 8)), line(run, 8).len() as u32, "{name}");
+        assert_eq!(link_end(&format!("{prefix}{}", run.repeat(8))), prefix.len() as u32, "{name}");
+        let cost = seconds_per_byte(&line(run, 8000));
+        let growth = cost / seconds_per_byte(&line(run, 2000));
+        let ratio = cost / seconds_per_byte(&line("a", 8000));
+        assert!(growth <= 2.5, "{name} runs cost {growth:.1} times more per byte at four times the size");
+        assert!(ratio <= 3.0, "{name} runs cost {ratio:.1} times more per byte than letters");
+    }
+}
+
+#[test]
+fn looks_up_definitions_in_linear_time() {
+    let defined = parse("[a]: b\n\n[c] [A]", &[]).unwrap();
+    let provenances: Vec<Provenance> = defined.children()[1].children.iter().map(|node| node.provenance).collect();
+    assert_eq!(provenances, [Provenance::Authored, Provenance::Literal]);
+    for (name, definition, reference) in [("definitions", "[a]: b\n", "[c]"), ("footnotes", "[^a]: b\n", "[^c]")] {
+        let text =
+            |times: usize| definition.repeat(times) + &format!("\n{}\n", reference.repeat(255)).repeat(times / 20);
+        assert!(parse(&text(4000), &[]).is_ok(), "{name}");
+        let growth = seconds_per_byte(&text(4000)) / seconds_per_byte(&text(1000));
+        assert!(growth <= 2.5, "{name} cost {growth:.1} times more per byte at four times the size");
+    }
+}
+
+#[test]
+fn normalizes_nested_labels_in_linear_time() {
+    let longest = format!("[{}]: b\n\n[{}]", "a".repeat(999), "A".repeat(999));
+    assert_eq!(parse(&longest, &[]).unwrap().children()[1].children[0].provenance, Provenance::Literal);
+    let text = |length: usize| {
+        let labels = (length / 1024).clamp(1, 255);
+        format!("[a]: b\n\n{}{}{}", "[".repeat(labels), "a ".repeat(length / 2), "]".repeat(labels))
+    };
+    assert!(parse(&text(65536), &[]).is_ok());
+    let growth = seconds_per_byte(&text(65536)) / seconds_per_byte(&text(16384));
+    assert!(growth <= 2.5, "nested labels cost {growth:.1} times more per byte at four times the size");
 }
 
 #[test]

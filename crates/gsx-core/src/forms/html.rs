@@ -1,9 +1,9 @@
-use super::{media, underlined, wrapper};
-use crate::document::{Align, Kind, Layout, Node, Range};
+use super::{dropped, label, language, math_block, media, spelled, underlined, wrapper};
+use crate::document::{Align, Kind, Node, Range};
 use crate::measure::{self, Field, Placement};
 use crate::project::{
     CELL, Change, Class, Context, Feature, FieldName, Format, HtmlBlocks, HtmlForm, RULE, Renderer, Slot, Truncated,
-    When, blank, href, marker, placed, references, shortened,
+    When, blank, date_refusal, href, marker, placed, references, shortened, time_format,
 };
 
 pub const RENDERER: Renderer = Renderer { blocks: render, inline: render_inline };
@@ -81,11 +81,22 @@ pub(super) fn escape(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
+fn formula(context: &mut Context, node: &Node, value: &str, tag: &str) {
+    if context.contains_cut(node) {
+        return context.leaf_with(node, value, dropped);
+    }
+    context.writer().raw(&format!("<{tag}>"));
+    context.writer().verbatim(true);
+    context.leaf(node, value);
+    context.writer().verbatim(false);
+    context.writer().raw(&format!("</{tag}>"));
+}
+
 fn formatting(nodes: &[Node], decorated: bool) -> usize {
     nodes
         .iter()
         .map(|node| match node.kind {
-            Kind::InlineCode { .. } => 1,
+            Kind::InlineCode { .. } | Kind::Math { .. } => 1,
             Kind::Link { .. } => {
                 1 + usize::from(decorated && !underlined(&node.children)) + formatting(&node.children, decorated)
             }
@@ -154,7 +165,7 @@ impl Html {
     }
 
     fn blocks(&mut self, context: &mut Context, nodes: &[Node]) {
-        let mut first = true;
+        let mut after = None;
         for node in nodes {
             if media(node) {
                 context.report_media(node);
@@ -163,10 +174,10 @@ impl Html {
             if context.done() {
                 continue;
             }
-            if !first {
-                context.writer().newlines(node.gap_before.unwrap_or(1));
+            if after.is_some() {
+                context.break_before(after, node);
             }
-            first = false;
+            after = Some(node.range.end);
             self.block(context, node);
         }
     }
@@ -197,7 +208,7 @@ impl Html {
                         break;
                     }
                     if index > 0 {
-                        context.writer().push("\n");
+                        context.break_before(Some(node.children[index - 1].range.end), item);
                     }
                     let checked = match item.kind {
                         Kind::ListItem { checked, .. } => checked,
@@ -273,17 +284,30 @@ impl Html {
     }
 
     fn code_block(&mut self, context: &mut Context, node: &Node, lang: Option<&str>, meta: bool, value: &str) {
+        if math_block(lang) {
+            match self.form.math {
+                Some(tags) => {
+                    if meta {
+                        context.report_when(Feature::CodeBlock, Some(node.range), Some(When::Info));
+                    }
+                    return formula(context, node, value, tags.block);
+                }
+                None => context.report(Feature::Math, node.range),
+            }
+        }
         let quoted = self.quoted > 0 && !self.form.quote_contains_code;
         if quoted {
             context.report(Feature::Blockquote, node.range);
             self.close_segment(context);
         }
-        if meta || (lang.is_some() && !self.form.code_info) {
+        let language = language(lang);
+        if meta || (lang.is_some() && (language.is_empty() || !self.form.code_info)) {
             context.report_when(Feature::CodeBlock, Some(node.range), Some(When::Info));
         }
-        let open = match lang.filter(|_| self.form.code_info) {
-            Some(lang) => format!("<pre><code class=\"language-{}\">", attribute(lang)),
-            None => "<pre>".to_owned(),
+        let open = if self.form.code_info && !language.is_empty() {
+            format!("<pre><code class=\"language-{}\">", attribute(language))
+        } else {
+            "<pre>".to_owned()
         };
         let close = if open.len() > "<pre>".len() { "</code></pre>" } else { "</pre>" };
         context.writer().raw(&open);
@@ -305,6 +329,14 @@ impl Html {
                 Kind::Text { value } => context.leaf(node, value),
                 Kind::Break => context.writer().push("\n"),
                 Kind::InlineCode { value } => self.code(context, node, value),
+                Kind::Math { value } => {
+                    if let Some(tags) = self.form.math {
+                        formula(context, node, value, tags.inline);
+                    } else {
+                        context.report(Feature::Math, node.range);
+                        context.leaf_with(node, value, spelled);
+                    }
+                }
                 Kind::Link { url, title, .. } => {
                     if title.is_some() {
                         context.report(Feature::LinkTitle, node.range);
@@ -312,9 +344,24 @@ impl Html {
                     let open = format!("<a href=\"{}\">", attribute(&href(url)));
                     self.element(context, node, Feature::Link, open);
                 }
-                Kind::Datetime { unix, .. } => {
-                    let open = self.form.tag(Feature::Datetime).map(|tag| format!("<{tag} unix=\"{unix}\">"));
-                    self.element_or_fallback(context, node, Feature::Datetime, open);
+                Kind::Datetime { unix, format, .. } => {
+                    let format = time_format(self.form.time_formats, *format);
+                    let open = self.form.tag(Feature::Datetime).map(|tag| match format {
+                        Some(format) => format!("<{tag} unix=\"{unix}\" format=\"{format}\">"),
+                        None => format!("<{tag} unix=\"{unix}\">"),
+                    });
+                    let refusal = open.as_ref().and_then(|_| {
+                        let mut text = String::new();
+                        label(&node.children, &mut text, false);
+                        date_refusal(&text, *unix, format.is_some())
+                    });
+                    match refusal {
+                        Some(when) => {
+                            context.report_when(Feature::Datetime, Some(node.range), Some(when));
+                            self.inline(context, &node.children);
+                        }
+                        None => self.element_or_fallback(context, node, Feature::Datetime, open),
+                    }
                 }
                 kind => match wrapper(kind) {
                     Some(feature) => {
@@ -412,7 +459,10 @@ impl Html {
             self.counted.blocks_reported = true;
             context.report_when(Feature::Text, range, Some(When::Blocks));
         }
-        self.deepen(context, range, depth);
+        if depth > limits.depth && !self.counted.depth_reported {
+            self.counted.depth_reported = true;
+            context.report_when(Feature::Text, range, Some(When::Depth));
+        }
     }
 
     fn limit(&self) -> usize {
@@ -480,16 +530,11 @@ impl Html {
         if let Kind::MediaGroup { layout, .. } = node.kind
             && indices.len() > 1
         {
-            let grouped = indices.iter().all(|&index| match self.media[index].format {
-                Format::Image => true,
-                Format::Video => layout == Layout::Collage,
-                Format::Gif | Format::Audio => false,
-            });
-            if grouped {
-                let name = match layout {
-                    Layout::Collage => "tg-collage",
-                    Layout::Slideshow => "tg-slideshow",
-                };
+            let group = self
+                .form
+                .group(layout)
+                .filter(|(_, formats)| indices.iter().all(|&index| formats.contains(&self.media[index].format)));
+            if let Some((name, _)) = group {
                 self.count(context, node.range, level);
                 let start = context.writer().mark();
                 context.writer().raw(&format!("<{name}>"));
@@ -513,10 +558,7 @@ impl Html {
             }
             context.report_when(Feature::Media, Some(node.range), Some(When::Group));
         }
-        for (position, &index) in indices.iter().enumerate() {
-            if position > 0 {
-                context.writer().raw("<br>");
-            }
+        for &index in indices {
             self.single(context, index, Some(node.range), level);
         }
     }
@@ -533,11 +575,19 @@ impl Html {
         let body = cost(&context.target.form.visible(context.writer().since(0)));
         let Some(mut remaining) = maximum.checked_sub(body) else { return };
         let cut = context.done();
+        let additive = limit.is_some_and(|limit| limit.unit.max_bytes().is_some());
+        let mut measured = (0, 0, None);
         let mut inserts = vec![];
         let mut kept = 0;
         for figure in std::mem::take(&mut self.figures) {
             let before = if cut && !figure.cut {
-                Some(cost(&context.target.form.visible(&context.writer().since(0)[..figure.end])))
+                let form = context.target.form;
+                let (from, prefix, tail) = if additive && measured.0 <= figure.end { measured } else { (0, 0, None) };
+                let visible = form.visible(&context.writer().since(0)[from..figure.end]);
+                let joint = tail.is_some_and(|tail| tail != '\n') && !visible.is_empty();
+                let total = prefix + cost(&visible) + if joint { cost("\n") } else { 0 };
+                measured = (figure.end, total, visible.chars().next_back().or(tail));
+                Some(total)
             } else {
                 None
             };
@@ -545,11 +595,12 @@ impl Html {
             for (index, (item, alt)) in figure.alts.iter().enumerate() {
                 let Some(alt) = alt.as_deref().filter(|alt| !alt.trim().is_empty()) else { continue };
                 let prefix = if figure.group { format!("{}. ", index + 1) } else { String::new() };
-                let separator = if entries.is_empty() { "" } else { "\n" };
-                let overhead = cost(&format!("{separator}{prefix}"));
+                let overhead = cost(&format!("\n{prefix}"));
                 let room = remaining.saturating_sub(overhead);
                 let value = cost(alt);
-                let whole = before.is_some_and(|before| before + kept + overhead + value <= maximum);
+                let whole = before.is_some_and(|before| {
+                    before.saturating_add(kept).saturating_add(overhead).saturating_add(value) <= maximum
+                });
                 let text = if whole || value <= room {
                     alt.to_owned()
                 } else if room == 0 {
@@ -590,14 +641,26 @@ impl Html {
                 inserts.push((figure.end, caption + "</figure>"));
             }
         }
-        for (at, markup) in inserts.into_iter().rev() {
-            context.writer().insert(at, &markup);
+        if inserts.is_empty() {
+            return;
         }
+        context.writer().edit(|text| {
+            let extra = inserts.iter().map(|(_, markup)| markup.len()).sum::<usize>();
+            let mut spliced = String::with_capacity(text.len() + extra);
+            let mut last = 0;
+            for (at, markup) in &inserts {
+                debug_assert!(last <= *at, "figure inserts follow output order");
+                spliced.push_str(&text[last..*at]);
+                spliced.push_str(markup);
+                last = *at;
+            }
+            spliced.push_str(&text[last..]);
+            *text = spliced;
+        });
     }
 
     fn rich(&mut self, context: &mut Context, nodes: &[Node], level: usize) {
-        let mut first = true;
-        let mut paragraph = false;
+        let mut after = None;
         let mut carry = 0;
         if level == 1 {
             let placed_ids = references(nodes);
@@ -605,13 +668,8 @@ impl Html {
                 .filter(|&index| !placed_ids.contains_key(self.media[index].id.as_str()))
                 .collect();
             for index in unplaced {
-                if !first {
-                    context.writer().raw("<br>");
-                }
-                first = false;
                 self.single(context, index, None, level);
             }
-            carry = u32::from(!first);
         }
         for node in nodes {
             let ids = placed(node);
@@ -619,71 +677,59 @@ impl Html {
                 continue;
             }
             let gap = carry.max(node.gap_before.unwrap_or(1));
-            if let Some(ids) = ids {
-                let indices = self.resolve(context, node, &ids);
-                if indices.is_empty() {
-                    carry = gap;
-                    continue;
-                }
-                if paragraph {
-                    context.writer().raw("</p>");
-                    paragraph = false;
-                }
-                if !first {
-                    (0..gap).for_each(|_| context.writer().raw("<br>"));
-                }
-                first = false;
-                carry = 0;
+            let indices = ids.map(|ids| self.resolve(context, node, &ids));
+            if indices.as_ref().is_some_and(Vec::is_empty) {
+                carry = gap;
+                continue;
+            }
+            context.gap(after, node, gap);
+            carry = 0;
+            after = Some(node.range.end);
+            if let Some(indices) = indices {
                 if context.done() {
                     context.report_when(Feature::Media, Some(node.range), Some(When::Cut));
                 }
                 self.place(context, node, &indices, level);
-                continue;
-            }
-            let gap = if first { 0 } else { gap };
-            first = false;
-            carry = 0;
-            let prose = matches!(node.kind, Kind::Paragraph | Kind::Heading { .. });
-            if paragraph && !prose {
-                context.writer().raw("</p>");
-                paragraph = false;
-            }
-            for _ in 0..gap {
-                context.writer().raw("<br>");
-            }
-            if prose {
-                let heading = matches!(node.kind, Kind::Heading { .. });
-                let decorated = self.form.tag(Feature::Underline).is_some();
-                let depth = level + usize::from(heading) + formatting(&node.children, decorated);
-                if paragraph {
-                    self.deepen(context, node.range, depth);
-                } else {
-                    self.count(context, node.range, depth);
-                    context.writer().raw("<p>");
-                    paragraph = true;
-                }
-                if heading {
-                    context.report(Feature::Heading, node.range);
-                    self.heading(context, node);
-                } else {
-                    self.inline(context, &node.children);
-                }
             } else {
                 self.rich_block(context, node, level);
             }
         }
-        if paragraph {
-            context.writer().raw("</p>");
-        }
     }
 
-    fn deepen(&mut self, context: &mut Context, range: impl Into<Option<Range>>, depth: usize) {
-        if let Some(limits) = self.form.structure
-            && depth > limits.depth
-            && !self.counted.depth_reported
-        {
-            self.counted.depth_reported = true;
-            context.report_when(Feature::Text, range.into(), Some(When::Depth));
+    fn paragraph(&mut self, context: &mut Context, node: &Node, level: usize) {
+        let heading = matches!(node.kind, Kind::Heading { .. });
+        let children = match node.kind {
+            Kind::Paragraph | Kind::Heading { .. } => &node.children[..],
+            _ => std::slice::from_ref(node),
+        };
+        let decorated = self.form.tag(Feature::Underline).is_some();
+        let depth = level + usize::from(heading) + formatting(children, decorated);
+        let start = context.writer().mark();
+        context.writer().raw("<p>");
+        if heading {
+            context.report(Feature::Heading, node.range);
+            self.heading(context, node);
+        } else {
+            self.inline(context, children);
+        }
+        context.writer().raw("</p>");
+        let form = context.target.form;
+        let written = context.writer().since(start);
+        let inner = &written["<p>".len()..written.len() - "</p>".len()];
+        let empty = form.visible_blank(inner, |part| part.chars().all(blank));
+        let lead = inner.len() - inner.trim_start_matches("<br>").len();
+        let trail = inner.len() - inner.trim_end_matches("<br>").len();
+        if empty {
+            return context.writer().edit(|text| text.truncate(start));
+        }
+        self.count(context, node.range, depth);
+        if lead + trail > 0 {
+            let body = start + "<p>".len();
+            context.writer().edit(|text| {
+                let end = text.len() - "</p>".len();
+                text.replace_range(end - trail..end, "");
+                text.replace_range(body..body + lead, "");
+            });
         }
     }
 
@@ -764,12 +810,7 @@ impl Html {
                 }
                 context.writer().raw("</table>");
             }
-            _ => {
-                self.count(context, node.range, level);
-                context.writer().verbatim(true);
-                self.inline(context, std::slice::from_ref(node));
-                context.writer().verbatim(false);
-            }
+            _ => self.paragraph(context, node, level),
         }
     }
 }

@@ -5,20 +5,27 @@ pub const WINDOW: usize = 64;
 pub fn search(
     mode: Search,
     upper: usize,
+    start: Option<usize>,
     clean: impl Fn(usize) -> bool,
     mut probe: impl FnMut(usize) -> (bool, f64),
 ) -> Option<usize> {
     if mode == Search::Exhaustive {
         return (0..=upper).rev().find(|&keep| probe(keep).0);
     }
-    let (fit, load) = probe(upper);
-    if fit {
-        return Some(upper);
-    }
+    let (guess, above) = if let Some(guess) = start {
+        (guess.min(upper), upper + 1)
+    } else {
+        let (fit, load) = probe(upper);
+        if fit {
+            return Some(upper);
+        }
+        (((upper as f64 / load) as usize).min(upper.saturating_sub(1)), upper)
+    };
+    let (fit, load) = probe(guess);
     let mut fits = |keep| probe(keep).0;
-    let guess = ((upper as f64 / load) as usize).min(upper.saturating_sub(1));
-    let (mut below, mut above, mut step) = (guess, upper, 1);
-    if fits(guess) {
+    let step = ((guess as f64 / load) as usize).abs_diff(guess).clamp(1, upper.max(1));
+    let (mut below, mut above, mut step) = (guess, above, step);
+    if fit {
         while below + step < above && fits(below + step) {
             below += step;
             step *= 2;

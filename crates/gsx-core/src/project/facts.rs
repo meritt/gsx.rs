@@ -1,5 +1,8 @@
 use crate::measure::{MediaKind, Placement};
 
+pub const FACT_MAX_UNITS: usize = 65_536;
+pub const FACT_MAX_ITEMS: usize = 1024;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Facts<'a> {
     pub media: Option<MediaKind>,
@@ -31,6 +34,19 @@ pub enum Format {
     Gif,
     Video,
     Audio,
+}
+
+impl Format {
+    pub const ALL: &[Format] = &[Format::Image, Format::Gif, Format::Video, Format::Audio];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Format::Image => "image",
+            Format::Gif => "gif",
+            Format::Video => "video",
+            Format::Audio => "audio",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

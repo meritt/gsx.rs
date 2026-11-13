@@ -11,19 +11,13 @@ pub(super) fn utf16_code_units(text: &str) -> usize {
 }
 
 pub(super) fn markers(text: &str, sigil: char, word: fn(char) -> bool) -> Vec<usize> {
-    let mut positions = vec![];
-    let mut previous: Option<char> = None;
-    let mut chars = text.char_indices().peekable();
-    while let Some((at, char)) = chars.next() {
-        if char == sigil
-            && previous.is_none_or(char::is_whitespace)
-            && chars.peek().is_some_and(|&(_, next)| word(next))
-        {
-            positions.push(at);
-        }
-        previous = Some(char);
-    }
-    positions
+    text.match_indices(sigil)
+        .map(|(at, _)| at)
+        .filter(|&at| {
+            text[..at].chars().next_back().is_none_or(char::is_whitespace)
+                && text[at + sigil.len_utf8()..].chars().next().is_some_and(word)
+        })
+        .collect()
 }
 
 pub(super) fn graphemes(text: &str) -> usize {
@@ -87,45 +81,188 @@ pub(super) fn mastodon_weighted(
     elided: &[Range<usize>],
     reserved_per_url: usize,
 ) -> usize {
+    mastodon_weighted_prefixes(text, urls, elided, reserved_per_url, &[]).1
+}
+
+pub(super) fn threads_weighted(text: &str) -> usize {
+    cluster_prefixes(text, &[], true).1
+}
+
+type Measured = (Vec<Option<usize>>, usize);
+
+struct Prefixes<'a> {
+    ends: &'a [usize],
+    next: usize,
+    upcoming: usize,
+    values: Vec<Option<usize>>,
+}
+
+impl<'a> Prefixes<'a> {
+    fn new(ends: &'a [usize]) -> Self {
+        Prefixes {
+            ends,
+            next: 0,
+            upcoming: ends.first().copied().unwrap_or(usize::MAX),
+            values: vec![None; ends.len()],
+        }
+    }
+
+    fn wanted(&mut self, at: usize) -> bool {
+        at >= self.upcoming && self.reached(at)
+    }
+
+    fn reached(&mut self, at: usize) -> bool {
+        while self.ends.get(self.next).is_some_and(|&end| end < at) {
+            self.next += 1;
+        }
+        self.upcoming = self.ends.get(self.next).copied().unwrap_or(usize::MAX);
+        self.upcoming == at
+    }
+
+    fn set(&mut self, value: usize) {
+        self.values[self.next] = Some(value.min(u32::MAX as usize));
+        self.next += 1;
+        self.upcoming = self.ends.get(self.next).copied().unwrap_or(usize::MAX);
+    }
+
+    fn record(&mut self, at: usize, value: usize) {
+        if self.wanted(at) {
+            self.set(value);
+        }
+    }
+
+    fn done(mut self, at: usize, value: usize) -> Measured {
+        self.record(at, value);
+        (self.values, value)
+    }
+}
+
+pub(super) fn cluster_prefixes(text: &str, ends: &[usize], weighted: bool) -> Measured {
+    let mut prefixes = Prefixes::new(ends);
+    let (mut at, mut value) = (0, 0);
+    for cluster in clusters(text) {
+        prefixes.record(at, value);
+        let mut chars = cluster.chars();
+        let single = chars.next().filter(|_| chars.next().is_none());
+        value += if weighted && (single.is_some_and(emoji::presentation) || emoji::rgi_prefix(cluster) == cluster.len())
+        {
+            cluster.len()
+        } else {
+            1
+        };
+        at += cluster.len();
+    }
+    prefixes.done(text.len(), value)
+}
+
+pub(super) fn x_weighted_prefixes(text: &str, urls: &[Range<usize>], ends: &[usize]) -> Measured {
+    let mut prefixes = Prefixes::new(ends);
     let mut urls = valid(text, urls).peekable();
-    let mut elided = valid(text, elided).peekable();
+    let bytes = text.as_bytes();
+    let mut weight = 0;
+    let mut at = 0;
+    while let Some(char) = text[at..].chars().next() {
+        if prefixes.wanted(at) && char.is_whitespace() {
+            prefixes.set(weight);
+        }
+        while urls.next_if(|url| url.start < at).is_some() {}
+        if let Some(url) = urls.next_if(|url| url.start == at) {
+            weight += X_URL_WEIGHT;
+            at = url.end;
+            continue;
+        }
+        if char.is_ascii() && bytes.get(at + 1).is_none_or(u8::is_ascii) {
+            weight += 1;
+            at += 1;
+            continue;
+        }
+        let emoji = emoji::rgi_prefix(&text[at..]);
+        if emoji > 0 {
+            weight += 2;
+            at += emoji;
+        } else {
+            weight += x_char(char);
+            at += char.len_utf8();
+        }
+    }
+    prefixes.done(text.len(), weight)
+}
+
+pub(super) fn mastodon_weighted_prefixes(
+    text: &str,
+    urls: &[Range<usize>],
+    elided: &[Range<usize>],
+    reserved_per_url: usize,
+    ends: &[usize],
+) -> Measured {
+    let mut prefixes = Prefixes::new(ends);
+    let sorted = |spans: &[Range<usize>]| spans.is_sorted_by_key(|span| span.start);
+    let (mut covering, mut reach) = ([0, 0], if sorted(urls) && sorted(elided) { 0 } else { usize::MAX });
+    let mut covers = |at: usize| {
+        for (spans, next) in [urls, elided].into_iter().zip(&mut covering) {
+            while let Some(span) = spans.get(*next).filter(|span| span.start < at) {
+                reach = reach.max(span.end);
+                *next += 1;
+            }
+        }
+        at < reach
+    };
     let mut segmenter = grapheme::Segmenter::default();
-    let mut count = 0;
-    let mut feed = |part: &str| count += part.chars().filter(|&char| segmenter.starts(char)).count();
-    let mut linked = 0;
+    let (mut count, mut linked): (usize, usize) = (0, 0);
+    let weighed =
+        |count: usize, linked: usize| count.saturating_add(linked.saturating_mul(reserved_per_url.saturating_sub(1)));
+    let mut feed = |(from, to): (usize, usize), segmenter: &mut grapheme::Segmenter, count: &mut usize, linked| {
+        if prefixes.upcoming >= to {
+            *count += text[from..to].chars().filter(|&char| segmenter.starts(char)).count();
+            return;
+        }
+        for (offset, char) in text[from..to].char_indices() {
+            let at = from + offset;
+            if prefixes.wanted(at) && char.is_whitespace() && !covers(at) {
+                prefixes.set(weighed(*count, linked));
+            }
+            if segmenter.starts(char) {
+                *count += 1;
+            }
+        }
+    };
+    let mut spans = (valid(text, urls).peekable(), valid(text, elided).peekable());
     let mut cursor = 0;
     loop {
-        let url = match (urls.peek(), elided.peek()) {
-            (Some(url), Some(skip)) => url.start <= skip.start,
-            (Some(_), None) => true,
-            (None, Some(_)) => false,
-            (None, None) => break,
-        };
-        let span = if url { urls.next() } else { elided.next() }.unwrap();
+        let (urls, elided) = &mut spans;
+        let (span, url) =
+            if let Some(span) = urls.next_if(|url| elided.peek().is_none_or(|skip| url.start <= skip.start)) {
+                (span, true)
+            } else if let Some(span) = elided.next() {
+                (span, false)
+            } else {
+                break;
+            };
         if span.start < cursor {
             continue;
         }
-        feed(&text[cursor..span.start]);
+        feed((cursor, span.start), &mut segmenter, &mut count, linked);
         if url {
-            feed(&"x"[..usize::from(reserved_per_url > 0)]);
+            if reserved_per_url > 0 && segmenter.starts('x') {
+                count += 1;
+            }
             linked += 1;
         }
         cursor = span.end;
     }
-    feed(&text[cursor..]);
-    count + linked * reserved_per_url.saturating_sub(1)
+    feed((cursor, text.len()), &mut segmenter, &mut count, linked);
+    prefixes.done(text.len(), weighed(count, linked))
 }
 
-pub(super) fn threads_weighted(text: &str) -> usize {
-    clusters(text)
-        .map(|cluster| {
-            let mut chars = cluster.chars();
-            let single = chars.next().filter(|_| chars.next().is_none());
-            if single.is_some_and(emoji::presentation) || emoji::rgi_prefix(cluster) == cluster.len() {
-                cluster.len()
-            } else {
-                1
-            }
-        })
-        .sum()
+#[cfg(test)]
+mod tests {
+    use super::mastodon_weighted;
+
+    #[test]
+    fn saturates_url_weight_when_the_reserved_length_fills_usize() {
+        let text = "ab https://e.co https://e.org";
+        assert_eq!(mastodon_weighted(text, &[3..15, 16..29], &[], usize::MAX), usize::MAX);
+        assert_eq!(mastodon_weighted(text, std::slice::from_ref(&(3..15)), &[], usize::MAX), usize::MAX);
+        assert_eq!(mastodon_weighted(text, &[3..15, 16..29], &[], 23), 3 + 1 + 2 * 23);
+    }
 }

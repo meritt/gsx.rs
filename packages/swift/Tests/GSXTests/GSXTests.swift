@@ -11,7 +11,7 @@ import Testing
 }
 
 @Test func passesMedia() throws {
-    let media = [Media(id: "v", cover: "c"), Media(id: "c")]
+    let media = [GSX.Media(id: "v", cover: "c"), GSX.Media(id: "c")]
     let document = try GSX.parse("::media{id=\"v\"}", media: media)
     #expect(document.children.first?.kind == .mediaReference(id: "v"))
     let unknown = try GSX.parse("::media{id=\"x\"}", media: media)
@@ -19,10 +19,10 @@ import Testing
 }
 
 @Test func throwsParseErrors() {
-    #expect(throws: ParseError.self) { try GSX.parse("a\u{0}b") }
+    #expect(throws: GSX.ParseError.self) { try GSX.parse("a\u{0}b") }
     do {
         _ = try GSX.parse("😀\u{1}")
-    } catch let error as ParseError {
+    } catch let error as GSX.ParseError {
         #expect(error.range == 2..<3)
         #expect(error.details.codePoint == 1)
     } catch {
@@ -30,7 +30,7 @@ import Testing
     }
     do {
         _ = try GSX.parse(String(repeating: ">", count: 65))
-    } catch let error as ParseError {
+    } catch let error as GSX.ParseError {
         #expect(error.code == .markdownTooComplex)
         #expect(error.details.limit == "containerDepth")
     } catch {
@@ -44,8 +44,8 @@ import Testing
     #expect(plain.changes.first?.kind == .textualFallback)
     #expect(plain.measurements.first?.unit == .xWeighted)
 
-    let facts = Facts(media: .video, mediaCount: 1, title: "T")
-    let video = try GSX.project("a\n\n::media{id=\"p1\"}", target: "youtube-plain", facts: facts, media: [Media(id: "p1")])
+    let facts = GSX.Facts(media: .video, mediaCount: 1, title: "T")
+    let video = try GSX.project("a\n\n::media{id=\"p1\"}", target: "youtube-plain", facts: facts, media: [GSX.Media(id: "p1")])
     #expect(video.fields.first { $0.name == .title }?.text == "T")
     #expect(video.media == ["p1"])
 
@@ -54,29 +54,45 @@ import Testing
     #expect(entity.style == .link && entity.range == 2..<3 && entity.value == "https://c.example/")
     #expect(try GSX.project("", target: "x-plain").changes.first?.code == "TEXT_EMPTY")
 
-    #expect(throws: InternalError.self) { try GSX.projectJSON("a", target: "nope") }
-    #expect(throws: ParseError.self) { try GSX.project("a\u{0}b", target: "x-plain") }
+    #expect(throws: GSX.InternalError.self) { try GSX.projectJSON("a", target: "nope") }
+    #expect(throws: GSX.ParseError.self) { try GSX.project("a\u{0}b", target: "x-plain") }
+}
+
+@Test func locatesThreadPartsInTheSource() throws {
+    let paragraph = "Ёжик в тумане 👩🏽‍💻 идёт по лесу и считает шаги до самого конца тропинки, не торопясь."
+    let markdown = Array(repeating: paragraph, count: 8).joined(separator: "\n\n")
+    let projection = try GSX.project(markdown, target: "x-plain", facts: GSX.Facts(overflow: .thread))
+    let parts = try #require(projection.parts)
+    #expect(parts.count > 1)
+    let units = Array(markdown.utf16)
+    for part in parts {
+        let source = String(decoding: units[part.range], as: UTF16.self)
+        #expect(source == part.fields.first?.text)
+    }
+    #expect(parts.dropLast().allSatisfy { $0.boundary == .paragraph })
+    #expect(parts.last?.boundary == nil)
 }
 
 @Test func laysOutBlocksWithMediaFacts() throws {
-    let gif = MediaFact(id: "p", format: .gif, alt: "A cat", spoiler: true, inline: true)
-    let facts = Facts(media: .image, mediaCount: 1, items: [gif])
-    let blocks = try GSX.project("a\n\n::media{id=\"p\"}", target: "discord-blocks", facts: facts, media: [Media(id: "p")])
+    let gif = GSX.MediaFact(id: "p", format: .gif, alt: "A cat", spoiler: true, inline: true)
+    let facts = GSX.Facts(media: .image, mediaCount: 1, items: [gif])
+    let blocks = try GSX.project("a\n\n::media{id=\"p\"}", target: "discord-blocks", facts: facts, media: [GSX.Media(id: "p")])
     let laid = try #require(blocks.blocks)
-    #expect(laid.first == .text("a\n\n"))
+    #expect(laid.first == .text("a"))
     guard case .media(let items, let layout) = laid.last else { Issue.record("no media block in \(laid)"); return }
     #expect(items.map(\.reference) == ["media:p"] && items.first?.spoiler == true && layout == nil)
-    let audio = Facts(media: .audio, mediaCount: 1, items: [MediaFact(id: "s", format: .audio, inline: true)])
-    let filed = try GSX.project("::media{id=\"s\"}", target: "discord-blocks", facts: audio, media: [Media(id: "s")])
+    let audio = GSX.Facts(media: .audio, mediaCount: 1, items: [GSX.MediaFact(id: "s", format: .audio, inline: true)])
+    let filed = try GSX.project("::media{id=\"s\"}", target: "discord-blocks", facts: audio, media: [GSX.Media(id: "s")])
     guard case .file(let file) = filed.blocks?.first else { Issue.record("no file block in \(String(describing: filed.blocks))"); return }
     #expect(file.reference == "media:s" && file.alt == nil)
     #expect(try GSX.project("a", target: "x-plain").blocks == nil)
-    #expect(GSX.targets.contains { $0.name == "discord-blocks" && $0.form == .blocks })
+    #expect(try GSX.targets.contains { $0.name == "discord-blocks" && $0.form == .blocks })
 }
 
-@Test func listsTargets() {
-    #expect(GSX.targets.contains { $0.name == "bluesky-entities" && $0.form == .entities && $0.offsets == .utf8 })
-    #expect(GSX.targets.allSatisfy { $0.digest.count == 16 && !$0.manifest.isEmpty })
+@Test func listsTargets() throws {
+    let targets = try GSX.targets
+    #expect(targets.contains { $0.name == "bluesky-entities" && $0.form == .entities && $0.offsets == .utf8 })
+    #expect(targets.allSatisfy { $0.digest.count == 16 && !$0.manifest.isEmpty })
 }
 
 @Test func returnsTheWireJSON() throws {

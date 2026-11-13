@@ -1,11 +1,12 @@
 use super::limits::{CodePoints, Limit, Post, Reel, Story, Text, With, Without, limit};
 use super::plain::BODY;
-use super::{TEXT, rule};
+use super::{DATE_BOUNDS, DEFAULT, MATH, TELEGRAM_TIME_FORMATS, TEXT, THREADED_TEXT, rule};
+use crate::document::Layout;
 use crate::forms::html::RENDERER;
 use crate::project::Class::{Approximated, Blocked, Omitted, TextualFallback, Unwrapped};
 use crate::project::{
-    Condition, Feature, Form, Format, HtmlBlocks, HtmlForm, Normalization, Rule, Search, Spoilers, Structure, Target,
-    When,
+    Condition, Feature, Form, Format, HtmlBlocks, HtmlForm, MathTags, Normalization, Rule, Search, Spoilers, Structure,
+    Target, When,
 };
 
 const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlForm, limits: &'static [Limit]) -> Target {
@@ -19,6 +20,7 @@ const fn html(name: &'static str, rules: &'static [Rule], form: &'static HtmlFor
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
+        alt: Format::ALL,
     }
 }
 
@@ -71,12 +73,15 @@ static TELEGRAM_FORM: HtmlForm = HtmlForm {
         (Feature::Datetime, "tg-time"),
     ],
     exclusive: &[Feature::Link, Feature::Datetime],
+    groups: &[],
     code_contained: false,
     quote_nests: false,
     quote_contains_code: false,
     code_info: true,
     empty_removed: true,
     trim: true,
+    time_formats: TELEGRAM_TIME_FORMATS,
+    math: None,
 };
 
 const NESTED: Condition = Condition { when: When::Nested, class: Unwrapped, reason: "entity_cannot_contain_entity" };
@@ -111,10 +116,11 @@ pub static TELEGRAM: Target = Target {
             entity(Feature::Underline, &[]),
             rule(Feature::Highlight, Unwrapped, "highlight_unwrapped"),
             entity(Feature::Spoiler, &[]),
+            MATH,
             entity(Feature::Link, &[NESTED, INVISIBLE]),
             LINK_TITLE,
-            entity(Feature::Datetime, &[NESTED]),
-            TEXT,
+            entity(Feature::Datetime, &[NESTED, DATE_BOUNDS[0], DATE_BOUNDS[1]]),
+            THREADED_TEXT,
         ],
         &TELEGRAM_FORM,
         &[
@@ -141,12 +147,18 @@ static RICH_FORM: HtmlForm = HtmlForm {
         (Feature::Datetime, "tg-time"),
     ],
     exclusive: &[],
+    groups: &[
+        (Layout::Collage, "tg-collage", &[Format::Image, Format::Video]),
+        (Layout::Slideshow, "tg-slideshow", &[Format::Image]),
+    ],
     code_contained: true,
     quote_nests: true,
     quote_contains_code: true,
     code_info: true,
     empty_removed: false,
     trim: false,
+    time_formats: TELEGRAM_TIME_FORMATS,
+    math: Some(MathTags { inline: "tg-math", block: "tg-math-block" }),
 };
 
 pub static TELEGRAM_RICH: Target = Target {
@@ -173,6 +185,7 @@ pub static TELEGRAM_RICH: Target = Target {
             },
             rule(Feature::Link, Omitted, "link_label_invisible"),
             LINK_TITLE,
+            Rule { conditions: &DATE_BOUNDS, ..DEFAULT.datetime },
             RICH_TEXT,
         ],
         &RICH_FORM,
@@ -180,9 +193,10 @@ pub static TELEGRAM_RICH: Target = Target {
     )
 };
 
-const RICH_TEXT_CONDITIONS: [Condition; 4] = [
+const RICH_TEXT_CONDITIONS: [Condition; 5] = [
     TEXT.conditions[0],
     TEXT.conditions[1],
+    TEXT.conditions[2],
     Condition { when: When::Blocks, class: Blocked, reason: "block_limit_exceeded" },
     Condition { when: When::Depth, class: Blocked, reason: "nesting_limit_exceeded" },
 ];
@@ -193,12 +207,15 @@ static MAX_FORM: HtmlForm = HtmlForm {
     structure: None,
     tags: &[INLINE[0], INLINE[1], INLINE[2], INLINE[3], INLINE[4], INLINE[6], INLINE[7], (Feature::Highlight, "mark")],
     exclusive: &[],
+    groups: &[],
     code_contained: true,
     quote_nests: true,
     quote_contains_code: true,
     code_info: false,
     empty_removed: false,
     trim: false,
+    time_formats: &[],
+    math: None,
 };
 
 pub static MAX: Target = html(
@@ -214,10 +231,11 @@ pub static MAX: Target = html(
         TEXTUAL[5],
         MEDIA,
         rule(Feature::Spoiler, Unwrapped, "spoiler_unwrapped"),
+        MATH,
         rule(Feature::Link, Omitted, "link_label_invisible"),
         LINK_TITLE,
         rule(Feature::Datetime, TextualFallback, "datetime_label_as_text"),
-        TEXT,
+        THREADED_TEXT,
     ],
     &MAX_FORM,
     &[limit(Text, CodePoints, 4000).visible()],

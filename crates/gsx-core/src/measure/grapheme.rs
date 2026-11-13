@@ -1,6 +1,6 @@
 use std::str::CharIndices;
 
-use super::tables::BREAK;
+use super::tables::{BREAK_BLOCK, BREAK_CLASSES, BREAK_DELTAS, BREAK_STARTS};
 
 const OTHER: u8 = 0;
 const CR: u8 = 1;
@@ -75,14 +75,34 @@ impl Segmenter {
             });
         }
         if !(self.range.0..self.range.1).contains(&point) {
-            let index = BREAK.partition_point(|entry| entry >> 8 <= point) - 1;
-            let end = BREAK.get(index + 1).map_or(u32::MAX, |entry| entry >> 8);
-            self.range = (BREAK[index] >> 8, end, (BREAK[index] & 0xFF) as u8);
+            let block = BREAK_STARTS.partition_point(|&start| start <= point) - 1;
+            let (mut index, mut start) = (block * BREAK_BLOCK, BREAK_STARTS[block]);
+            let end = loop {
+                let end = BREAK_DELTAS.get(index + 1).map_or(u32::MAX, |&delta| start + u32::from(delta));
+                if end > point {
+                    break end;
+                }
+                (index, start) = (index + 1, end);
+            };
+            self.range = (start, end, BREAK_CLASSES[index]);
         }
         Property(self.range.2)
     }
 
     pub(crate) fn starts(&mut self, char: char) -> bool {
+        if (char as u32) < 0x7F {
+            let class = self.property(char).class();
+            let starts = self.previous.is_none_or(|previous| match class {
+                OTHER => previous != PREPEND,
+                LF => previous != CR,
+                _ => true,
+            });
+            self.regional_odd = false;
+            self.emoji = Emoji::None;
+            self.conjunct = Conjunct::None;
+            self.previous = Some(class);
+            return starts;
+        }
         let next = self.property(char);
         let class = next.class();
         let starts = self.previous.is_none_or(|previous| self.breaks(previous, next));

@@ -67,7 +67,8 @@ fn links(text: &str) -> Vec<Autolink> {
         };
         if let Some((start, end)) = matched {
             let mut value = &text[start..end];
-            while value.ends_with(['.', ',', ';', ':', '!', '?']) || (value.ends_with(')') && !value.contains('(')) {
+            let open = value.contains('(');
+            while value.ends_with(['.', ',', ';', ':', '!', '?']) || (value.ends_with(')') && !open) {
                 value = &value[..value.len() - 1];
             }
             let raw =
@@ -83,6 +84,11 @@ fn links(text: &str) -> Vec<Autolink> {
     found
 }
 
+fn overlaps(links: &[Autolink], range: &Range<usize>) -> bool {
+    let after = links.partition_point(|link| link.range().end <= range.start);
+    links.get(after).is_some_and(|link| link.range().start < range.end)
+}
+
 fn tag_char(char: char) -> bool {
     !space(char)
         && !matches!(char, '\u{AD}' | '\u{2060}' | '\u{200A}' | '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{20E2}')
@@ -91,8 +97,7 @@ fn tag_char(char: char) -> bool {
 fn tags(text: &str, links: &[Autolink]) -> Vec<Autolink> {
     let mut found = vec![];
     let mut at = 0;
-    while at < text.len() {
-        let next = text[at..].chars().next().unwrap();
+    while let Some(next) = text[at..].chars().next() {
         let hash = if at == 0 && matches!(next, '#' | '＃') {
             Some(at)
         } else if space(next) && text[at + next.len_utf8()..].starts_with(['#', '＃']) {
@@ -104,7 +109,7 @@ fn tags(text: &str, links: &[Autolink]) -> Vec<Autolink> {
             at += next.len_utf8();
             continue;
         };
-        let body = hash + text[hash..].chars().next().unwrap().len_utf8();
+        let body = hash + if text[hash..].starts_with('#') { 1 } else { '＃'.len_utf8() };
         let run = text[body..].find(|char| !tag_char(char)).map_or(text.len(), |end| body + end);
         let group = &text[body..run];
         let valid =
@@ -121,7 +126,7 @@ fn tags(text: &str, links: &[Autolink]) -> Vec<Autolink> {
             continue;
         }
         let range = hash..body + value.len();
-        if links.iter().any(|link| link.range().start < range.end && range.start < link.range().end) {
+        if overlaps(links, &range) {
             continue;
         }
         found.push(Autolink::Tag { range, tag: value.to_owned() });
@@ -158,10 +163,7 @@ fn mentions(text: &str, links: &[Autolink]) -> Vec<Autolink> {
             end -= 1;
         }
         let range = at..end;
-        if end == body
-            || !handle(&text[body..end])
-            || links.iter().any(|link| link.range().start < range.end && range.start < link.range().end)
-        {
+        if end == body || !handle(&text[body..end]) || overlaps(links, &range) {
             continue;
         }
         found.push(Autolink::Mention { handle: text[body..end].to_owned(), range });
@@ -174,6 +176,6 @@ pub fn autolinks(text: &str) -> Vec<Autolink> {
     let tags = tags(text, &links);
     let mentions = mentions(text, &links);
     let mut all: Vec<Autolink> = links.into_iter().chain(tags).chain(mentions).collect();
-    all.sort_by_key(|item| item.range().start);
+    crate::order::sort_by_key(&mut all, |item| item.range().start as u64);
     all
 }

@@ -47,7 +47,7 @@ pub fn subtokenize(events: &mut Vec<Event>, parse_state: &ParseState, filter: Op
         if let Some(ref link) = event.link {
             debug_assert_eq!(event.kind, Kind::Enter);
 
-            if link.previous().is_none() && (filter.is_none() || &link.content == *filter.as_ref().unwrap()) {
+            if link.previous().is_none() && filter.is_none_or(|filter| link.content == *filter) {
                 let mut link_index = Some(index);
                 let mut tokenizer = Tokenizer::new(event.point, parse_state);
                 debug_assert!(!matches!(link.content, Content::Flow), "cannot use flow as subcontent yet");

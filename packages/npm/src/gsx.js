@@ -45,17 +45,6 @@ export const load = (() => {
     return text.length;
   }
 
-  function invalid(text) {
-    if (typeof text !== 'string') {
-      throw new TypeError('text must be a string');
-    }
-
-    if (text.isWellFormed()) return null;
-
-    const at = firstLoneSurrogate(text);
-    return [at, text.charCodeAt(at)];
-  }
-
   function split(media) {
     const ids = [];
     const covers = [];
@@ -137,6 +126,8 @@ export const load = (() => {
     const encoder = new TextEncoder();
     let { wasm, memory } = instance;
     let bytes = new Uint8Array(0);
+    const units = wasm.documentUnits();
+    const idBytes = wasm.mediaIdMaxBytes();
 
     function call(run) {
       try {
@@ -158,18 +149,39 @@ export const load = (() => {
       return encoder.encodeInto(text, bytes.subarray(at, at + capacity)).written;
     }
 
+    function apply(text, operation, target) {
+      if (typeof text !== 'string') {
+        throw new TypeError('text must be a string');
+      }
+
+      if (text.length > units) {
+        return call(() => {
+          operation(pass(''));
+          return wasm.oversized(text.length, text.codePointAt(units - 1), target);
+        });
+      }
+
+      if (!text.isWellFormed()) {
+        const at = firstLoneSurrogate(text);
+        return call(() => {
+          operation(pass(''));
+          return wasm.invalidText(at, text.charCodeAt(at), target);
+        });
+      }
+
+      return call(() => operation(pass(text)));
+    }
+
     function parseJSON(text, media = []) {
       const entries = split(media);
-      const at = invalid(text);
 
-      return call(() => (at ? wasm.invalidText(...at) : wasm.parse(pass(text), ...entries)));
+      return apply(text, (len) => wasm.parse(len, ...entries));
     }
 
     function serializeJSON(text, media = []) {
       const entries = split(media);
-      const at = invalid(text);
 
-      return call(() => (at ? wasm.invalidText(...at) : wasm.serialize(pass(text), ...entries)));
+      return apply(text, (len) => wasm.serialize(len, ...entries));
     }
 
     function projectJSON(text, target, facts = {}, media = []) {
@@ -227,13 +239,20 @@ export const load = (() => {
         spoilerText ?? undefined,
         overflow,
       ];
-      const at = invalid(text);
 
-      return call(() =>
-        at
-          ? wasm.invalidText(...at)
-          : wasm.project(pass(text), ...entries, target, kind, ...limits, entitiesAllowed, items !== null, ...described)
+      return apply(
+        text,
+        (len) => wasm.project(len, ...entries, target, kind, ...limits, entitiesAllowed, items !== null, ...described),
+        target
       );
+    }
+
+    function isMediaId(id) {
+      if (typeof id !== 'string') {
+        throw new TypeError('id must be a string');
+      }
+
+      return id.length <= idBytes && call(() => wasm.isMediaId(pass(id)));
     }
 
     let listed;
@@ -246,6 +265,7 @@ export const load = (() => {
       project: (text, target, facts, media) => unwrap(projectJSON(text, target, facts, media), 'projection'),
       projectJSON,
       targets: () => (listed ??= Object.freeze(JSON.parse(call(() => wasm.targets())).targets.map(Object.freeze))),
+      isMediaId,
     };
   }
 
@@ -296,6 +316,17 @@ export const load = (() => {
       throw new VersionError(found);
     }
 
-    return Object.freeze({ ...bind(instance, instantiate), VERSION, ParseError, VersionError });
+    const { wasm } = instance;
+
+    return Object.freeze({
+      ...bind(instance, instantiate),
+      VERSION,
+      MEDIA_ID_MAX_BYTES: wasm.mediaIdMaxBytes(),
+      MEDIA_ID_PATTERN: wasm.mediaIdPattern(),
+      MEDIA_GROUP_MIN: wasm.mediaGroupMin(),
+      MEDIA_GROUP_MAX: wasm.mediaGroupMax(),
+      ParseError,
+      VersionError,
+    });
   };
 })();

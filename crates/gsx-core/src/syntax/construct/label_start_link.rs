@@ -5,7 +5,7 @@ use crate::syntax::state::State;
 use crate::syntax::tokenizer::{LabelKind, LabelStart, Tokenizer};
 
 pub fn start(tokenizer: &mut Tokenizer) -> State {
-    let index = tokenizer.point.index;
+    let index = tokenizer.point.index as usize;
     if tokenizer.current == Some(b'[') && tokenizer.spend(Limit::BlockLabels, index, |_| index + 1) {
         let start = tokenizer.events.len();
         tokenizer.enter(Name::LabelLink);

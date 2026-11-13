@@ -13,7 +13,7 @@ The `gsx/1` markup for posts and messages. One Rust core parses, serializes and 
 SwiftPM dependency:
 
 ```swift
-.package(url: "https://github.com/meritt/gsx.rs", exact: "0.2.0")
+.package(url: "https://github.com/meritt/gsx.rs", exact: "0.3.0")
 ```
 
 Package platforms and loading: [bindings](docs/decisions/bindings.md#packages).
@@ -76,7 +76,7 @@ console.log(projection.fields[0]);
 import GSX
 
 let text = "Hello **world**."
-let facts = Facts(entitiesAllowed: true)
+let facts = GSX.Facts(entitiesAllowed: true)
 
 let projection = try GSX.project(text, target: "telegram-entities", facts: facts)
 
@@ -96,7 +96,7 @@ projection = gsx.project(text, "telegram-entities", facts)
 assert projection.fields[0].text == "Hello world."
 ```
 
-Check document diagnostics before publishing and reject projections with `blocked` changes. The caller resolves media and account references and sends provider requests; gsx performs no I/O.
+Check document diagnostics before publishing, which every projection carries, and reject projections with `blocked` changes. The caller resolves media and account references and sends provider requests; gsx performs no I/O.
 
 ## Formatting
 

@@ -15,6 +15,7 @@ pub struct Leaf<'a> {
     pub node: Option<&'a Node>,
     pub text: &'a str,
     pub code: bool,
+    atomic: bool,
     nested: bool,
     previous: Option<u32>,
     source: Option<(u32, bool)>,
@@ -111,6 +112,7 @@ struct Builder<'a> {
     flows: Vec<(usize, usize)>,
     open: usize,
     nested: usize,
+    math: bool,
 }
 
 impl<'a> Builder<'a> {
@@ -121,16 +123,20 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn leaf(&mut self, node: &'a Node, text: &'a str, code: bool) {
+    fn leaf(&mut self, node: &'a Node, text: &'a str, code: bool, atomic: bool) {
         let source = self.document.map(|document| (node.range.start, document.source(node.range) == text));
         let previous = (self.leaves.len() > self.open).then(|| self.leaves.len() as u32 - 1);
-        self.leaves.push(Leaf { node: Some(node), text, code, nested: self.nested > 0, previous, source });
+        self.leaves.push(Leaf { node: Some(node), text, code, atomic, nested: self.nested > 0, previous, source });
     }
 
     fn visit(&mut self, node: &'a Node) {
         match &node.kind {
-            Kind::Text { value } => self.leaf(node, value, false),
-            Kind::InlineCode { value } | Kind::Code { value, .. } => self.leaf(node, value, true),
+            Kind::Text { value } => self.leaf(node, value, false, false),
+            Kind::Math { value } => self.leaf(node, value, false, self.math),
+            Kind::Code { lang, value, .. } => {
+                self.leaf(node, value, true, self.math && lang.as_deref() == Some("math"));
+            }
+            Kind::InlineCode { value } => self.leaf(node, value, true, false),
             Kind::Paragraph | Kind::Heading { .. } | Kind::TableCell => {
                 node.children.iter().for_each(|child| self.visit(child));
             }
@@ -151,8 +157,8 @@ impl<'a> Builder<'a> {
 }
 
 impl<'a> Outline<'a> {
-    pub fn of_nodes(document: &'a Document, nodes: &'a [Node]) -> Self {
-        let mut builder = Builder { document: Some(document), leaves: vec![], flows: vec![], open: 0, nested: 0 };
+    pub fn of_nodes(document: &'a Document, nodes: &'a [Node], math: bool) -> Self {
+        let mut builder = Builder { document: Some(document), leaves: vec![], flows: vec![], open: 0, nested: 0, math };
         for node in nodes {
             builder.flush();
             builder.visit(node);
@@ -162,8 +168,22 @@ impl<'a> Outline<'a> {
     }
 
     pub fn of_text(text: &'a str) -> Self {
-        let leaf = Leaf { node: None, text, code: false, nested: false, previous: None, source: None };
+        let leaf = Leaf { node: None, text, code: false, atomic: false, nested: false, previous: None, source: None };
         Self::new(vec![leaf], vec![(0, usize::from(!text.is_empty()))], 0)
+    }
+
+    pub fn of_rendered(text: &'a str) -> Self {
+        let leaf = Leaf {
+            node: None,
+            text,
+            code: false,
+            atomic: false,
+            nested: false,
+            previous: None,
+            source: Some((0, true)),
+        };
+        let units = text.encode_utf16().count() as u32;
+        Self::new(vec![leaf], vec![(0, usize::from(!text.is_empty()))], units)
     }
 
     fn new(leaves: Vec<Leaf<'a>>, flows: Vec<(usize, usize)>, end: u32) -> Self {
@@ -218,23 +238,35 @@ impl<'a> Outline<'a> {
         let flow = &self.leaves[cursor.first..cursor.last];
         let (head, fresh, first_leaf) = (cursor.start, boundaries.len(), cursor.leaf);
         let mut done = true;
-        for (offset, char) in value[cursor.next..].char_indices() {
-            let at = cursor.next + offset;
-            if cursor.segmenter.starts(char) && at > cursor.start {
+        let printable = |byte: u8| (0x20..0x7F).contains(&byte);
+        let bytes = value.as_bytes();
+        let mut at = cursor.next;
+        let mut ascii = at > 0 && printable(bytes[at - 1]);
+        while let Some(&byte) = bytes.get(at) {
+            let (starts, width) = if ascii && printable(byte) {
+                (true, 1)
+            } else {
+                let char = value[at..].chars().next().unwrap_or_default();
+                ascii = printable(byte);
+                (cursor.segmenter.starts(char), char.len_utf8())
+            };
+            if starts && at > cursor.start {
                 boundaries.push(cursor.start);
                 cursor.start = at;
                 if at - head >= CHUNK && value[..at].ends_with(char::is_whitespace) {
-                    cursor.next = at + char.len_utf8();
+                    cursor.next = at + width;
                     done = false;
                     break;
                 }
             }
+            at += width;
         }
         if done && cursor.start < value.len() {
             boundaries.push(cursor.start);
         }
         let tail = if done { value.len() } else { cursor.start };
         let mut leaf = first_leaf;
+        let mut run = None;
         for index in fresh..boundaries.len() {
             let start = boundaries[index];
             let end = boundaries.get(index + 1).copied().unwrap_or(tail);
@@ -252,15 +284,21 @@ impl<'a> Outline<'a> {
                 retained,
             });
             if retained {
-                visible_starts.push(Some(visible.len()));
-                visible.push_str(&value[start..end]);
+                let from = *run.get_or_insert(start);
+                visible_starts.push(Some(visible.len() + start - from));
             } else {
+                if let Some(from) = run.take() {
+                    visible.push_str(&value[from..start]);
+                }
                 visible_starts.push(None);
             }
             letters.push(match &value.as_bytes()[start..end] {
                 [byte] => byte.is_ascii_alphanumeric(),
                 _ => value[start..end].chars().any(|char| letter_or_number(u32::from(char))),
             });
+        }
+        if let Some(from) = run {
+            visible.push_str(&value[from..tail]);
         }
         cursor.leaf = leaf;
         let base = cursor.base;
@@ -285,6 +323,14 @@ impl<'a> Outline<'a> {
                 }
             }
             run = stop;
+        }
+        for index in fresh..boundaries.len() {
+            let segment = segments[effective[base + index] as usize];
+            let local = segment.leaf as usize - cursor.first;
+            if flow[local].atomic && segment.offset > 0 {
+                let first = boundaries.partition_point(|&at| at <= starts[local]) - 1;
+                effective[base + index] = effective[base + first];
+            }
         }
         if done {
             built.cursor = None;
@@ -359,6 +405,20 @@ impl<'a> Outline<'a> {
                 return None;
             }
         }
+    }
+
+    pub fn share(&self, fraction: f64, upper: usize) -> usize {
+        let mut starts = Vec::with_capacity(self.leaves.len());
+        let mut total = 0;
+        for leaf in &self.leaves {
+            starts.push(total);
+            total += leaf.text.len();
+        }
+        let target = (total as f64 * fraction) as usize;
+        let built = self.built.borrow();
+        let segments = &built.segments[..upper.min(built.segments.len())];
+        let at = segments.partition_point(|segment| starts[segment.leaf as usize] + (segment.offset as usize) < target);
+        at.min(upper.saturating_sub(1))
     }
 
     pub fn end(&self) -> u32 {
@@ -505,7 +565,7 @@ fn entities(value: &str) -> Vec<(usize, usize)> {
             ranges.push((at, end));
         }
     }
-    ranges.sort_unstable();
+    crate::order::sort_by_key(&mut ranges, |&(start, end)| crate::order::pair(start, end));
     let mut merged: Vec<(usize, usize)> = vec![];
     for (start, end) in ranges {
         match merged.last_mut() {

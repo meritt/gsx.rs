@@ -1,9 +1,10 @@
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::{HashMap, HashSet};
 
 use crate::document::tree::{self, Prefix, decode_string};
 use crate::document::{
-    Code, Details, Diagnostic, Kind, Layout, Media, Node, Provenance, Range, Scheme, Severity, time,
+    Code, Details, Diagnostic, Kind, Layout, MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, MEDIA_ID_MAX_BYTES, Media, Node,
+    Provenance, Range, Scheme, Severity, TimeFormat, time,
 };
 use crate::source::LineIndex;
 use crate::syntax::{self, whitespace};
@@ -13,7 +14,8 @@ struct Context<'a> {
     lines: &'a LineIndex,
     prefixes: &'a [Prefix],
     diagnostics: RefCell<Vec<Diagnostic>>,
-    placed: HashMap<usize, Kind>,
+    placed: Vec<(usize, Kind)>,
+    closings: OnceCell<Vec<[u32; 2]>>,
 }
 
 impl Context<'_> {
@@ -60,13 +62,14 @@ impl Context<'_> {
     }
 
     fn malformed(&self, start: usize) -> (usize, usize) {
-        (start, time::reserved_end(self.text.as_bytes(), start))
+        let bytes = self.text.as_bytes();
+        (start, time::reserved_end(bytes, self.closings.get_or_init(|| time::closing_ends(bytes)), start))
     }
 }
 
-fn is_media_id(id: &str) -> bool {
+pub fn is_media_id(id: &str) -> bool {
     let bytes = id.as_bytes();
-    (1..=128).contains(&bytes.len())
+    (1..=MEDIA_ID_MAX_BYTES).contains(&bytes.len())
         && bytes[0].is_ascii_alphanumeric()
         && bytes[1..].iter().all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(byte))
 }
@@ -86,7 +89,7 @@ fn parse_media(raw: &str) -> Option<Kind> {
         _ => return None,
     };
     let ids: Vec<String> = ids.split(',').map(Into::into).collect();
-    if !(2..=64).contains(&ids.len()) || !ids.iter().all(|id| is_media_id(id)) {
+    if !(MEDIA_GROUP_MIN..=MEDIA_GROUP_MAX).contains(&ids.len()) || !ids.iter().all(|id| is_media_id(id)) {
         return None;
     }
     Some(Kind::MediaGroup { ids, layout })
@@ -131,19 +134,27 @@ fn collect_candidates<'n>(node: &'n tree::Node, bytes: &[u8], out: &mut Vec<Cand
 fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
     let text = context.text;
     let bytes = text.as_bytes();
-    let known: HashSet<&str> = media.iter().map(|item| item.id).collect();
-    let covers: HashSet<&str> = media.iter().filter_map(|item| item.cover).collect();
+    let known: HashMap<&str, usize> = media.iter().enumerate().map(|(at, item)| (item.id, at)).collect();
+    let covers: HashMap<&str, usize> =
+        media.iter().enumerate().filter_map(|(at, item)| Some((item.cover?, at))).collect();
     let mut seen: HashSet<String> = HashSet::new();
+    let paired: Vec<(usize, usize)> = pair_html(&root.children, text)
+        .into_iter()
+        .filter(|&(child, end)| end > child.end)
+        .map(|(child, end)| (child.end, end))
+        .collect();
     let mut candidates = vec![];
     collect_candidates(root, bytes, &mut candidates);
-    candidates.sort_by_key(|candidate| candidate.start);
+    crate::order::sort_by_key(&mut candidates, |candidate| candidate.start as u64);
+    let (mut line_start, mut scanned) = (0, 0);
     for candidate in candidates {
         let (start, end) = (candidate.start, candidate.end);
         let Some(parsed) = parse_media(&text[start..end]) else {
             context.diagnostic(Code::MediaDirectiveInvalid, Severity::Error, Details::None, start, end);
             continue;
         };
-        let line_start = text[..start].rfind('\n').map_or(0, |at| at + 1);
+        line_start = text[scanned..start].rfind('\n').map_or(line_start, |at| scanned + at + 1);
+        scanned = start;
         let prefix_ok = start - line_start <= 3 && bytes[line_start..start].iter().all(|byte| *byte == b' ');
         let context_ok = match candidate.node {
             Some((tree::Kind::Root, siblings, index)) => {
@@ -154,7 +165,9 @@ fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
                     .is_none_or(|node| is_media(node.kind) || context.line(start) - context.line(node.end) >= 2);
                 let next_ok =
                     next.is_none_or(|node| is_media(node.kind) || context.line(node.start) - context.line(end) >= 2);
-                prefix_ok && previous_ok && next_ok
+                let after = paired.partition_point(|&(from, _)| from <= start);
+                let unpaired = after == 0 || paired[after - 1].1 <= start;
+                prefix_ok && previous_ok && next_ok && unpaired
             }
             _ => false,
         };
@@ -170,18 +183,21 @@ fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
         for (index, id) in ids.into_iter().enumerate() {
             let details =
                 || Details::Media { id: id.clone(), index: group.then(|| u32::try_from(index).unwrap_or(u32::MAX)) };
-            if !known.contains(id.as_str()) {
+            if !known.contains_key(id.as_str()) {
                 context.diagnostic(Code::MediaReferenceUnknown, Severity::Error, details(), start, end);
             }
             if seen.contains(&id) {
                 context.diagnostic(Code::MediaReferenceDuplicate, Severity::Error, details(), start, end);
             }
-            if covers.contains(id.as_str()) {
+            if covers.contains_key(id.as_str()) {
                 context.diagnostic(Code::MediaReferenceCover, Severity::Error, details(), start, end);
             }
             seen.insert(id);
         }
-        context.placed.insert(start, parsed);
+        match context.placed.last_mut() {
+            Some((at, kind)) if *at == start => *kind = parsed,
+            _ => context.placed.push((start, parsed)),
+        }
     }
 }
 
@@ -408,6 +424,10 @@ fn fragment(context: &Context, item: &Item, value: &str, start: usize, end: usiz
 }
 
 fn literal_value(context: &Context, start: usize, end: usize) -> String {
+    unprefixed(context, start, end).split('\n').map(decode_string).collect::<Vec<_>>().join("\n")
+}
+
+fn unprefixed(context: &Context, start: usize, end: usize) -> String {
     let prefixes = context.prefixes;
     let first = prefixes.partition_point(|prefix| prefix.end <= start);
     let mut joined = String::new();
@@ -420,7 +440,7 @@ fn literal_value(context: &Context, start: usize, end: usize) -> String {
         joined.extend(std::iter::repeat_n(' ', prefix.padding));
     }
     joined.push_str(&context.text[cursor..end]);
-    joined.split('\n').map(decode_string).collect::<Vec<_>>().join("\n")
+    joined
 }
 
 fn literalized<'n>(items: Vec<Item<'n>>, context: &Context) -> Vec<Item<'n>> {
@@ -432,6 +452,7 @@ fn literalized<'n>(items: Vec<Item<'n>>, context: &Context) -> Vec<Item<'n>> {
     let mut ahead = Ahead::default();
     let mut pending = items;
     let mut result = vec![];
+    let mut unfit = HashSet::new();
     let mut index = 0;
     while index < pending.len() {
         let item = pending[index].clone();
@@ -450,23 +471,25 @@ fn literalized<'n>(items: Vec<Item<'n>>, context: &Context) -> Vec<Item<'n>> {
                 at = next;
                 continue;
             }
-            let mut last = index + 1;
-            while last < pending.len() && pending[last].end() < end {
-                last += 1;
-            }
+            let last = index + 1 + pending[index + 1..].partition_point(|item| item.end() < end);
             let Some(tail) = pending.get(last) else {
                 at = next;
                 continue;
             };
-            if tail.text().is_none() && tail.end() != end {
+            if (tail.text().is_none() && tail.end() != end) || unfit.contains(&(last, end)) {
                 at = next;
                 continue;
             }
             let start = at + base;
             let prefix = (start > node_start).then(|| fragment(context, &item, value, node_start, start));
+            if matches!(prefix, Some(None)) {
+                at = next;
+                continue;
+            }
             let suffix =
                 (tail.end() > end).then(|| fragment(context, tail, tail.text().unwrap_or_default(), end, tail.end()));
-            if matches!(prefix, Some(None)) || matches!(suffix, Some(None)) {
+            if matches!(suffix, Some(None)) {
+                unfit.insert((last, end));
                 at = next;
                 continue;
             }
@@ -557,17 +580,28 @@ enum Converted {
 
 fn time_node(node: &tree::Node, context: &Context) -> Converted {
     let refused = |code| Converted::One(context.refused(code, (node.start, node.end), node.start, node.end), false);
-    let [attribute] = node.extra().attributes.as_slice() else {
-        return refused(Code::DatetimeInvalid);
+    let (attribute, format) = match node.extra().attributes.as_slice() {
+        [attribute] => (attribute, None),
+        [attribute, format] | [format, attribute] if !format.shortcut && format.name == "format" => {
+            (attribute, Some(format))
+        }
+        _ => return refused(Code::DatetimeInvalid),
     };
     if attribute.shortcut || !matches!(attribute.name.as_str(), "datetime" | "unix") {
         return refused(Code::DatetimeInvalid);
     }
+    let format = match format {
+        None => None,
+        Some(format) => match format.value.as_deref().and_then(TimeFormat::parse) {
+            Some(format) => Some(format),
+            None => return refused(Code::DatetimeInvalid),
+        },
+    };
     let value = attribute.value.clone().unwrap_or_default();
     let kind = if attribute.name == "unix" {
-        time::unix(&value).map(|unix| Kind::Datetime { datetime: None, unix })
+        time::unix(&value).map(|unix| Kind::Datetime { datetime: None, unix, format })
     } else {
-        time::absolute(&value).map(|unix| Kind::Datetime { datetime: Some(value), unix })
+        time::absolute(&value).map(|unix| Kind::Datetime { datetime: Some(value), unix, format })
     };
     match kind {
         Ok(kind) => Converted::One(context.node(kind, node.start, node.end), true),
@@ -621,9 +655,9 @@ fn convert_node(node: &tree::Node, end: usize, context: &Context) -> Converted {
     let kind = match node.kind {
         T::MediaDirective => {
             return Converted::One(
-                match context.placed.get(&start) {
-                    Some(kind) => context.node(kind.clone(), start, end),
-                    None => context.literal(start, end, None),
+                match context.placed.binary_search_by_key(&start, |(at, _)| *at) {
+                    Ok(at) => context.node(context.placed[at].1.clone(), start, end),
+                    Err(_) => context.literal(start, end, None),
                 },
                 false,
             );
@@ -649,10 +683,7 @@ fn convert_node(node: &tree::Node, end: usize, context: &Context) -> Converted {
         | T::TextDirective => return Converted::One(context.literal(start, end, None), false),
         T::Link => return link_node(node, context),
         T::Text => return Converted::Many(text_nodes(node.start, node.end, &node.value, context)),
-        T::Math => {
-            let value = literal_value(context, node.start, end);
-            return Converted::One(context.literal(node.start, end, Some(value)), false);
-        }
+        T::Math => Kind::Math { value: unprefixed(context, start + 1, node.end - 1) },
         T::InlineCode => Kind::InlineCode { value: node.value.replace('\n', " ") },
         T::Root | T::Paragraph => Kind::Paragraph,
         T::Heading => Kind::Heading { depth: node.depth },
@@ -694,23 +725,26 @@ fn pair_html<'n>(children: &'n [tree::Node], text: &str) -> Vec<(&'n tree::Node,
     if !children.iter().any(|child| child.kind == tree::Kind::Html) {
         return children.iter().map(|child| (child, child.end)).collect();
     }
-    let mut used = vec![false; children.len()];
+    let mut nearest: HashMap<String, usize> = HashMap::new();
+    let mut close = vec![None; children.len()];
+    for (index, child) in children.iter().enumerate().rev() {
+        if let Some(name) = html_tag(child, text, true) {
+            nearest.insert(name, index);
+        } else if let Some(name) = html_tag(child, text, false) {
+            close[index] = nearest.get(&name).copied();
+        }
+    }
     let mut out = vec![];
     let mut index = 0;
     while index < children.len() {
         let child = &children[index];
-        if let Some(name) = html_tag(child, text, false) {
-            let close = (index + 1..children.len())
-                .find(|&at| !used[at] && html_tag(&children[at], text, true).as_deref() == Some(name.as_str()));
-            if let Some(close) = close {
-                used[close] = true;
-                out.push((child, children[close].end));
-                index = close + 1;
-                continue;
-            }
+        if let Some(close) = close[index] {
+            out.push((child, children[close].end));
+            index = close + 1;
+        } else {
+            out.push((child, child.end));
+            index += 1;
         }
-        out.push((child, child.end));
-        index += 1;
     }
     out
 }
@@ -769,7 +803,9 @@ fn convert_children(parent: &tree::Node, context: &Context) -> Vec<Node> {
 
 fn visible(node: &Node) -> bool {
     let value = match &node.kind {
-        Kind::Text { value } | Kind::InlineCode { value } | Kind::Code { value, .. } => Some(value),
+        Kind::Text { value } | Kind::InlineCode { value } | Kind::Math { value } | Kind::Code { value, .. } => {
+            Some(value)
+        }
         _ => None,
     };
     value.is_some_and(|value| value.chars().any(|char| !whitespace(char))) || node.children.iter().any(visible)
@@ -782,7 +818,8 @@ pub(super) fn convert(
     lines: &LineIndex,
     media: &[Media],
 ) -> (Vec<Node>, Vec<Diagnostic>) {
-    let mut context = Context { text, lines, prefixes, diagnostics: RefCell::default(), placed: HashMap::new() };
+    let mut context =
+        Context { text, lines, prefixes, diagnostics: RefCell::default(), placed: vec![], closings: OnceCell::new() };
     resolve_media(root, media, &mut context);
     let children = convert_children(root, &context);
     (children, context.diagnostics.into_inner())

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::{env, fs};
 
+use gsx_core::document;
 use serde_json::{Value, json};
 
 const USAGE: &str = "usage: cargo xtask header [--check] | wasm | xcframework | wheel | replay [npm|swift|python]... \
@@ -16,9 +17,10 @@ const RELEASES: &str = "https://github.com/meritt/gsx.rs/releases/download";
 
 const BINARYEN: &str = "133";
 
-const WASM_OPT_FLAGS: [&str; 3] = ["-Os", "--strip-debug", "--strip-producers"];
+const WASM_OPT_FLAGS: [&str; 5] =
+    ["-Os", "--low-memory-unused", "--strip-debug", "--strip-producers", "--strip-target-features"];
 
-const WASM_GZIP_BUDGET: u64 = 365_000;
+const WASM_GZIP_BUDGET: u64 = 375_000;
 
 const GLUE_MARKER: &str = "/* @glue */";
 
@@ -36,6 +38,10 @@ const LINUX_WHEELS: [&str; 4] =
 const CORPUS: [&str; 2] = ["testdata/corpus/document.jsonl", "testdata/corpus/diagnostics.jsonl"];
 const SELECTION: &str = "testdata/corpus/targets/x-plain.jsonl";
 const PROJECTION: &str = "target/staging/projection.jsonl";
+const MEDIA: &str = "target/staging/media.jsonl";
+const SIZES: &str = "target/staging/sizes.jsonl";
+const LIMITS: &str = "target/staging/limits.jsonl";
+const CEILINGS: &str = "target/staging/ceilings.jsonl";
 
 type Result<T = ()> = std::result::Result<T, String>;
 
@@ -76,7 +82,8 @@ fn main() -> ExitCode {
 fn header(check: bool) -> Result {
     let ffi = root().join("crates/gsx-ffi");
     let path = ffi.join("include/gsx.h");
-    let config = cbindgen::Config::from_file(ffi.join("cbindgen.toml"))?;
+    let mut config = cbindgen::Config::from_file(ffi.join("cbindgen.toml"))?;
+    config.after_includes = Some(format!("\n#define GSX_MEDIA_ID_PATTERN {:?}", document::MEDIA_ID_PATTERN));
     let bindings = cbindgen::Builder::new()
         .with_crate(&ffi)
         .with_config(config)
@@ -579,7 +586,7 @@ fn corpus_args(command: &mut Command) -> &mut Command {
 
 fn corpus_files() -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = CORPUS.iter().map(|file| root().join(file)).collect();
-    files.push(root().join(PROJECTION));
+    files.extend([PROJECTION, MEDIA, SIZES, LIMITS, CEILINGS].map(|file| root().join(file)));
     files
 }
 
@@ -588,6 +595,10 @@ fn cases() -> Result<Vec<corpus::Case>> {
     let parent = projection.parent().ok_or("the projection cases have no directory")?;
     fs::create_dir_all(parent).map_err(at(parent.display()))?;
     corpus::projection(&CORPUS.map(|file| root().join(file)), &root().join(SELECTION), &projection)?;
+    corpus::media(&root().join(MEDIA))?;
+    corpus::sizes(&root().join(SIZES))?;
+    corpus::limits(&root().join(LIMITS))?;
+    corpus::ceilings(&root().join(CEILINGS))?;
     corpus::load(&corpus_files())
 }
 

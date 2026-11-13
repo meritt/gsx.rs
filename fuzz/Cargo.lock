@@ -79,7 +79,7 @@ dependencies = [
 
 [[package]]
 name = "gsx-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "icu_normalizer",
  "icu_properties",

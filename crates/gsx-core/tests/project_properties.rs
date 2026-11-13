@@ -5,13 +5,15 @@ mod validator;
 
 use std::sync::LazyLock;
 
-use gsx_core::document::{Media, Range, parse};
+use gsx_core::document::{Document, Kind, Media, Range, parse};
 use gsx_core::project::{
-    Class, Facts, Format, MediaFact, MediaKind, Offsets, Options, Overflow, Placement, Projection, Target, project_with,
+    Class, Facts, Form, Format, MediaFact, MediaKind, Offsets, Options, Overflow, Placement, Projection, Target,
+    project_with,
 };
 use gsx_core::targets::TARGETS;
 use gsx_core::wire;
 use proptest::prelude::*;
+use support::Json;
 use support::markup::boundaries;
 use validator::Schema;
 
@@ -60,6 +62,17 @@ const FRAGMENTS: &[&str] = &[
     "@alice@social.example",
     "#hashtag",
     "::time[tomorrow]{datetime=\"2026-11-06T18:00:00Z\"}",
+    "::time[soon]{unix=\"1785423600\" format=\"relative\"}",
+    "::time[at]{format=\"datetime-short\" datetime=\"2026-11-06T18:00:00Z\"}",
+    "::time[a label longer than thirty-one units]{unix=\"1\" format=\"full\"}",
+    "::time[bad]{unix=\"1\" format=\"Relative\"}",
+    "$x^2 + y^2$",
+    "$\\sum_{i=1}^{n} i^2 = \\frac{n(n+1)(2n+1)}{6}$",
+    "$a$1",
+    "$ a $",
+    "$5 and $10",
+    "\n```math\n\\frac{1}{2}\n```\n",
+    "::media{id=\"-bad\"}\n",
     "::media{id=\"a\"}\n",
     "::media{id=\"b\"}\n",
     "::media{ids=\"a,b\" layout=\"collage\"}\n",
@@ -205,7 +218,51 @@ fn within(range: Range, boundaries: &[bool]) -> bool {
     start <= end && end < boundaries.len() && boundaries[start] && boundaries[end]
 }
 
-fn check(input: &str, target: &Target, projection: &Projection) -> Result<(), TestCaseError> {
+fn whole_parts(document: &Document, target: &Target, projection: &Projection) -> Result<(), TestCaseError> {
+    let name = target.name;
+    let parts = &projection.parts;
+    for part in parts {
+        for measurement in part.measurements.iter().filter(|measurement| !measurement.unit.counts_markers()) {
+            prop_assert!(
+                measurement.maximum.is_none_or(|maximum| measurement.value <= maximum),
+                "{name} part exceeds its limit: {measurement:?}"
+            );
+        }
+    }
+    for (index, pair) in parts.windows(2).enumerate() {
+        prop_assert!(
+            pair[0].range.end <= pair[1].range.start,
+            "{name} part {index} range {:?} overlaps the next {:?}",
+            pair[0].range,
+            pair[1].range
+        );
+    }
+    let mut elements = vec![];
+    for node in document.children() {
+        match node.kind {
+            Kind::Paragraph => elements.extend(
+                node.children
+                    .iter()
+                    .filter(|child| !matches!(child.kind, Kind::Text { .. } | Kind::Break))
+                    .map(|child| child.range),
+            ),
+            _ => elements.push(node.range),
+        }
+    }
+    for element in elements {
+        let touched = parts.iter().filter(|part| part.range.start < element.end && element.start < part.range.end);
+        prop_assert!(touched.count() <= 1, "{name} splits the element at {element:?} across parts");
+    }
+    Ok(())
+}
+
+fn check(
+    input: &str,
+    document: &Document,
+    target: &Target,
+    facts: &Facts,
+    projection: &Projection,
+) -> Result<(), TestCaseError> {
     let name = target.name;
     let units = input.encode_utf16().count() as u32;
     for change in &projection.changes {
@@ -235,7 +292,7 @@ fn check(input: &str, target: &Target, projection: &Projection) -> Result<(), Te
             measurement.unit
         );
     }
-    for part in &projection.parts {
+    for (index, part) in projection.parts.iter().enumerate() {
         for measurement in &part.measurements {
             let Some(maximum) = measurement.maximum else { continue };
             let blocked = projection.changes.iter().any(|change| change.class == Class::Blocked);
@@ -246,7 +303,23 @@ fn check(input: &str, target: &Target, projection: &Projection) -> Result<(), Te
                 measurement.unit
             );
         }
-        prop_assert!(part.fields.iter().all(|field| !field.text.is_empty()), "{name} has an empty part");
+        let media = !part.media.is_empty() || !part.items.is_empty() || index == 0 && facts.media.is_some();
+        prop_assert!(part.fields.iter().all(|field| media || !field.text.is_empty()), "{name} has an empty part");
+        prop_assert!(
+            part.range.start <= part.range.end && part.range.end <= units,
+            "{name} part range {:?} outside the input",
+            part.range
+        );
+    }
+    for (index, pair) in projection.parts.windows(2).enumerate() {
+        prop_assert!(pair[0].range.start <= pair[1].range.start, "{name} part {index} ranges run backwards");
+        prop_assert!(pair[0].boundary.is_some(), "{name} part {index} has no boundary before the next part");
+    }
+    if let Some(last) = projection.parts.last() {
+        prop_assert!(last.boundary.is_none(), "{name} last part has a boundary");
+    }
+    if matches!(target.form, Form::Html(_) | Form::Markdown(_)) {
+        whole_parts(document, target, projection)?;
     }
     for field in &projection.fields {
         let utf16 = boundaries(&field.text);
@@ -316,11 +389,20 @@ fn properties(input: &str, setup: &Setup) -> Result<(), TestCaseError> {
         let first = project_with(&document, target, &facts, &options);
         let second = project_with(&document, target, &facts, &options);
         prop_assert_eq!(&first, &second, "{} is not deterministic", target.name);
-        check(input, target, &first)?;
+        check(input, &document, target, &facts, &first)?;
     }
     let sampled = TARGETS[input.len() % TARGETS.len()];
     let out = wire::project(input.as_bytes(), &MEDIA[..setup.media], sampled, &facts);
-    SCHEMA.check_wire(&out).map_err(TestCaseError::fail)
+    SCHEMA.check_wire(&out).map_err(TestCaseError::fail)?;
+    let parsed = Json::parse(&wire::parse(input.as_bytes(), &MEDIA[..setup.media]));
+    let projected = Json::parse(&out);
+    prop_assert_eq!(
+        projected.get("projection").get("diagnostics"),
+        parsed.get("document").get("diagnostics"),
+        "{} diagnostics differ from the document's",
+        sampled.name
+    );
+    Ok(())
 }
 
 proptest! {

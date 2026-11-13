@@ -8,6 +8,10 @@ yanked = "deny"
 allow = ["Apache-2.0", "MIT", "MPL-2.0", "Unicode-3.0"]
 confidence-threshold = 0.9
 
+[[licenses.exceptions]]
+allow = ["NCSA"]
+crate = "libfuzzer-sys"
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

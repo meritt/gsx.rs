@@ -9,6 +9,7 @@
     { "id": "long-32k", "group": "long", "source": { "repeat": { "block": "section" }, "until": 32768 } },
     { "id": "long-128k", "group": "long", "source": { "repeat": { "block": "section" }, "until": 131072 } },
     { "id": "prose-128k", "group": "long", "source": { "repeat": { "block": "prose" }, "until": 131072 } },
+    { "id": "prose-256k", "group": "long", "source": { "repeat": { "block": "prose" }, "until": 262144 } },
 
     { "id": "units", "group": "budget", "source": { "repeat": "a ", "times": 131072 } },
     {
@@ -50,6 +51,40 @@
     { "id": "quote-paragraphs", "group": "budget", "source": { "repeat": "> a\n\n", "times": 8191 } },
     { "id": "setext-headings", "group": "budget", "source": { "repeat": "a\n=\n", "times": 8191 } },
     { "id": "nested-list-items", "group": "budget", "source": { "repeat": "- a\n  - b\n", "times": 4096 } },
+    { "id": "html-block-opens", "group": "budget", "source": { "repeat": "<a>\n\n", "times": 8191 } },
+    { "id": "media-directive-line", "group": "budget", "source": { "repeat": "::media{id=\"x\"}", "times": 17476 } },
+    {
+      "id": "time-label-opens",
+      "group": "budget",
+      "source": { "concat": [{ "repeat": "::time[", "times": 4096 }, { "repeat": "a", "times": 233472 }] }
+    },
+    {
+      "id": "definition-references",
+      "group": "budget",
+      "source": {
+        "concat": [
+          { "repeat": "[a]: b\n", "times": 15800 },
+          "\n",
+          { "repeat": { "concat": [{ "repeat": "[c]", "times": 255 }, "\n\n"] }, "until": 151000 }
+        ]
+      }
+    },
+    {
+      "id": "footnote-references",
+      "group": "budget",
+      "source": {
+        "concat": [
+          { "repeat": "[^a]: b\n", "times": 15800 },
+          "\n",
+          { "repeat": { "concat": [{ "repeat": "[^c]", "times": 255 }, "\n\n"] }, "until": 135000 }
+        ]
+      }
+    },
+    {
+      "id": "label-normalization",
+      "group": "budget",
+      "source": { "concat": [{ "repeat": "[", "times": 255 }, { "repeat": "a ", "times": 130800 }, { "repeat": "]", "times": 255 }] }
+    },
 
     { "id": "html-comment-opens", "group": "unbounded", "source": { "concat": ["</", { "repeat": "<!--", "times": 16384 }] } },
     {
@@ -62,6 +97,21 @@
     { "id": "http-run", "group": "unbounded", "source": { "repeat": "http", "times": 32768 } },
     { "id": "scheme-separator-run", "group": "unbounded", "source": { "repeat": "://", "times": 32768 } },
     { "id": "www-run", "group": "unbounded", "source": { "repeat": "www.", "times": 32768 } },
+    { "id": "autolink-trail-path", "group": "unbounded", "source": { "concat": ["http://a.b/", { "repeat": ",", "times": 262000 }, "x"] } },
+    { "id": "autolink-trail-domain", "group": "unbounded", "source": { "concat": ["www.a", { "repeat": ".", "times": 262000 }, "x"] } },
+    {
+      "id": "rich-captions",
+      "group": "unbounded",
+      "source": { "concat": [{ "repeat": "::media{id=\"m\"}\n\n", "times": 6553 }, { "repeat": "a ", "times": 75000 }] }
+    },
+    { "id": "bluesky-parens", "group": "unbounded", "source": { "concat": ["https&#58;//a", { "repeat": ")", "times": 262000 }, " x"] } },
+    {
+      "id": "entity-cap",
+      "group": "unbounded",
+      "source": { "repeat": { "concat": [{ "repeat": "*a* ", "times": 200 }, "\n\n"] }, "until": 262000 }
+    },
+    { "id": "bluesky-tags", "group": "unbounded", "source": { "repeat": "https&#58;//a.co #a ", "until": 262000 } },
+    { "id": "bluesky-mentions", "group": "unbounded", "source": { "repeat": "https&#58;//a.co @a.bc ", "until": 262000 } },
 
     { "id": "reject-lines", "group": "reject", "source": { "repeat": "a\n", "times": 65536 } },
     { "id": "reject-empty-items", "group": "reject", "source": { "repeat": "-\n", "times": 43690 } },

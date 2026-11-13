@@ -1,0 +1,970 @@
+{
+  "reference": {
+    "implementation": "gsx-wasm",
+    "commit": "fdb4eb645478d5349bec3e6da3789e6ef8e6948b",
+    "dirty": false
+  },
+  "environment": {
+    "node": "v26.13.0",
+    "platform": "darwin 24.6.0 x64",
+    "cpu": "Intel(R) Core(TM) i9-10910 CPU @ 3.60GHz",
+    "date": "2026-11-12T00:37:22.538Z"
+  },
+  "budgetMs": 500,
+  "wasm": {
+    "bytes": 870924,
+    "gzip9Bytes": 360957
+  },
+  "cold": {
+    "importMs": {
+      "median": 5.676,
+      "p95": 6.184,
+      "min": 5.539,
+      "samples": 5
+    },
+    "firstParseMs": {
+      "median": 6.753,
+      "p95": 7.216,
+      "min": 6.593,
+      "samples": 5
+    }
+  },
+  "results": [
+    {
+      "id": "typical",
+      "group": "typical",
+      "documents": 91,
+      "units": 112952,
+      "outcome": "accepted",
+      "parse": {
+        "median": 5.005,
+        "p95": 5.885,
+        "min": 4.635,
+        "samples": 99
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 72776,
+        "deltaKiB": 21684
+      }
+    },
+    {
+      "id": "long-4k",
+      "group": "long",
+      "documents": 1,
+      "units": 3857,
+      "outcome": "accepted",
+      "parse": {
+        "median": 1.583,
+        "p95": 1.73,
+        "min": 1.55,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 66672,
+        "deltaKiB": 15736
+      }
+    },
+    {
+      "id": "long-32k",
+      "group": "long",
+      "documents": 1,
+      "units": 32509,
+      "outcome": "accepted",
+      "parse": {
+        "median": 11.752,
+        "p95": 12.6,
+        "min": 11.415,
+        "samples": 42
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 85712,
+        "deltaKiB": 34984
+      }
+    },
+    {
+      "id": "long-128k",
+      "group": "long",
+      "documents": 1,
+      "units": 130587,
+      "outcome": "accepted",
+      "parse": {
+        "median": 47.814,
+        "p95": 55.878,
+        "min": 46.19,
+        "samples": 11
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 105368,
+        "deltaKiB": 54304
+      }
+    },
+    {
+      "id": "prose-128k",
+      "group": "long",
+      "documents": 1,
+      "units": 131057,
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.971,
+        "p95": 4.246,
+        "min": 3.83,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 68356,
+        "deltaKiB": 17108
+      }
+    },
+    {
+      "id": "prose-256k",
+      "group": "long",
+      "documents": 1,
+      "units": 262114,
+      "outcome": "accepted",
+      "parse": {
+        "median": 9.004,
+        "p95": 9.882,
+        "min": 8.726,
+        "samples": 55
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 74556,
+        "deltaKiB": 22876
+      }
+    },
+    {
+      "id": "units",
+      "group": "budget",
+      "documents": 1,
+      "units": 262144,
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.307,
+        "p95": 3.461,
+        "min": 3.24,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 67776,
+        "deltaKiB": 15692
+      }
+    },
+    {
+      "id": "inline-depth",
+      "group": "budget",
+      "documents": 1,
+      "units": 67000,
+      "outcome": "accepted",
+      "parse": {
+        "median": 38.024,
+        "p95": 45.689,
+        "min": 36.035,
+        "samples": 13
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 100308,
+        "deltaKiB": 49168
+      }
+    },
+    {
+      "id": "lines-text",
+      "group": "budget",
+      "documents": 1,
+      "units": 32766,
+      "outcome": "accepted",
+      "parse": {
+        "median": 24.087,
+        "p95": 24.506,
+        "min": 23.786,
+        "samples": 21
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 79680,
+        "deltaKiB": 28072
+      }
+    },
+    {
+      "id": "lines-blank",
+      "group": "budget",
+      "documents": 1,
+      "units": 24573,
+      "outcome": "accepted",
+      "parse": {
+        "median": 31.734,
+        "p95": 33.051,
+        "min": 31.249,
+        "samples": 16
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 87520,
+        "deltaKiB": 36276
+      }
+    },
+    {
+      "id": "lines-heading",
+      "group": "budget",
+      "documents": 1,
+      "units": 65532,
+      "outcome": "accepted",
+      "parse": {
+        "median": 61.429,
+        "p95": 62.693,
+        "min": 60.625,
+        "samples": 9
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 108592,
+        "deltaKiB": 57868
+      }
+    },
+    {
+      "id": "hard-breaks",
+      "group": "budget",
+      "documents": 1,
+      "units": 4093,
+      "outcome": "accepted",
+      "parse": {
+        "median": 2.94,
+        "p95": 3.166,
+        "min": 2.924,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 68744,
+        "deltaKiB": 17188
+      }
+    },
+    {
+      "id": "emphasis-delimiters",
+      "group": "budget",
+      "documents": 1,
+      "units": 129086,
+      "outcome": "accepted",
+      "parse": {
+        "median": 12.564,
+        "p95": 12.916,
+        "min": 12.48,
+        "samples": 40
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 71748,
+        "deltaKiB": 20336
+      }
+    },
+    {
+      "id": "label-starts",
+      "group": "budget",
+      "documents": 1,
+      "units": 120020,
+      "outcome": "accepted",
+      "parse": {
+        "median": 14.393,
+        "p95": 14.652,
+        "min": 14.312,
+        "samples": 35
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 74424,
+        "deltaKiB": 23292
+      }
+    },
+    {
+      "id": "escapes",
+      "group": "budget",
+      "documents": 1,
+      "units": 12285,
+      "outcome": "accepted",
+      "parse": {
+        "median": 8.573,
+        "p95": 8.933,
+        "min": 8.317,
+        "samples": 59
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 80496,
+        "deltaKiB": 28972
+      }
+    },
+    {
+      "id": "list-items",
+      "group": "budget",
+      "documents": 1,
+      "units": 32764,
+      "outcome": "accepted",
+      "parse": {
+        "median": 51.467,
+        "p95": 60.752,
+        "min": 50.29,
+        "samples": 10
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 108096,
+        "deltaKiB": 56428
+      }
+    },
+    {
+      "id": "container-depth",
+      "group": "budget",
+      "documents": 1,
+      "units": 128000,
+      "outcome": "accepted",
+      "parse": {
+        "median": 48.1,
+        "p95": 51.962,
+        "min": 47.048,
+        "samples": 11
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 113048,
+        "deltaKiB": 61884
+      }
+    },
+    {
+      "id": "table-cells",
+      "group": "budget",
+      "documents": 1,
+      "units": 27024,
+      "outcome": "accepted",
+      "parse": {
+        "median": 21.926,
+        "p95": 22.526,
+        "min": 21.548,
+        "samples": 23
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 93160,
+        "deltaKiB": 42304
+      }
+    },
+    {
+      "id": "paired-highlight",
+      "group": "budget",
+      "documents": 1,
+      "units": 6138,
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.772,
+        "p95": 3.877,
+        "min": 3.656,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 72120,
+        "deltaKiB": 20600
+      }
+    },
+    {
+      "id": "paired-spoiler",
+      "group": "budget",
+      "documents": 1,
+      "units": 6138,
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.684,
+        "p95": 3.835,
+        "min": 3.648,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 72672,
+        "deltaKiB": 21132
+      }
+    },
+    {
+      "id": "math-literals",
+      "group": "budget",
+      "documents": 1,
+      "units": 6138,
+      "outcome": "accepted",
+      "parse": {
+        "median": 1.49,
+        "p95": 1.538,
+        "min": 1.486,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 66588,
+        "deltaKiB": 15224
+      }
+    },
+    {
+      "id": "label-ends",
+      "group": "budget",
+      "documents": 1,
+      "units": 512,
+      "outcome": "accepted",
+      "parse": {
+        "median": 0.019,
+        "p95": 0.02,
+        "min": 0.019,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 52708,
+        "deltaKiB": 1168
+      }
+    },
+    {
+      "id": "escaped-code-ticks",
+      "group": "budget",
+      "documents": 1,
+      "units": 16384,
+      "outcome": "accepted",
+      "parse": {
+        "median": 9.606,
+        "p95": 10.067,
+        "min": 9.278,
+        "samples": 53
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 80784,
+        "deltaKiB": 29620
+      }
+    },
+    {
+      "id": "quote-paragraphs",
+      "group": "budget",
+      "documents": 1,
+      "units": 40955,
+      "outcome": "accepted",
+      "parse": {
+        "median": 46.112,
+        "p95": 53.622,
+        "min": 45.107,
+        "samples": 11
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 109784,
+        "deltaKiB": 58944
+      }
+    },
+    {
+      "id": "setext-headings",
+      "group": "budget",
+      "documents": 1,
+      "units": 32764,
+      "outcome": "accepted",
+      "parse": {
+        "median": 44.491,
+        "p95": 45.813,
+        "min": 43.844,
+        "samples": 12
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 92568,
+        "deltaKiB": 41556
+      }
+    },
+    {
+      "id": "nested-list-items",
+      "group": "budget",
+      "documents": 1,
+      "units": 40960,
+      "outcome": "accepted",
+      "parse": {
+        "median": 59.265,
+        "p95": 68.503,
+        "min": 58.56,
+        "samples": 9
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 106012,
+        "deltaKiB": 54756
+      }
+    },
+    {
+      "id": "html-block-opens",
+      "group": "budget",
+      "documents": 1,
+      "units": 40955,
+      "outcome": "accepted",
+      "parse": {
+        "median": 18.456,
+        "p95": 19.431,
+        "min": 18.087,
+        "samples": 27
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 81980,
+        "deltaKiB": 31008
+      }
+    },
+    {
+      "id": "media-directive-line",
+      "group": "budget",
+      "documents": 1,
+      "units": 262140,
+      "outcome": "accepted",
+      "parse": {
+        "median": 37.441,
+        "p95": 49.229,
+        "min": 36.011,
+        "samples": 14
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 116384,
+        "deltaKiB": 65184
+      }
+    },
+    {
+      "id": "time-label-opens",
+      "group": "budget",
+      "documents": 1,
+      "units": 262144,
+      "outcome": "accepted",
+      "parse": {
+        "median": 169.149,
+        "p95": 169.48,
+        "min": 168.975,
+        "samples": 3
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 89932,
+        "deltaKiB": 38708
+      }
+    },
+    {
+      "id": "definition-references",
+      "group": "budget",
+      "documents": 1,
+      "units": 260933,
+      "outcome": "accepted",
+      "parse": {
+        "median": 140.672,
+        "p95": 149.263,
+        "min": 139.543,
+        "samples": 4
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 136584,
+        "deltaKiB": 85784
+      }
+    },
+    {
+      "id": "footnote-references",
+      "group": "budget",
+      "documents": 1,
+      "units": 261305,
+      "outcome": "accepted",
+      "parse": {
+        "median": 129.582,
+        "p95": 134.161,
+        "min": 129.034,
+        "samples": 4
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 134760,
+        "deltaKiB": 83012
+      }
+    },
+    {
+      "id": "label-normalization",
+      "group": "budget",
+      "documents": 1,
+      "units": 262110,
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.695,
+        "p95": 3.813,
+        "min": 3.42,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 67740,
+        "deltaKiB": 16296
+      }
+    },
+    {
+      "id": "html-comment-opens",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 65538,
+      "outcome": "accepted",
+      "parse": {
+        "median": 9.673,
+        "p95": 9.835,
+        "min": 9.512,
+        "samples": 52
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 71136,
+        "deltaKiB": 19824
+      }
+    },
+    {
+      "id": "html-instruction-opens",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 65535,
+      "outcome": "accepted",
+      "parse": {
+        "median": 8.779,
+        "p95": 9.149,
+        "min": 8.597,
+        "samples": 57
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 68400,
+        "deltaKiB": 16944
+      }
+    },
+    {
+      "id": "html-comment-tags",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 65540,
+      "outcome": "accepted",
+      "parse": {
+        "median": 8.127,
+        "p95": 8.323,
+        "min": 7.933,
+        "samples": 62
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 69668,
+        "deltaKiB": 17972
+      }
+    },
+    {
+      "id": "code-tick-ramp",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 125750,
+      "outcome": "accepted",
+      "parse": {
+        "median": 8.809,
+        "p95": 9.003,
+        "min": 8.761,
+        "samples": 57
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 65868,
+        "deltaKiB": 14776
+      }
+    },
+    {
+      "id": "http-run",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 131072,
+      "outcome": "accepted",
+      "parse": {
+        "median": 6.207,
+        "p95": 6.336,
+        "min": 6.109,
+        "samples": 81
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 69252,
+        "deltaKiB": 18556
+      }
+    },
+    {
+      "id": "scheme-separator-run",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 98304,
+      "outcome": "accepted",
+      "parse": {
+        "median": 7.409,
+        "p95": 7.589,
+        "min": 7.276,
+        "samples": 68
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 70096,
+        "deltaKiB": 18540
+      }
+    },
+    {
+      "id": "www-run",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 131072,
+      "outcome": "accepted",
+      "parse": {
+        "median": 6.263,
+        "p95": 6.355,
+        "min": 6.03,
+        "samples": 81
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 63624,
+        "deltaKiB": 12420
+      }
+    },
+    {
+      "id": "autolink-trail-path",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 262012,
+      "outcome": "accepted",
+      "parse": {
+        "median": 18.924,
+        "p95": 20.662,
+        "min": 18.746,
+        "samples": 27
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 63420,
+        "deltaKiB": 12368
+      }
+    },
+    {
+      "id": "autolink-trail-domain",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 262006,
+      "outcome": "accepted",
+      "parse": {
+        "median": 18.985,
+        "p95": 21.011,
+        "min": 18.597,
+        "samples": 27
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 63036,
+        "deltaKiB": 12072
+      }
+    },
+    {
+      "id": "rich-captions",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 261401,
+      "outcome": "accepted",
+      "parse": {
+        "median": 31.273,
+        "p95": 36.329,
+        "min": 30.337,
+        "samples": 16
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 94068,
+        "deltaKiB": 42492
+      }
+    },
+    {
+      "id": "bluesky-parens",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 262015,
+      "outcome": "accepted",
+      "parse": {
+        "median": 3.468,
+        "p95": 3.608,
+        "min": 3.387,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 67180,
+        "deltaKiB": 16064
+      }
+    },
+    {
+      "id": "entity-cap",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 261452,
+      "outcome": "accepted",
+      "parse": {
+        "median": 305.228,
+        "p95": 330.955,
+        "min": 287.102,
+        "samples": 3
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 223672,
+        "deltaKiB": 172780
+      }
+    },
+    {
+      "id": "bluesky-tags",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 262000,
+      "outcome": "accepted",
+      "parse": {
+        "median": 22.044,
+        "p95": 22.568,
+        "min": 21.761,
+        "samples": 23
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 93412,
+        "deltaKiB": 42436
+      }
+    },
+    {
+      "id": "bluesky-mentions",
+      "group": "unbounded",
+      "documents": 1,
+      "units": 261993,
+      "outcome": "accepted",
+      "parse": {
+        "median": 19.6,
+        "p95": 20.826,
+        "min": 19.268,
+        "samples": 26
+      },
+      "memory": {
+        "outcome": "accepted",
+        "maxRssKiB": 88192,
+        "deltaKiB": 37240
+      }
+    },
+    {
+      "id": "reject-lines",
+      "group": "reject",
+      "documents": 1,
+      "units": 131072,
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.676,
+        "p95": 0.727,
+        "min": 0.675,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "MARKDOWN_TOO_COMPLEX",
+        "maxRssKiB": 57848,
+        "deltaKiB": 6216
+      }
+    },
+    {
+      "id": "reject-empty-items",
+      "group": "reject",
+      "documents": 1,
+      "units": 87380,
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.463,
+        "p95": 0.477,
+        "min": 0.461,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "MARKDOWN_TOO_COMPLEX",
+        "maxRssKiB": 56244,
+        "deltaKiB": 5368
+      }
+    },
+    {
+      "id": "reject-delimiters",
+      "group": "reject",
+      "documents": 1,
+      "units": 120000,
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.928,
+        "p95": 0.978,
+        "min": 0.921,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "MARKDOWN_TOO_COMPLEX",
+        "maxRssKiB": 58688,
+        "deltaKiB": 7404
+      }
+    },
+    {
+      "id": "reject-label-ends",
+      "group": "reject",
+      "documents": 1,
+      "units": 514,
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.018,
+        "p95": 0.02,
+        "min": 0.018,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "MARKDOWN_TOO_COMPLEX",
+        "maxRssKiB": 52572,
+        "deltaKiB": 916
+      }
+    },
+    {
+      "id": "reject-units",
+      "group": "reject",
+      "documents": 1,
+      "units": 262146,
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.007,
+        "p95": 0.009,
+        "min": 0.007,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "MARKDOWN_TOO_COMPLEX",
+        "maxRssKiB": 51924,
+        "deltaKiB": 476
+      }
+    },
+    {
+      "id": "reject-inline-depth",
+      "group": "reject",
+      "documents": 1,
+      "units": 69,
+      "outcome": "MARKDOWN_TOO_COMPLEX",
+      "parse": {
+        "median": 0.025,
+        "p95": 0.031,
+        "min": 0.024,
+        "samples": 100
+      },
+      "memory": {
+        "outcome": "MARKDOWN_TOO_COMPLEX",
+        "maxRssKiB": 51936,
+        "deltaKiB": 916
+      }
+    }
+  ]
+}

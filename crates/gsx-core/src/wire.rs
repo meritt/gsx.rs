@@ -1,13 +1,13 @@
-use std::fmt::Write;
-
 use crate::document::{
     self, Align, Code, Details, Diagnostic, Document, Error, Kind, Layout, Marker, MarkerKind, Media, Node, Provenance,
-    Range, Severity,
+    Range, Severity, TimeFormat,
 };
+use crate::measure::{Fact, Limit, Maximum, Placement};
 use crate::project::{
-    self, Attachment, Block, Change, Entity, Facts, Field, Item, Measurement, Offsets, Part, Projection, Slot, Target,
-    Truncated,
+    self, Attachment, Block, Change, Entity, FACT_MAX_ITEMS, FACT_MAX_UNITS, Facts, Field, Format, Item, Measurement,
+    MediaShape, Part, Projection, Slot, Target, Truncated,
 };
+use crate::source;
 use crate::targets::TARGETS;
 
 pub fn parse(input: &[u8], media: &[Media]) -> String {
@@ -48,6 +48,8 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
     out.list(&measurements, Out::measurement);
     out.raw(",\"changes\":");
     out.list(&changes, Out::change);
+    out.raw(",\"diagnostics\":");
+    out.list(document.diagnostics(), Out::diagnostic);
     out.raw(",\"media\":");
     out.list(&media, |out, id| out.string(id));
     if target.form.blocks().is_some() {
@@ -61,7 +63,7 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
     if !parts.is_empty() {
         out.raw(",\"parts\":");
         out.list(&parts, |out, part| {
-            let Part { fields, measurements, media, items } = part;
+            let Part { fields, measurements, media, items, range, boundary } = part;
             out.raw("{\"fields\":");
             out.list(fields, Out::field);
             out.raw(",\"measurements\":");
@@ -70,6 +72,13 @@ pub fn project(input: &[u8], media: &[Media], target: &'static Target, facts: &F
             out.list(media, |out, id| out.string(id));
             out.raw(",\"items\":");
             out.list(items, Out::attachment);
+            out.raw(",\"range\":");
+            out.range(*range);
+            out.raw(",\"boundary\":");
+            match boundary {
+                Some(boundary) => out.string(boundary.name()),
+                None => out.raw("null"),
+            }
             out.0.push('}');
         });
     }
@@ -86,11 +95,7 @@ pub fn targets() -> String {
         out.key("form");
         out.string(target.form.version());
         out.key("offsets");
-        match target.form.entities().map(|form| form.offsets) {
-            Some(Offsets::Utf8) => out.string("utf8"),
-            Some(Offsets::Utf16) => out.string("utf16"),
-            None => out.raw("null"),
-        }
+        out.optional(target.form.entities().map(|form| form.offsets.name()));
         out.key("digest");
         out.string(&target.digest());
         out.key("manifest");
@@ -99,13 +104,77 @@ pub fn targets() -> String {
         out.list(&target.codes(), |out, code| out.string(code));
         out.key("threads");
         out.raw(if target.threads() { "true" } else { "false" });
+        out.key("facts");
+        out.list(&target.facts(), |out, fact| out.string(fact));
+        out.key("fields");
+        out.list(target.fields, |out, field| {
+            out.raw("{\"name\":");
+            out.string(field.name.name());
+            out.key("required");
+            out.bool(field.required);
+            out.key("media");
+            out.string(field.media.name());
+            out.0.push('}');
+        });
+        out.key("limits");
+        out.list(target.limits, Out::limit);
+        out.key("features");
+        out.list(target.rules, |out, rule| {
+            out.raw("{\"feature\":");
+            out.string(rule.feature.name());
+            out.key("class");
+            out.string(rule.class.name());
+            out.key("reason");
+            out.string(rule.reason);
+            out.key("conditions");
+            out.list(rule.conditions, |out, condition| {
+                out.raw("{\"when\":");
+                out.string(condition.when.name());
+                out.key("class");
+                out.string(condition.class.name());
+                out.key("reason");
+                out.string(condition.reason);
+                out.0.push('}');
+            });
+            out.0.push('}');
+        });
+        let MediaShape { formats, alt, spoiler: (mode, spoiled), inline, groups } = target.media();
+        let names = |out: &mut Out, formats: &[Format]| out.list(formats, |out, format| out.string(format.name()));
+        out.key("media");
+        out.raw("{\"formats\":");
+        names(out, formats);
+        out.key("alt");
+        names(out, alt);
+        out.key("spoiler");
+        out.raw("{\"mode\":");
+        out.string(mode.name());
+        out.key("formats");
+        names(out, spoiled);
         out.0.push('}');
+        out.key("inline");
+        out.bool(inline);
+        out.key("groups");
+        out.list(&groups, |out, group| {
+            out.raw("{\"layout\":");
+            out.string(group.layout.as_str());
+            out.key("formats");
+            names(out, group.formats);
+            out.key("minimum");
+            out.number(group.minimum);
+            out.key("maximum");
+            out.number(group.maximum);
+            out.0.push('}');
+        });
+        out.raw("}}");
     });
     out.0.push('}');
     out.0
 }
 
 fn decode(input: &[u8]) -> Result<&str, String> {
+    if let Some(error) = document::oversized(input) {
+        return Err(result(&Err(error)));
+    }
     std::str::from_utf8(input).map_err(|error| {
         let (valid, rest) = input.split_at(error.valid_up_to());
         let offset = std::str::from_utf8(valid).unwrap_or_default().encode_utf16().count() as u32;
@@ -119,8 +188,32 @@ fn decode(input: &[u8]) -> Result<&str, String> {
     })
 }
 
+pub fn refused(facts: &Facts) -> Option<String> {
+    let over = |text: &str| text.len() > FACT_MAX_UNITS && text.encode_utf16().nth(FACT_MAX_UNITS).is_some();
+    let items = facts.items.unwrap_or_default();
+    if items.len() > FACT_MAX_ITEMS {
+        return Some(format!("items has {} entries, over {FACT_MAX_ITEMS}", items.len()));
+    }
+    for (index, item) in items.iter().enumerate() {
+        if !document::is_media_id(item.id) {
+            return Some(format!("item {index} id is not a media ID"));
+        }
+        if item.alt.is_some_and(over) {
+            return Some(format!("item {index} alt is over {FACT_MAX_UNITS} UTF-16 units"));
+        }
+    }
+    [("title", facts.title), ("targetUrl", facts.target_url), ("spoilerText", facts.spoiler_text)]
+        .into_iter()
+        .find(|(_, text)| text.is_some_and(over))
+        .map(|(name, _)| format!("{name} is over {FACT_MAX_UNITS} UTF-16 units"))
+}
+
+pub fn oversized(units: u64, code_point: u32) -> Option<String> {
+    source::oversized_units(units, code_point > 0xFFFF).map(|range| result(&Err(document::too_large(range))))
+}
+
 pub fn invalid_text(offset: u32, code_point: Option<u32>) -> String {
-    let range = Range { start: offset, end: offset + 1 };
+    let range = Range { start: offset, end: offset.saturating_add(1) };
     let details = code_point.map_or(Details::None, Details::CodePoint);
     result(&Err(Error { code: Code::MarkdownInvalidText, range: Some(range), details }))
 }
@@ -153,6 +246,40 @@ pub fn result(result: &Result<Document, Error>) -> String {
     out.0
 }
 
+trait Unsigned {
+    fn wide(self) -> u64;
+}
+
+impl Unsigned for u64 {
+    fn wide(self) -> u64 {
+        self
+    }
+}
+
+impl Unsigned for usize {
+    fn wide(self) -> u64 {
+        self as u64
+    }
+}
+
+impl Unsigned for u32 {
+    fn wide(self) -> u64 {
+        u64::from(self)
+    }
+}
+
+impl Unsigned for u8 {
+    fn wide(self) -> u64 {
+        u64::from(self)
+    }
+}
+
+impl<T: Unsigned + Copy> Unsigned for &T {
+    fn wide(self) -> u64 {
+        (*self).wide()
+    }
+}
+
 struct Out(String);
 
 impl Out {
@@ -160,8 +287,26 @@ impl Out {
         self.0.push_str(text);
     }
 
-    fn number(&mut self, value: impl std::fmt::Display) {
-        let _ = write!(self.0, "{value}");
+    fn number(&mut self, value: impl Unsigned) {
+        let mut value = value.wide();
+        let mut digits = [0; 20];
+        let mut at = digits.len();
+        loop {
+            at -= 1;
+            digits[at] = b'0' + (value % 10) as u8;
+            value /= 10;
+            if value == 0 {
+                break;
+            }
+        }
+        self.0.extend(digits[at..].iter().map(|&digit| char::from(digit)));
+    }
+
+    fn signed(&mut self, value: i64) {
+        if value < 0 {
+            self.0.push('-');
+        }
+        self.number(value.unsigned_abs());
     }
 
     fn bool(&mut self, value: bool) {
@@ -185,7 +330,9 @@ impl Out {
             };
             self.0.push_str(&value[start..at]);
             if escape.is_empty() {
-                let _ = write!(self.0, "\\u{byte:04x}");
+                self.0.push_str("\\u00");
+                self.0.push(char::from(b"0123456789abcdef"[usize::from(byte >> 4)]));
+                self.0.push(char::from(b"0123456789abcdef"[usize::from(byte & 0x0f)]));
             } else {
                 self.0.push_str(escape);
             }
@@ -220,7 +367,11 @@ impl Out {
     }
 
     fn range(&mut self, range: Range) {
-        let _ = write!(self.0, "[{},{}]", range.start, range.end);
+        self.0.push('[');
+        self.number(range.start);
+        self.0.push(',');
+        self.number(range.end);
+        self.0.push(']');
     }
 
     fn node(&mut self, node: &Node) {
@@ -282,7 +433,7 @@ impl Out {
                     Align::Center => out.string("center"),
                 });
             }
-            Kind::Text { value } | Kind::InlineCode { value } => {
+            Kind::Text { value } | Kind::InlineCode { value } | Kind::Math { value } => {
                 self.key("value");
                 self.string(value);
             }
@@ -294,11 +445,13 @@ impl Out {
                 self.key("title");
                 self.optional(title.as_deref());
             }
-            Kind::Datetime { datetime, unix } => {
+            Kind::Datetime { datetime, unix, format } => {
                 self.key("datetime");
                 self.optional(datetime.as_deref());
                 self.key("unix");
-                self.number(unix);
+                self.signed(*unix);
+                self.key("format");
+                self.optional(format.map(TimeFormat::as_str));
             }
             Kind::MediaReference { id } => {
                 self.key("mediaId");
@@ -366,13 +519,17 @@ impl Out {
         self.list(links, |out, range| out.range(*range));
         self.key("entities");
         self.list(entities, |out, entity| {
-            let Entity { style, range, value } = entity;
+            let Entity { style, range, value, format } = entity;
             out.raw("{\"style\":");
             out.string(style.name());
             out.key("range");
             out.range(*range);
             out.key("value");
             out.optional(value.as_deref());
+            if let Some(format) = format {
+                out.key("format");
+                out.string(format);
+            }
             out.0.push('}');
         });
         self.0.push('}');
@@ -418,6 +575,37 @@ impl Out {
         self.optional(alt.as_deref());
         self.key("spoiler");
         self.bool(*spoiler);
+        self.0.push('}');
+    }
+
+    fn limit(&mut self, limit: &Limit) {
+        let (maximum, fact) = match limit.maximum {
+            Maximum::Fixed(value) => (Some(value), None),
+            Maximum::Resolved(fact, value) => (Some(value), Some(fact)),
+            Maximum::Given(fact) => (None, Some(fact)),
+            Maximum::Unlimited => (None, None),
+        };
+        self.raw("{\"field\":");
+        self.string(limit.field.name());
+        self.key("unit");
+        self.string(limit.unit.name());
+        self.key("maximum");
+        match maximum {
+            Some(value) => self.number(value),
+            None => self.raw("null"),
+        }
+        self.key("fact");
+        self.optional(fact.map(Fact::name));
+        self.key("placements");
+        if limit.placements == Placement::ALL {
+            self.raw("null");
+        } else {
+            self.list(limit.placements, |out, placement| out.string(placement.name()));
+        }
+        self.key("media");
+        self.string(limit.media.name());
+        self.key("rendering");
+        self.string(limit.rendering.name());
         self.0.push('}');
     }
 
@@ -538,6 +726,7 @@ const fn node_type(kind: &Kind) -> &'static str {
         Kind::Highlight => "highlight",
         Kind::Spoiler => "spoiler",
         Kind::InlineCode { .. } => "inlineCode",
+        Kind::Math { .. } => "math",
         Kind::Break => "break",
         Kind::Link { .. } => "link",
         Kind::Datetime { .. } => "datetime",

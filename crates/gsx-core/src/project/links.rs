@@ -41,12 +41,24 @@ impl Units {
     }
 }
 
-pub fn x_urls(text: &str) -> Vec<Range<usize>> {
+pub fn x_urls(text: &str) -> Option<Vec<Range<usize>>> {
     if text.len() > X_MEASURED_UTF16 && text.encode_utf16().count() > X_MEASURED_UTF16 {
+        return None;
+    }
+    let units = Units::new(text);
+    Some(twitter::urls(&units.units).into_iter().filter_map(|range| units.bytes(range)).collect())
+}
+
+pub fn bare_urls(text: &str, x: bool, mastodon: bool) -> Vec<Range<usize>> {
+    if !(x || mastodon) || !text.contains('.') {
         return vec![];
     }
     let units = Units::new(text);
-    twitter::urls(&units.units).into_iter().filter_map(|range| units.bytes(range)).collect()
+    let mut urls = if x { twitter::urls(&units.units) } else { vec![] };
+    if mastodon {
+        urls.extend(mastodon::urls(&units.units));
+    }
+    urls.into_iter().filter_map(|range| units.bytes(range)).collect()
 }
 
 pub fn mastodon_entities(text: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {

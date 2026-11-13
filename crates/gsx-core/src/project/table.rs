@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::fmt::Write as _;
 
-use crate::document::{Layout, Node};
+use crate::document::{Layout, MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, Node, TimeFormat};
 
 use super::Context;
 use super::change::{Class, Feature, FieldName};
 use super::facts::{Facts, Format, MediaFact};
-use crate::measure::{self, MediaKind};
+use crate::measure::{self, Fact, Maximum, MediaKind, Placement, Unit};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum When {
@@ -32,6 +32,7 @@ pub enum When {
     Thread,
     Code,
     Post,
+    BlankLines,
 }
 
 impl When {
@@ -59,6 +60,7 @@ impl When {
             When::Thread => "thread",
             When::Code => "code",
             When::Post => "post",
+            When::BlankLines => "blank_lines",
         }
     }
 }
@@ -93,6 +95,14 @@ pub enum Media {
 }
 
 impl Media {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Media::Any => "any",
+            Media::Image => "image",
+            Media::Video => "video",
+        }
+    }
+
     pub fn applies(self, media: Option<MediaKind>) -> bool {
         match self {
             Media::Any => true,
@@ -129,6 +139,15 @@ pub enum Search {
     Exhaustive,
 }
 
+impl Search {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Search::Monotone => "monotone",
+            Search::Exhaustive => "exhaustive",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Escape {
     None,
@@ -142,6 +161,15 @@ pub enum Escape {
 pub enum Offsets {
     Utf8,
     Utf16,
+}
+
+impl Offsets {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Offsets::Utf8 => "utf8",
+            Offsets::Utf16 => "utf16",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -160,7 +188,19 @@ pub enum Style {
     Mention,
 }
 
-pub const DATE_LABEL: usize = 127;
+const DATE_LABEL: usize = 127;
+const FORMATTED_DATE_LABEL: usize = 31;
+
+pub fn date_refusal(label: &str, unix: i64, formatted: bool) -> Option<When> {
+    let maximum = if formatted { FORMATTED_DATE_LABEL } else { DATE_LABEL };
+    if label.encode_utf16().count() > maximum {
+        Some(When::Overflow)
+    } else if !(0..=i64::from(i32::MAX)).contains(&unix) {
+        Some(When::Refused)
+    } else {
+        None
+    }
+}
 
 impl Style {
     pub const fn name(self) -> &'static str {
@@ -199,6 +239,17 @@ pub struct EntityForm {
     pub links: Option<usize>,
     pub trim: bool,
     pub styled_suffix: bool,
+    pub time_formats: TimeFormats,
+}
+
+pub type TimeFormats = &'static [&'static str];
+
+pub fn time_format(formats: TimeFormats, format: Option<TimeFormat>) -> Option<&'static str> {
+    format.and_then(|format| formats.get(format as usize).copied())
+}
+
+fn describe_time_formats(formats: TimeFormats) -> String {
+    join(TimeFormat::ALL.iter().zip(formats).map(|(format, native)| format!("{}={}", format.as_str(), quoted(native))))
 }
 
 impl EntityForm {
@@ -206,6 +257,9 @@ impl EntityForm {
         self.styles.iter().find(|(native, _)| *native == feature).map(|(_, style)| *style)
     }
 }
+
+const RICH_BLOCKS: [&str; 14] =
+    ["p", "pre", "ul", "ol", "li", "blockquote", "table", "tr", "hr", "img", "video", "audio", "figure", "figcaption"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HtmlBlocks {
@@ -227,17 +281,36 @@ pub struct HtmlForm {
     pub structure: Option<Structure>,
     pub tags: &'static [(Feature, &'static str)],
     pub exclusive: &'static [Feature],
+    pub groups: &'static [(Layout, &'static str, &'static [Format])],
     pub code_contained: bool,
     pub quote_nests: bool,
     pub quote_contains_code: bool,
     pub code_info: bool,
     pub empty_removed: bool,
     pub trim: bool,
+    pub time_formats: TimeFormats,
+    pub math: Option<MathTags>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MathTags {
+    pub inline: &'static str,
+    pub block: &'static str,
 }
 
 impl HtmlForm {
     pub fn tag(&self, feature: Feature) -> Option<&'static str> {
         self.tags.iter().find(|(native, _)| *native == feature).map(|(_, tag)| *tag)
+    }
+
+    pub fn group(&self, layout: Layout) -> Option<(&'static str, &'static [Format])> {
+        self.groups.iter().find(|(native, ..)| *native == layout).map(|&(_, tag, formats)| (tag, formats))
+    }
+
+    fn rich_block(&self, tag: &str) -> bool {
+        RICH_BLOCKS.contains(&tag)
+            || self.groups.iter().any(|(_, group, _)| *group == tag)
+            || self.math.is_some_and(|math| math.block == tag)
     }
 }
 
@@ -257,9 +330,12 @@ pub struct MarkdownForm {
     pub neutralised: &'static [LineStart],
     pub html: bool,
     pub datetime: &'static str,
+    pub time_format: &'static str,
+    pub time_formats: TimeFormats,
     pub separators: &'static str,
     pub quote_depth: Option<u32>,
     pub url_labels: bool,
+    pub line_break: &'static str,
 }
 
 impl MarkdownForm {
@@ -270,6 +346,66 @@ impl MarkdownForm {
     pub fn native(&self, feature: Feature) -> bool {
         self.native.contains(&feature)
     }
+
+    fn describe(&self, out: &mut String) {
+        let delimiters = join(
+            self.delimiters.iter().map(|(feature, delimiter)| format!("{}={}", feature.name(), quoted(delimiter))),
+        );
+        let neutralised = join(self.neutralised.iter().map(|start| match start {
+            LineStart::Heading => "heading",
+            LineStart::Ordered => "ordered",
+            LineStart::Setext => "setext",
+        }));
+        let quote_depth = self.quote_depth.map_or_else(|| "none".to_owned(), |depth| depth.to_string());
+        let _ = writeln!(
+            out,
+            "  delimiters {delimiters}\n  native {}\n  escaped {}\n  owned {}\n  neutralised {neutralised}\n  html {}\n  \
+             datetime {}\n  time_format {}\n  time_formats {}\n  separators {}\n  quote_depth {quote_depth}\n  \
+             url_labels {}\n  line_break {}",
+            join(self.native.iter().map(|feature| feature.name())),
+            quoted(self.escaped),
+            self.owned,
+            self.html,
+            quoted(self.datetime),
+            quoted(self.time_format),
+            describe_time_formats(self.time_formats),
+            quoted(self.separators),
+            self.url_labels,
+            quoted(self.line_break),
+        );
+    }
+}
+
+fn join<T: AsRef<str>>(items: impl Iterator<Item = T>) -> String {
+    let mut out = String::new();
+    for item in items {
+        if !out.is_empty() {
+            out.push(',');
+        }
+        out.push_str(item.as_ref());
+    }
+    if out.is_empty() { "none".to_owned() } else { out }
+}
+
+fn optional(value: Option<usize>) -> String {
+    value.map_or_else(|| "none".to_owned(), |value| value.to_string())
+}
+
+fn quoted(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for char in text.chars() {
+        match char {
+            '"' | '\\' => {
+                out.push('\\');
+                out.push(char);
+            }
+            '\n' => out.push_str("\\n"),
+            _ => out.push(char),
+        }
+    }
+    out.push('"');
+    out
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -349,6 +485,17 @@ impl Form {
         }
     }
 
+    pub const fn math(self) -> Option<MathTags> {
+        match self {
+            Form::Html(form) => form.math,
+            _ => None,
+        }
+    }
+
+    pub const fn splits_by_nodes(self) -> bool {
+        matches!(self, Form::Html(_) | Form::Markdown(_))
+    }
+
     pub const fn markdown(self) -> Option<&'static MarkdownForm> {
         match self {
             Form::Markdown(form) => Some(form),
@@ -364,33 +511,172 @@ impl Form {
         }
     }
 
-    pub fn visible(self, text: &str) -> Cow<'_, str> {
-        if self.html().is_none() {
-            return Cow::Borrowed(text);
-        }
-        let mut out = String::with_capacity(text.len());
-        let mut rest = text;
-        while let Some(at) = rest.find(['<', '&']) {
-            out.push_str(&rest[..at]);
-            rest = &rest[at..];
-            if rest.starts_with('<') {
-                let end = rest.find('>').map_or(rest.len(), |end| end + 1);
-                if &rest[..end] == "<br>" {
-                    out.push('\n');
-                }
-                rest = &rest[end..];
-            } else {
-                let (decoded, length) = [("&lt;", '<'), ("&gt;", '>'), ("&quot;", '"'), ("&amp;", '&')]
-                    .into_iter()
-                    .find(|(entity, _)| rest.starts_with(entity))
-                    .map_or(('&', 1), |(entity, char)| (char, entity.len()));
-                out.push(decoded);
-                rest = &rest[length..];
+    fn describe(self, out: &mut String) {
+        match self {
+            Form::Plain { escape } => {
+                let escape = match escape {
+                    Escape::None => "none",
+                    Escape::LinkedIn => "linkedin",
+                    Escape::Html => "html",
+                    Escape::HtmlBreaks => "html-breaks",
+                    Escape::Angle => "angle",
+                };
+                let _ = writeln!(out, "  escape {escape}");
+            }
+            Form::Entities(form) => {
+                let offsets = form.offsets.name();
+                let styles =
+                    join(form.styles.iter().map(|(feature, style)| format!("{}={}", feature.name(), style.name())));
+                let detection = match form.detection {
+                    Detection::None => "none",
+                    Detection::Bluesky => "bluesky",
+                };
+                let _ = writeln!(
+                    out,
+                    "  offsets {offsets}\n  styles {styles}\n  heading {}\n  gated {}\n  code_splits {}\n  detection \
+                     {detection}\n  cap {}\n  links {}\n  trim {}\n  styled_suffix {}\n  time_formats {}",
+                    form.heading.map_or("none", Style::name),
+                    form.gated,
+                    form.code_splits,
+                    optional(form.cap),
+                    optional(form.links),
+                    form.trim,
+                    form.styled_suffix,
+                    describe_time_formats(form.time_formats),
+                );
+            }
+            Form::Html(form) => {
+                let blocks = match form.blocks {
+                    HtmlBlocks::Message => "message",
+                    HtmlBlocks::Rich => "rich",
+                };
+                let structure = form.structure.map_or_else(
+                    || "none".to_owned(),
+                    |Structure { blocks, depth, columns, items }| {
+                        format!("blocks={blocks} depth={depth} columns={columns} items={items}")
+                    },
+                );
+                let tags = join(form.tags.iter().map(|(feature, tag)| format!("{}={tag}", feature.name())));
+                let groups = join(form.groups.iter().map(|(layout, _, formats)| {
+                    let formats: Vec<_> = formats.iter().map(|format| format.name()).collect();
+                    format!("{}={}", layout.as_str(), formats.join("+"))
+                }));
+                let _ = writeln!(
+                    out,
+                    "  blocks {blocks}\n  structure {structure}\n  tags {tags}\n  exclusive {}\n  groups {groups}\n  \
+                     code_contained {}\n  quote_nests {}\n  quote_contains_code {}\n  code_info {}\n  empty_removed {}\n  \
+                     trim {}\n  time_formats {}\n  math {}",
+                    join(form.exclusive.iter().map(|feature| feature.name())),
+                    form.code_contained,
+                    form.quote_nests,
+                    form.quote_contains_code,
+                    form.code_info,
+                    form.empty_removed,
+                    form.trim,
+                    describe_time_formats(form.time_formats),
+                    form.math.map_or_else(|| "none".to_owned(), |tags| format!("{},{}", tags.inline, tags.block)),
+                );
+            }
+            Form::Markdown(form) => form.describe(out),
+            Form::Blocks(form) => {
+                form.text.describe(out);
+                let group = form.group.map_or_else(
+                    || "none".to_owned(),
+                    |(layout, maximum)| format!("{} maximum={maximum}", layout.as_str()),
+                );
+                let ceiling = form.ceiling.map_or_else(
+                    || "none".to_owned(),
+                    |Ceiling { blocks, per_item }| format!("blocks={blocks} per_item={per_item}"),
+                );
+                let unplaced = match form.unplaced {
+                    Unplaced::File => "file",
+                    Unplaced::Attach => "attach",
+                };
+                let _ = writeln!(
+                    out,
+                    "  formats {}\n  group {group}\n  items {}\n  ceiling {ceiling}\n  spoiler {}\n  separator {}\n  \
+                     unplaced {unplaced}",
+                    join(form.formats.iter().map(|format| format.name())),
+                    optional(form.items),
+                    form.spoiler,
+                    form.separator,
+                );
             }
         }
-        out.push_str(rest);
+    }
+
+    pub fn visible(self, text: &str) -> Cow<'_, str> {
+        let Some(form) = self.html() else {
+            return Cow::Borrowed(text);
+        };
+        let mut out = String::with_capacity(text.len());
+        visible_parts(text, form, usize::MAX, &mut |part| {
+            out.push_str(part);
+            true
+        });
         Cow::Owned(out)
     }
+
+    pub fn visible_blank(self, text: &str, blank: fn(&str) -> bool) -> bool {
+        match self.html() {
+            Some(form) => visible_parts(text, form, 256, &mut |part| blank(part)),
+            None => blank(text),
+        }
+    }
+}
+
+fn visible_parts(text: &str, form: &HtmlForm, window: usize, emit: &mut dyn FnMut(&str) -> bool) -> bool {
+    let rich = form.blocks == HtmlBlocks::Rich;
+    let (mut started, mut newline) = (false, false);
+    let mut push = |part: &str, boundary: &mut bool| {
+        if part.is_empty() {
+            return true;
+        }
+        if std::mem::take(boundary) && started && !newline && !emit("\n") {
+            return false;
+        }
+        started = true;
+        newline = part.ends_with('\n');
+        emit(part)
+    };
+    let mut boundary = false;
+    let mut rest = text;
+    while !rest.is_empty() {
+        let scope = &rest[..rest.floor_char_boundary(window)];
+        let Some(at) = scope.bytes().position(|byte| byte == b'<' || byte == b'&') else {
+            if !push(scope, &mut boundary) {
+                return false;
+            }
+            rest = &rest[scope.len()..];
+            continue;
+        };
+        if !push(&rest[..at], &mut boundary) {
+            return false;
+        }
+        rest = &rest[at..];
+        if rest.starts_with('<') {
+            let end = rest.find('>').map_or(rest.len(), |end| end + 1);
+            if &rest[..end] == "<br>" {
+                if !push("\n", &mut boundary) {
+                    return false;
+                }
+            } else if rich {
+                let tag = rest[1..end].trim_start_matches('/');
+                boundary |= form.rich_block(&tag[..tag.find([' ', '/', '>']).unwrap_or(tag.len())]);
+            }
+            rest = &rest[end..];
+        } else {
+            let (decoded, length) = [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&amp;", "&")]
+                .into_iter()
+                .find(|(entity, _)| rest.starts_with(entity))
+                .map_or(("&", 1), |(entity, char)| (char, entity.len()));
+            if !push(decoded, &mut boundary) {
+                return false;
+            }
+            rest = &rest[length..];
+        }
+    }
+    true
 }
 
 #[derive(Clone, Copy)]
@@ -422,6 +708,7 @@ pub struct Target {
     pub renderer: Renderer,
     pub limits: &'static [measure::Limit],
     pub spoilers: Spoilers,
+    pub alt: &'static [Format],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -429,6 +716,40 @@ pub enum Spoilers {
     None,
     Items(&'static [Format]),
     Post,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpoilerMode {
+    Carried,
+    Widened,
+    Omitted,
+}
+
+impl SpoilerMode {
+    pub const fn name(self) -> &'static str {
+        match self {
+            SpoilerMode::Carried => "carried",
+            SpoilerMode::Widened => "widened",
+            SpoilerMode::Omitted => "omitted",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Group {
+    pub layout: Layout,
+    pub formats: &'static [Format],
+    pub minimum: usize,
+    pub maximum: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MediaShape {
+    pub formats: &'static [Format],
+    pub alt: &'static [Format],
+    pub spoiler: (SpoilerMode, &'static [Format]),
+    pub inline: bool,
+    pub groups: Vec<Group>,
 }
 
 impl Target {
@@ -476,10 +797,96 @@ impl Target {
         codes
     }
 
+    pub fn conditions(&self, feature: Feature, when: When) -> bool {
+        self.rules
+            .iter()
+            .any(|rule| rule.feature == feature && rule.conditions.iter().any(|condition| condition.when == when))
+    }
+
     pub fn threads(&self) -> bool {
-        self.rules.iter().any(|rule| {
-            rule.feature == Feature::Text && rule.conditions.iter().any(|condition| condition.when == When::Thread)
-        })
+        self.conditions(Feature::Text, When::Thread)
+    }
+
+    pub fn facts(&self) -> Vec<&'static str> {
+        let bodies = || self.limits.iter().filter(|limit| limit.field != FieldName::Alt);
+        let limited = |fact: Fact| {
+            self.limits
+                .iter()
+                .any(|limit| matches!(limit.maximum, Maximum::Resolved(read, _) | Maximum::Given(read) if read == fact))
+        };
+        let weighted = self.limits.iter().any(|limit| limit.unit == Unit::MastodonWeighted);
+        let empty = self.conditions(Feature::Text, When::Empty);
+        [
+            (
+                "media",
+                bodies().any(|limit| limit.media != measure::Condition::Any)
+                    || self.fields.iter().any(|field| field.media != Media::Any),
+            ),
+            ("mediaCount", empty),
+            (
+                "placement",
+                self.threads()
+                    || self.spoilers != Spoilers::None
+                    || bodies().any(|limit| limit.placements != Placement::ALL),
+            ),
+            ("title", self.fields.iter().any(|field| field.source == Source::Title { fact: true })),
+            ("targetUrl", self.handles(Feature::TargetUrl)),
+            ("maxCharacters", limited(Fact::MaxCharacters)),
+            ("charactersReservedPerUrl", weighted),
+            ("captionLimit", limited(Fact::CaptionLimit)),
+            ("descriptionLimit", limited(Fact::DescriptionLimit)),
+            ("hashtagLimit", limited(Fact::HashtagLimit)),
+            ("spoilerText", weighted),
+            ("overflow", self.threads()),
+            ("entitiesAllowed", self.form.entities().is_some_and(|form| form.gated)),
+            ("items", true),
+        ]
+        .into_iter()
+        .filter_map(|(name, read)| read.then_some(name))
+        .collect()
+    }
+
+    pub fn media(&self) -> MediaShape {
+        match self.form {
+            Form::Blocks(form) => MediaShape {
+                formats: form.formats,
+                alt: self.alt,
+                spoiler: if form.spoiler { (SpoilerMode::Carried, Format::ALL) } else { (SpoilerMode::Omitted, &[]) },
+                inline: true,
+                groups: form
+                    .group
+                    .map(|(layout, maximum)| Group {
+                        layout,
+                        formats: form.formats,
+                        minimum: MEDIA_GROUP_MIN,
+                        maximum: maximum.min(MEDIA_GROUP_MAX),
+                    })
+                    .into_iter()
+                    .collect(),
+            },
+            _ => MediaShape {
+                formats: Format::ALL,
+                alt: self.alt,
+                spoiler: match self.spoilers {
+                    Spoilers::None => (SpoilerMode::Omitted, &[]),
+                    Spoilers::Items(formats) => (SpoilerMode::Carried, formats),
+                    Spoilers::Post => (SpoilerMode::Widened, Format::ALL),
+                },
+                inline: false,
+                groups: self.form.html().map_or_else(Vec::new, |form| {
+                    let maximum = form.structure.map_or(MEDIA_GROUP_MAX, |structure| structure.items);
+                    form.groups
+                        .iter()
+                        .map(|&(layout, _, formats)| Group {
+                            layout,
+                            formats,
+                            minimum: MEDIA_GROUP_MIN,
+                            maximum: maximum.min(MEDIA_GROUP_MAX),
+                        })
+                        .collect()
+                }),
+            },
+        }
     }
 
     pub fn class(&self, feature: Feature) -> Class {
@@ -501,19 +908,21 @@ impl Target {
 
     pub fn manifest(&self) -> String {
         let mut out = String::new();
-        let _ = writeln!(
-            out,
-            "target {}\nform {} {:?}\nsearch {:?}",
-            self.name,
-            self.form.version(),
-            self.form,
-            self.search
-        );
+        let _ = writeln!(out, "target {}\nform {}", self.name, self.form.version());
+        self.form.describe(&mut out);
+        let _ = writeln!(out, "search {}", self.search.name());
         if self.normalization == Normalization::Nfc {
             let _ = writeln!(out, "normalization nfc {}", super::nfc::UNICODE_VERSION);
         }
-        if self.spoilers != Spoilers::None {
-            let _ = writeln!(out, "spoilers {:?}", self.spoilers);
+        match self.spoilers {
+            Spoilers::None => {}
+            Spoilers::Items(formats) => {
+                let _ = writeln!(out, "spoilers items {}", join(formats.iter().map(|format| format.name())));
+            }
+            Spoilers::Post => out.push_str("spoilers post\n"),
+        }
+        if self.alt != self.form.blocks().map_or(Format::ALL, |form| form.formats) {
+            let _ = writeln!(out, "alt {}", join(self.alt.iter().map(|format| format.name())));
         }
         for rule in self.rules {
             let _ = writeln!(out, "feature {} {} {}", rule.feature.name(), rule.class.name(), rule.reason);
@@ -523,31 +932,39 @@ impl Target {
             }
         }
         for field in self.fields {
+            let source = match field.source {
+                Source::Body => "body",
+                Source::Title { fact: true } => "title-fact",
+                Source::Title { fact: false } => "title",
+            };
+            let truncation = match field.truncation {
+                Truncation::Ellipsis => "ellipsis",
+                Truncation::Hard => "hard",
+            };
             let _ = writeln!(
                 out,
-                "field {} {:?} {:?} {:?} required={}",
+                "field {} media={} source={source} truncation={truncation} required={}",
                 field.name.name(),
-                field.media,
-                field.source,
-                field.truncation,
+                field.media.name(),
                 field.required,
             );
-            for limit in self.limits.iter().filter(|limit| limit.field == field.name) {
-                let _ = writeln!(
-                    out,
-                    "  limit {} {:?} {:?} {:?} {:?}",
-                    limit.unit.name(),
-                    limit.maximum,
-                    limit.placements,
-                    limit.media,
-                    limit.rendering
-                );
-            }
         }
-        if self.form.blocks().is_some() {
-            for limit in self.limits.iter().filter(|limit| limit.field == FieldName::Alt) {
-                let _ = writeln!(out, "alt limit {} {:?} {:?}", limit.unit.name(), limit.maximum, limit.media);
-            }
+        for limit in self.limits {
+            let maximum = match limit.maximum {
+                measure::Maximum::Fixed(value) => value.to_string(),
+                measure::Maximum::Resolved(fact, value) => format!("{value} fact={}", fact.name()),
+                measure::Maximum::Given(fact) => format!("none fact={}", fact.name()),
+                measure::Maximum::Unlimited => "none".to_owned(),
+            };
+            let _ = writeln!(
+                out,
+                "limit {} {} maximum={maximum} placements={} media={} rendering={}",
+                limit.field.name(),
+                limit.unit.name(),
+                join(limit.placements.iter().map(|placement| placement.name())),
+                limit.media.name(),
+                limit.rendering.name(),
+            );
         }
         out
     }

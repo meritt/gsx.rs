@@ -1,30 +1,44 @@
 import Foundation
 import GSXFFI
 
-public struct Media: Sendable, Hashable {
-    public var id: String
-    public var cover: String?
-
-    public init(id: String, cover: String? = nil) {
-        self.id = id
-        self.cover = cover
-    }
-}
-
-public struct InternalError: Error, Sendable, CustomStringConvertible {
-    public let message: String
-
-    public var description: String { message }
-}
-
 public enum GSX {
+    public struct Media: Sendable, Hashable {
+        public var id: String
+        public var cover: String?
+
+        public init(id: String, cover: String? = nil) {
+            self.id = id
+            self.cover = cover
+        }
+    }
+
+    public struct InternalError: Error, Sendable, CustomStringConvertible {
+        public let message: String
+
+        public var description: String { message }
+    }
+
     public static let version = String(cString: gsx_version())
 
+    public static let mediaIdMaximumBytes = Int(GSX_MEDIA_ID_MAX_BYTES)
+    public static let mediaIdPattern = GSX_MEDIA_ID_PATTERN
+    public static let mediaGroupMinimumCount = Int(GSX_MEDIA_GROUP_MIN)
+    public static let mediaGroupMaximumCount = Int(GSX_MEDIA_GROUP_MAX)
+
+    public static func isMediaId(_ id: String) -> Bool {
+        var id = id
+        return id.withUTF8 { utf8 in gsx_is_media_id(utf8.baseAddress, utf8.count) }
+    }
+
     /// Every target, in the order of the core's table.
-    public static let targets: [Target] = {
-        let json = try! call("gsx_targets") { error in gsx_targets(&error) }
-        return try! JSONDecoder().decode(Listing.self, from: Data(json.utf8)).targets
-    }()
+    public static var targets: [Target] {
+        get throws { try listing.get() }
+    }
+
+    private static let listing = Result { () throws -> [Target] in
+        let json = try call("gsx_targets") { error in gsx_targets(&error) }
+        return try JSONDecoder().decode(Listing.self, from: Data(json.utf8)).targets
+    }
 
     public static func parse(_ text: String, media: [Media] = []) throws -> Document {
         let json = try parseJSON(text, media: media)
@@ -238,14 +252,14 @@ public enum GSX {
         let json = gsx_output_json(output, &len)
         return String(decoding: UnsafeRawBufferPointer(start: json, count: len), as: UTF8.self)
     }
-}
 
-struct Wire: Decodable {
-    let document: Document?
-    let error: ParseError?
-}
+    struct Wire: Decodable {
+        let document: Document?
+        let error: ParseError?
+    }
 
-struct SerializedWire: Decodable {
-    let serialized: String?
-    let error: ParseError?
+    struct SerializedWire: Decodable {
+        let serialized: String?
+        let error: ParseError?
+    }
 }

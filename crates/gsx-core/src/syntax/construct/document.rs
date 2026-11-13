@@ -131,7 +131,7 @@ pub fn container_new_after(tokenizer: &mut Tokenizer) -> State {
                     )
             })
             .map_or(tokenizer.point.index, |at| tokenizer.events[at].point.index);
-        tokenizer.parse_state.exceed(Limit::ContainerDepth, prefix, tokenizer.point.index);
+        tokenizer.parse_state.exceed(Limit::ContainerDepth, prefix as usize, tokenizer.point.index as usize);
     }
     tokenizer.interrupt = false;
     State::Retry(StateName::DocumentContainerNewBefore)

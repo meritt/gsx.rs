@@ -13,6 +13,25 @@ pub const QUOTE: &str = "› ";
 pub const CELL: &str = " | ";
 pub const ELLIPSIS: &str = "…";
 
+const LINKEDIN_ESCAPED: u128 = escaped(b"|{}@[]()<>#\\*_~");
+const HTML_ESCAPED: u128 = escaped(b"&<>");
+const ANGLE_ESCAPED: u128 = escaped(b"<>");
+
+const fn escaped(set: &[u8]) -> u128 {
+    let mut mask = 0;
+    let mut at = 0;
+    while at < set.len() {
+        mask |= 1 << set[at];
+        at += 1;
+    }
+    mask
+}
+
+pub(super) fn within(span: &mut Span<usize>, kept: &Span<usize>) -> bool {
+    *span = span.start.clamp(kept.start, kept.end) - kept.start..span.end.clamp(kept.start, kept.end) - kept.start;
+    span.start < span.end
+}
+
 pub fn marker(ordered: bool, start: Option<u32>, index: usize, checked: Option<bool>) -> String {
     let task = match checked {
         None => "",
@@ -44,6 +63,7 @@ impl Prefix {
 pub struct Styled {
     pub style: Style,
     pub value: Option<String>,
+    pub format: Option<&'static str>,
     pub span: Span<usize>,
     pub source: Option<(Feature, Range)>,
     pub decoration: bool,
@@ -58,6 +78,34 @@ pub struct Written {
     pub prefixes: Vec<Span<usize>>,
     pub eligible: Vec<Span<usize>>,
     pub suffix: Option<Span<usize>>,
+    pub origins: Vec<(Span<usize>, Range)>,
+}
+
+impl Written {
+    pub fn trim_lines(&mut self) -> Span<usize> {
+        let kept = lines(&self.text);
+        if kept.len() == self.text.len() {
+            return kept;
+        }
+        self.text.truncate(kept.end);
+        self.text.replace_range(..kept.start, "");
+        let clamp = |span: &mut Span<usize>| within(span, &kept);
+        self.links.retain_mut(|span| clamp(span));
+        self.styled.retain_mut(|styled| clamp(&mut styled.span));
+        self.prefixes.retain_mut(|span| clamp(span));
+        self.eligible.retain_mut(|span| clamp(span));
+        self.suffix = self.suffix.take().and_then(|mut span| clamp(&mut span).then_some(span));
+        self.origins.retain_mut(|(span, _)| clamp(span));
+        kept
+    }
+}
+
+pub fn lines(text: &str) -> Span<usize> {
+    let content = text.len() - text.trim_start_matches(blank).len();
+    let start = text[..content].rfind('\n').map_or(0, |at| at + 1);
+    let end = text.trim_end_matches(blank).len();
+    let end = if text[end..].contains('\n') { end } else { text.len() };
+    start..end.max(start)
 }
 
 #[derive(Debug)]
@@ -115,14 +163,16 @@ impl Writer {
             return;
         }
         self.begin();
-        let escaped: &[u8] = match self.escape {
-            Escape::None => b"",
-            Escape::LinkedIn => b"|{}@[]()<>#\\*_~",
-            Escape::Html | Escape::HtmlBreaks => b"&<>",
-            Escape::Angle => b"<>",
+        let escaped = match self.escape {
+            Escape::None => 0,
+            Escape::LinkedIn => LINKEDIN_ESCAPED,
+            Escape::Html | Escape::HtmlBreaks => HTML_ESCAPED,
+            Escape::Angle => ANGLE_ESCAPED,
         };
         let mut rest = line;
-        while let Some(at) = rest.bytes().position(|byte| escaped.contains(&byte)) {
+        while escaped != 0
+            && let Some(at) = rest.bytes().position(|byte| byte.is_ascii() && (escaped >> byte) & 1 == 1)
+        {
             self.out.text.push_str(&rest[..at]);
             let byte = rest.as_bytes()[at];
             if self.escape == Escape::LinkedIn && byte == b'#' && self.hashtag(&rest[at + 1..]) {
@@ -178,6 +228,7 @@ impl Writer {
         self.out.prefixes.clear();
         self.out.eligible.clear();
         self.out.suffix = None;
+        self.out.origins.clear();
     }
 
     pub fn newlines(&mut self, count: u32) {
@@ -217,7 +268,8 @@ impl Writer {
 
     pub fn lines(&self, mark: usize) -> Vec<Span<usize>> {
         let text = &self.out.text;
-        let mut prefixes = self.out.prefixes.iter().skip_while(|span| span.start < mark).peekable();
+        let first = self.out.prefixes.partition_point(|span| span.start < mark);
+        let mut prefixes = self.out.prefixes[first..].iter().peekable();
         let mut lines = vec![];
         let mut start = mark;
         loop {
@@ -236,14 +288,28 @@ impl Writer {
         &self.out.text[mark..]
     }
 
-    pub fn style(&mut self, style: Style, value: Option<String>, mark: usize, source: Option<(Feature, Range)>) {
+    pub fn style(
+        &mut self,
+        style: Style,
+        value: Option<String>,
+        format: Option<&'static str>,
+        mark: usize,
+        source: Option<(Feature, Range)>,
+    ) {
         let span = mark..self.out.text.len();
-        self.out.styled.push(Styled { style, value, span, source, decoration: false });
+        self.out.styled.push(Styled { style, value, format, span, source, decoration: false });
     }
 
     pub fn decorate(&mut self, style: Style, mark: usize) {
         let span = mark..self.out.text.len();
-        self.out.styled.push(Styled { style, value: None, span, source: None, decoration: true });
+        self.out.styled.push(Styled { style, value: None, format: None, span, source: None, decoration: true });
+    }
+
+    pub fn origin(&mut self, start: usize, range: Range) {
+        let end = self.out.text.len();
+        if end > start {
+            self.out.origins.push((start..end, range));
+        }
     }
 
     pub fn eligible(&mut self, span: Span<usize>) {
@@ -291,10 +357,10 @@ impl Writer {
                     *pending = false;
                     mark.chars().for_each(|char| self.put(char));
                 }
-                Prefix::Item { marker: marker @ Some(_), .. } => {
-                    marker.take().unwrap().chars().for_each(|char| self.put(char));
-                }
-                Prefix::Item { width, marker: None } => (0..*width).for_each(|_| self.put(' ')),
+                Prefix::Item { width, marker } => match marker.take() {
+                    Some(marker) => marker.chars().for_each(|char| self.put(char)),
+                    None => (0..*width).for_each(|_| self.put(' ')),
+                },
             }
         }
         self.prefixes = prefixes;

@@ -3,8 +3,11 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
-use gsx_core::document::Media;
-use gsx_core::project::{Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target};
+use gsx_core::document::{MEDIA_GROUP_MAX, MEDIA_GROUP_MIN, MEDIA_ID_MAX_BYTES, MEDIA_ID_PATTERN, Media, is_media_id};
+use gsx_core::project::{
+    FACT_MAX_ITEMS, FACT_MAX_UNITS, Facts, Format, MediaFact, MediaKind, Overflow, Placement, Target,
+};
+use gsx_core::source::Limit;
 use gsx_core::targets::{TARGETS, target};
 use gsx_core::wire;
 
@@ -15,6 +18,8 @@ enum Operation {
     Parse,
     Serialize,
     Project,
+    Media,
+    Targets,
 }
 
 #[derive(Debug)]
@@ -32,6 +37,10 @@ pub fn load(files: &[impl AsRef<Path>]) -> Result<Vec<Case>> {
         let text = read(file)?;
         for (number, _, value) in records(file, &text)? {
             let place = format!("{}:{number}", file.display());
+            if let Some(case) = media_case(&value) {
+                cases.push(case);
+                continue;
+            }
             let target = match value.get("target").string() {
                 Some(name) => Some(target(&name).ok_or_else(|| format!("{place}: no target {name}"))?),
                 None => None,
@@ -51,6 +60,172 @@ pub fn load(files: &[impl AsRef<Path>]) -> Result<Vec<Case>> {
     Ok(cases)
 }
 
+fn media_case(value: &Json) -> Option<Case> {
+    if let Json::Bool(true) = value.get("targets") {
+        let id = value.get("id").string().unwrap_or_default();
+        return Some(Case { id, expected: wire::targets(), well_formed: true, operation: Operation::Targets });
+    }
+    let expected = match (value.get("mediaRule"), value.get("mediaId").string()) {
+        (Json::Bool(true), _) => format!(
+            "{{\"mediaIdMaxBytes\":{MEDIA_ID_MAX_BYTES},\"mediaGroupMin\":{MEDIA_GROUP_MIN},\
+             \"mediaGroupMax\":{MEDIA_GROUP_MAX},\"mediaIdPattern\":{}}}",
+            json_text(MEDIA_ID_PATTERN)
+        ),
+        (_, Some(id)) => is_media_id(&id).to_string(),
+        _ => return None,
+    };
+    let id = value.get("id").string().unwrap_or_default();
+    Some(Case { id, expected, well_formed: true, operation: Operation::Media })
+}
+
+pub fn media(out: &Path) -> Result {
+    let longest = "a".repeat(MEDIA_ID_MAX_BYTES);
+    let samples = [
+        "",
+        "p",
+        &longest,
+        &format!("{longest}a"),
+        ".a",
+        "a.b",
+        "_a",
+        "a_b",
+        ":a",
+        "a:b",
+        "-a",
+        "a-b",
+        "A",
+        "z",
+        "0",
+        "AZaz09",
+        "a b",
+        "a\"b",
+        "a,b",
+        "a/b",
+        "é",
+        "aé",
+        "a😀",
+        "a\n",
+        "a\0b",
+    ];
+    let mut lines = vec![
+        "{\"corpus\":\"gsx-media\"}".to_owned(),
+        "{\"id\":\"media-rule\",\"mediaRule\":true}".to_owned(),
+        "{\"id\":\"targets\",\"targets\":true}".to_owned(),
+    ];
+    for (index, id) in samples.iter().enumerate() {
+        lines.push(format!("{{\"id\":\"media-id-{index}\",\"mediaId\":{}}}", json_text(id)));
+    }
+    write_lines(out, &lines)
+}
+
+pub fn sizes(out: &Path) -> Result {
+    let units = Limit::DocumentUnits.maximum() as usize;
+    let a = |count| "a".repeat(count).encode_utf16().collect::<Vec<_>>();
+    let with = |count, tail: &[u16]| [a(count), tail.to_vec()].concat();
+    let samples = [
+        ("at-limit", a(units)),
+        ("at-limit-pair", with(units - 2, &[0xd83d, 0xde00])),
+        ("at-limit-three-bytes", "€".repeat(units).encode_utf16().collect()),
+        ("over-limit", a(units + 1)),
+        ("over-limit-pair-across", with(units - 1, &[0xd83d, 0xde00])),
+        ("over-limit-pair-before", with(units - 2, &[0xd83d, 0xde00, 0x61])),
+        ("over-limit-lone-surrogate", with(units - 1, &[0xd800, 0x61])),
+        ("over-limit-lone-surrogate-after", with(units + 1, &[0xdc00])),
+        ("lone-surrogate", with(1, &[0xd800, 0x61])),
+    ];
+    let mut lines = vec!["{\"corpus\":\"gsx-sizes\"}".to_owned()];
+    for (id, markdown) in &samples {
+        let markdown = json(markdown);
+        lines.push(format!("{{\"id\":\"size-{id}\",\"markdown\":{markdown},\"media\":[]}}"));
+        lines.push(format!(
+            "{{\"id\":\"size-{id}-project\",\"markdown\":{markdown},\"media\":[],\"target\":\"x-plain\",\"facts\":{{}}}}"
+        ));
+        lines.push(format!(
+            "{{\"id\":\"size-{id}-refused\",\"markdown\":{markdown},\"media\":[],\"target\":\"x-plain\",\
+             \"facts\":{{\"items\":[{{\"id\":\"not an id\",\"format\":\"image\",\"spoiler\":false,\"inline\":true}}]}}}}"
+        ));
+    }
+    write_lines(out, &lines)
+}
+
+pub fn ceilings(out: &Path) -> Result {
+    const MARKDOWN: &str = "Before the photo.\n\n::media{id=\"a\"}\n\nAfter the photo.";
+    let units = FACT_MAX_UNITS;
+    let string = |count: usize| json(&[vec![0x61; count - 2], vec![0xd83d, 0xde00]].concat());
+    let url = |count: usize| json_text(&format!("https://example.com/{}", "a".repeat(count - 20)));
+    let item = |id: &str, alt: Option<&str>| match alt {
+        Some(alt) => {
+            format!("{{\"id\":\"{id}\",\"format\":\"image\",\"alt\":{alt},\"spoiler\":false,\"inline\":true}}")
+        }
+        None => format!("{{\"id\":\"{id}\",\"format\":\"image\",\"spoiler\":false,\"inline\":true}}"),
+    };
+    let many = |count: usize| {
+        let items: Vec<String> = (0..count).map(|index| item(&format!("i{index}"), None)).collect();
+        format!("[{},{}]", item("a", None), items[1..].join(","))
+    };
+    let mut samples = vec![];
+    for (name, size) in [("at", units), ("over", units + 1)] {
+        samples.push((format!("title-{name}"), format!("\"title\":{}", string(size))));
+        samples.push((format!("target-url-{name}"), format!("\"targetUrl\":{}", url(size))));
+        samples.push((format!("spoiler-text-{name}"), format!("\"spoilerText\":{}", string(size))));
+        let alt = string(size);
+        samples.push((format!("alt-{name}"), format!("\"items\":[{},{}]", item("a", None), item("b", Some(&alt)))));
+    }
+    samples.push(("items-at".to_owned(), format!("\"items\":{}", many(FACT_MAX_ITEMS))));
+    samples.push(("items-over".to_owned(), format!("\"items\":{}", many(FACT_MAX_ITEMS + 1))));
+    let over = string(units + 1);
+    samples.push((
+        "order".to_owned(),
+        format!("\"title\":{over},\"items\":[{},{}]", item("a", Some(&over)), item("-b", None)),
+    ));
+    let markdown = json_text(MARKDOWN);
+    let mut lines = vec!["{\"corpus\":\"gsx-ceilings\"}".to_owned()];
+    for target in TARGETS {
+        for (name, facts) in &samples {
+            lines.push(format!(
+                "{{\"id\":\"ceiling-{name}\",\"markdown\":{markdown},\"media\":[{{\"id\":\"a\"}}],\
+                 \"target\":\"{}\",\"facts\":{{\"media\":\"image\",\"mediaCount\":1,{facts}}}}}",
+                target.name
+            ));
+        }
+    }
+    write_lines(out, &lines)
+}
+
+pub fn limits(out: &Path) -> Result {
+    const MARKDOWN: &str = "# Heading\n\n\
+        Read https://example.com/a and [docs](https://example.org/b \"t\") #one #two #three #four #five #six \
+        @alice @bob.\n\n\
+        ::media{id=\"a\"}\n\n\
+        > Quote with `code`, **strong** and ||spoiler||\n\n\
+        1. First\n2. Second ::time[today]{unix=\"1785423600\"}";
+    const ITEMS: &str = r#"[{"id":"a","format":"image","alt":"An alt text","spoiler":false,"inline":true}]"#;
+    const KEYS: [&str; 5] =
+        ["maxCharacters", "charactersReservedPerUrl", "captionLimit", "descriptionLimit", "hashtagLimit"];
+    const VARIANTS: [(&str, &str); 3] = [("truncate", "post"), ("thread", "post"), ("truncate", "story")];
+    let markdown = json_text(MARKDOWN);
+    let mut lines = vec!["{\"corpus\":\"gsx-limits\"}".to_owned()];
+    for target in TARGETS {
+        let sets = KEYS.iter().map(|key| (*key, vec![*key])).chain([("all", KEYS.to_vec())]);
+        for (name, keys) in sets {
+            for value in [0, 1, u32::MAX] {
+                for (overflow, placement) in VARIANTS {
+                    let limits = keys.iter().map(|key| format!("\"{key}\":{value}")).collect::<Vec<_>>().join(",");
+                    lines.push(format!(
+                        "{{\"id\":\"limit-{name}-{value}-{overflow}-{placement}\",\"markdown\":{markdown},\
+                         \"media\":[{{\"id\":\"a\"}}],\"target\":\"{}\",\"facts\":{{{limits},\"media\":\"image\",\
+                         \"mediaCount\":1,\"placement\":\"{placement}\",\"title\":\"Title\",\
+                         \"targetUrl\":\"https://example.com/t\",\"spoilerText\":\"CW\",\"overflow\":\"{overflow}\",\
+                         \"entitiesAllowed\":true,\"items\":{ITEMS}}}}}",
+                        target.name
+                    ));
+                }
+            }
+        }
+    }
+    write_lines(out, &lines)
+}
+
 pub fn regenerate(dir: &Path) -> Result {
     let mut inputs = HashMap::new();
     for name in ["document.jsonl", "diagnostics.jsonl"] {
@@ -62,7 +237,7 @@ pub fn regenerate(dir: &Path) -> Result {
             lines.push(with_expected(line, &outcome(&value, &NULL, None, Operation::Parse, &place)?));
             inputs.insert(value.get("id").string().unwrap_or_default(), value);
         }
-        fs::write(&file, lines.join("\n") + "\n").map_err(at(file.display()))?;
+        write_lines(&file, &lines)?;
     }
     let targets = dir.join("targets");
     let mut files = fs::read_dir(&targets)
@@ -91,7 +266,7 @@ pub fn regenerate(dir: &Path) -> Result {
             };
             lines.push(with_expected(line, &outcome(input, facts, Some(target), Operation::Project, &place)?));
         }
-        fs::write(&file, lines.join("\n") + "\n").map_err(at(file.display()))?;
+        write_lines(&file, &lines)?;
     }
     Ok(())
 }
@@ -194,13 +369,22 @@ fn outcome(
         entities_allowed: matches!(facts.get("entitiesAllowed"), Json::Bool(true)),
         items: matches!(facts.get("items"), Json::Array(_)).then_some(&items[..]),
     };
+    if let (Operation::Project, Some(refusal)) = (operation, wire::refused(&facts)) {
+        return Ok(format!("{{\"refused\":{}}}", json_text(&refusal)));
+    }
     Ok(match (String::from_utf16(units).ok(), operation, target) {
         (Some(text), Operation::Project, Some(target)) => wire::project(text.as_bytes(), &media, target, &facts),
         (Some(text), Operation::Serialize, _) => wire::serialize(text.as_bytes(), &media),
         (Some(text), _, _) => wire::parse(text.as_bytes(), &media),
         (None, _, _) => {
-            let at = first_lone_surrogate(units);
-            wire::invalid_text(at, units.get(at as usize).copied().map(u32::from))
+            let boundary = Limit::DocumentUnits.maximum() as usize - 1;
+            let code_point = units.get(boundary..).and_then(|rest| char::decode_utf16(rest.iter().copied()).next());
+            let code_point =
+                code_point.map_or(0, |unit| unit.map_or_else(|lone| lone.unpaired_surrogate().into(), u32::from));
+            wire::oversized(units.len() as u64, code_point).unwrap_or_else(|| {
+                let at = first_lone_surrogate(units);
+                wire::invalid_text(at, units.get(at as usize).copied().map(u32::from))
+            })
         }
     })
 }
@@ -273,13 +457,13 @@ pub fn projection(inputs: &[impl AsRef<Path>], selection: &Path, out: &Path) -> 
                 };
                 lines.push(format!(
                     "{{\"id\":{},{input},\"target\":\"{}\",\"facts\":{facts}}}",
-                    json(&id.encode_utf16().collect::<Vec<_>>()),
+                    json_text(id),
                     target.name
                 ));
             }
         }
     }
-    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+    write_lines(out, &lines)
 }
 
 fn items(ids: &[&[u16]]) -> String {
@@ -299,6 +483,14 @@ fn items(ids: &[&[u16]]) -> String {
         })
         .collect();
     items.join(",")
+}
+
+fn write_lines(out: &Path, lines: &[String]) -> Result {
+    fs::write(out, lines.join("\n") + "\n").map_err(at(out.display()))
+}
+
+fn json_text(text: &str) -> String {
+    json(&text.encode_utf16().collect::<Vec<_>>())
 }
 
 fn json(units: &[u16]) -> String {
@@ -359,10 +551,13 @@ pub fn compare(binding: &str, cases: &[Case], out: &Path, skips_ill_formed: bool
         cases.iter().filter(|case| case.operation == operation && (case.well_formed || !skips_ill_formed)).count()
     };
     println!(
-        "{binding}: {} parse, {} serialize and {} projection cases byte-identical to Rust{}",
+        "{binding}: {} parse, {} serialize, {} projection, {} media rule and {} target listing cases byte-identical to \
+         Rust{}",
         count(Operation::Parse),
         count(Operation::Serialize),
         count(Operation::Project),
+        count(Operation::Media),
+        count(Operation::Targets),
         if skipped > 0 { format!(", {skipped} ill-formed lines skipped") } else { String::new() }
     );
     Ok(())

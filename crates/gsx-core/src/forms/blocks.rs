@@ -6,45 +6,36 @@ pub const RENDERER: Renderer = Renderer { blocks, inline: markdown::inline };
 
 pub fn blocks(context: &mut Context, nodes: &[Node]) {
     let placed_ids = references(nodes);
-    let leading = context.items().iter().any(|item| !placed_ids.contains_key(item.id) && !dropped(context, item.id));
-    let mut gap = if leading { 2 } else { 0 };
-    let mut previous = leading.then_some(false);
-    if leading {
+    if context.items().iter().any(|item| !placed_ids.contains_key(item.id) && !dropped(context, item.id)) {
         context.anchor(None);
     }
     let separator = context.target.form.blocks().is_some_and(|form| form.separator);
+    let mut previous: Option<&Node> = None;
+    let mut gap = 0;
     for node in nodes {
         gap = gap.max(node.gap_before.unwrap_or(1));
         if separator && matches!(node.kind, Kind::ThematicBreak) {
-            if context.done() {
-                continue;
+            if !context.done() {
+                context.anchor(Some(node));
             }
-            if previous == Some(true) {
-                context.writer().newlines(gap);
-            }
-            context.anchor(Some(node));
-            (previous, gap) = (Some(false), 0);
             continue;
         }
         if let Some(ids) = placed(node) {
-            if ids.iter().all(|id| dropped(context, id)) {
-                continue;
+            if !ids.iter().all(|id| dropped(context, id)) {
+                context.anchor(Some(node));
             }
-            if previous == Some(true) && !context.done() {
-                context.writer().newlines(gap);
-            }
-            context.anchor(Some(node));
-            (previous, gap) = (Some(false), 0);
             continue;
         }
         if context.done() {
             continue;
         }
-        if previous.is_some() {
-            context.writer().newlines(gap);
+        if let Some(previous) = previous {
+            let gap = context.gap(Some(previous.range.end), node, gap);
+            markdown::separate(context, previous, node, gap);
         }
+        previous = Some(node);
         markdown::block(context, node, 0);
-        (previous, gap) = (Some(true), 0);
+        gap = 0;
     }
 }
 

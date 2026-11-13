@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops::Range as Span;
 
 use crate::document::Range;
@@ -12,6 +13,7 @@ pub struct Entity {
     pub style: Style,
     pub range: Range,
     pub value: Option<String>,
+    pub format: Option<&'static str>,
 }
 
 pub struct Finished {
@@ -37,7 +39,7 @@ fn pieces(styled: &Styled, prefixes: &[Span<usize>], suffix: Option<usize>, out:
 
 fn merged(spans: &[Span<usize>]) -> Vec<Span<usize>> {
     let mut sorted = spans.to_vec();
-    sorted.sort_by_key(|span| span.start);
+    crate::order::sort_by_key(&mut sorted, |span| span.start as u64);
     let mut out: Vec<Span<usize>> = vec![];
     for span in sorted {
         match out.last_mut() {
@@ -65,19 +67,18 @@ fn detected(written: &Written, out: &mut Vec<Styled>) {
             Autolink::Tag { tag, .. } => (Style::Tag, tag),
             Autolink::Mention { handle, .. } => (Style::Mention, handle),
         };
-        out.push(Styled { style, value: Some(value), span: range, source: None, decoration: false });
+        out.push(Styled { style, value: Some(value), format: None, span: range, source: None, decoration: false });
     }
 }
 
-fn trim(text: &mut String, styled: &mut Vec<Styled>) {
+fn trim(text: &mut String, styled: &mut Vec<Styled>, origins: &mut Vec<(Span<usize>, Range)>) {
     let lead = text.len() - text.trim_start_matches(blank).len();
     let end = text.trim_end_matches(blank).len().max(lead);
     text.truncate(end);
     text.replace_range(..lead, "");
-    styled.retain_mut(|entity| {
-        entity.span = entity.span.start.clamp(lead, end) - lead..entity.span.end.clamp(lead, end) - lead;
-        !entity.span.is_empty()
-    });
+    let kept = lead..end;
+    styled.retain_mut(|entity| super::layout::within(&mut entity.span, &kept));
+    origins.retain_mut(|(span, _)| super::layout::within(span, &kept));
 }
 
 fn code(style: Style) -> bool {
@@ -105,7 +106,7 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
     let mut breaks = written.prefixes.clone();
     if form.code_splits {
         breaks.extend(spans(code));
-        breaks.sort_by_key(|span| span.start);
+        crate::order::sort_by_key(&mut breaks, |span| span.start as u64);
     }
     let pre: Vec<Span<usize>> = spans(|style| style == Style::Pre).collect();
     let mut styled = vec![];
@@ -122,10 +123,12 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
         Detection::Bluesky => detected(written, &mut styled),
     }
     if form.trim {
-        trim(&mut written.text, &mut styled);
+        trim(&mut written.text, &mut styled, &mut written.origins);
         tighten(&written.text, &mut styled);
     }
-    styled.sort_by_key(|entity| (entity.span.start, std::cmp::Reverse(entity.span.end)));
+    crate::order::sort_by_key(&mut styled, |entity| {
+        crate::order::pair(entity.span.start, u32::MAX as usize - entity.span.end)
+    });
     let mut capped = vec![];
     if let Some(cap) = form.cap {
         let decorations = styled.iter().filter(|entity| entity.decoration).count();
@@ -139,9 +142,10 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
     if let Some(cap) = form.cap
         && styled.len() > cap
     {
+        let mut seen = HashSet::new();
         for entity in styled.drain(cap..) {
             if let Some(source) = entity.source
-                && !capped.contains(&source)
+                && seen.insert(source)
             {
                 capped.push(source);
             }
@@ -152,7 +156,7 @@ pub fn finish(form: &EntityForm, written: &mut Written) -> Finished {
 
 pub fn offsets(form: &EntityForm, text: &str, styled: &[Styled]) -> Vec<Entity> {
     let mut positions: Vec<usize> = styled.iter().flat_map(|entity| [entity.span.start, entity.span.end]).collect();
-    positions.sort_unstable();
+    crate::order::sort_by_key(&mut positions, |&position| position as u64);
     positions.dedup();
     let (mut byte, mut unit) = (0, 0usize);
     let units: Vec<usize> = positions
@@ -176,6 +180,7 @@ pub fn offsets(form: &EntityForm, text: &str, styled: &[Styled]) -> Vec<Entity> 
             style: entity.style,
             range: Range { start: offset(entity.span.start), end: offset(entity.span.end) },
             value: entity.value.clone(),
+            format: entity.format,
         })
         .collect()
 }

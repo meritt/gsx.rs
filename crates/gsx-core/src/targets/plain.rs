@@ -2,7 +2,7 @@ use super::limits::{
     Alt, CodePoints, Description, Fact, Hashtags, Image, Limit, MastodonWeighted, Mentions, Only, Post, Text, Title,
     Utf8Bytes, Utf16CodeUnits, Video, XWeighted, given, limit, resolved, unlimited,
 };
-use super::{DEFAULT, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
+use super::{ALT_REFUSED, DEFAULT, Rules, SPOILERS_PER_POST, THREADED_TEXT, rule};
 use crate::forms::plain::RENDERER;
 use crate::project::Class::{Approximated, Blocked, TextualFallback};
 use crate::project::{
@@ -48,6 +48,7 @@ const fn text(
         renderer: RENDERER,
         limits,
         spoilers: Spoilers::None,
+        alt: Format::ALL,
     }
 }
 
@@ -87,22 +88,25 @@ pub static LINKEDIN: Target = text(
 pub static FACEBOOK: Target =
     text(Escape::None, "facebook-plain", plain!(&[]), BODY, &[limit(Text, CodePoints, 63206)]);
 
-pub static INSTAGRAM: Target = text(
-    Escape::None,
-    "instagram-plain",
-    plain!(
-        &[],
-        rule(Feature::Hashtag, Approximated, "hashtag_limit_exceeded"),
-        rule(Feature::Mention, Approximated, "mention_limit_exceeded"),
-    ),
-    BODY,
-    &[
-        limit(Text, CodePoints, 2200),
-        resolved(Text, Hashtags, Fact::HashtagLimit, 5),
-        limit(Text, Mentions, 20),
-        limit(Alt, CodePoints, 1000),
-    ],
-);
+pub static INSTAGRAM: Target = Target {
+    alt: &[Format::Image],
+    ..text(
+        Escape::None,
+        "instagram-plain",
+        rules!(
+            Rules { media: ALT_REFUSED, ..DEFAULT },
+            rule(Feature::Hashtag, Approximated, "hashtag_limit_exceeded"),
+            rule(Feature::Mention, Approximated, "mention_limit_exceeded"),
+        ),
+        BODY,
+        &[
+            limit(Text, CodePoints, 2200),
+            resolved(Text, Hashtags, Fact::HashtagLimit, 5),
+            limit(Text, Mentions, 20),
+            limit(Alt, CodePoints, 1000).when(Only(Image)),
+        ],
+    )
+};
 
 pub static VK: Target = text(
     Escape::None,
@@ -138,7 +142,12 @@ pub static YOUTUBE: Target = text(
         field(FieldName::Title, Media::Any, Source::Title { fact: true }, true),
         field(FieldName::Description, Media::Any, Source::Body, false),
     ],
-    &[limit(Title, CodePoints, 100), limit(Description, Utf8Bytes, 5000), limit(Description, Hashtags, 60)],
+    &[
+        limit(Title, CodePoints, 100),
+        limit(Title, Hashtags, 60),
+        limit(Description, Utf8Bytes, 5000),
+        limit(Description, Hashtags, 60),
+    ],
 );
 
 pub static TIKTOK: Target = text(

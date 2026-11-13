@@ -51,6 +51,11 @@
         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
         "measurements": { "type": "array", "items": { "$ref": "#/$defs/measurement" } },
         "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
+        "diagnostics": {
+          "description": "Diagnostics of the parsed document, as in document.diagnostics.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/diagnostic" }
+        },
         "media": { "type": "array", "items": { "type": "string" } },
         "blocks": {
           "description": "Present for targets of the blocks/1 form only: text, media, files and separators in order.",
@@ -68,7 +73,7 @@
           "items": { "$ref": "#/$defs/part" }
         }
       },
-      "required": ["fields", "measurements", "changes", "media"],
+      "required": ["fields", "measurements", "changes", "diagnostics", "media"],
       "additionalProperties": false
     },
     "part": {
@@ -77,9 +82,17 @@
         "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
         "measurements": { "type": "array", "items": { "$ref": "#/$defs/measurement" } },
         "media": { "type": "array", "items": { "type": "string" } },
-        "items": { "type": "array", "items": { "$ref": "#/$defs/attachment" } }
+        "items": { "type": "array", "items": { "$ref": "#/$defs/attachment" } },
+        "range": {
+          "description": "Source text of the part as UTF-16 offsets in the original input. Exact where the rendered text matches its source; otherwise it covers the part and may overlap a neighbor.",
+          "$ref": "#/$defs/range"
+        },
+        "boundary": {
+          "description": "Where the split after this part falls; null on the last part.",
+          "enum": ["paragraph", "sentence", "word", "grapheme", null]
+        }
       },
-      "required": ["fields", "measurements", "media", "items"],
+      "required": ["fields", "measurements", "media", "items", "range", "boundary"],
       "additionalProperties": false
     },
     "attachment": {
@@ -167,6 +180,10 @@
         "value": {
           "description": "The URL of a link, the tag of a tag, the handle of a mention (to resolve to a DID), the language of a pre, the UNIX time of a date in decimal; null otherwise.",
           "$ref": "#/$defs/nullableString"
+        },
+        "format": {
+          "description": "The Telegram format letters of a date whose source has a format; absent otherwise.",
+          "enum": ["t", "T", "d", "D", "dt", "Dt", "wDt", "r"]
         }
       },
       "required": ["style", "range", "value"],
@@ -203,41 +220,65 @@
       "dependentRequired": { "block": ["item"] },
       "additionalProperties": false
     },
+    "changeClass": { "enum": ["approximated", "textual_fallback", "unwrapped", "omitted", "blocked"] },
+    "feature": {
+      "enum": [
+        "heading",
+        "thematic_break",
+        "blockquote",
+        "bullet_list",
+        "ordered_list",
+        "compound_list",
+        "code_block",
+        "table",
+        "task_list",
+        "media",
+        "emphasis",
+        "strong",
+        "strikethrough",
+        "underline",
+        "highlight",
+        "spoiler",
+        "inline_code",
+        "math",
+        "link",
+        "link_title",
+        "datetime",
+        "angle_brackets",
+        "text",
+        "title",
+        "target_url",
+        "hashtag",
+        "mention"
+      ]
+    },
+    "reason": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "factName": {
+      "enum": [
+        "media",
+        "mediaCount",
+        "placement",
+        "title",
+        "targetUrl",
+        "maxCharacters",
+        "charactersReservedPerUrl",
+        "captionLimit",
+        "descriptionLimit",
+        "hashtagLimit",
+        "spoilerText",
+        "overflow",
+        "entitiesAllowed",
+        "items"
+      ]
+    },
+    "format": { "enum": ["image", "gif", "video", "audio"] },
+    "formats": { "type": "array", "items": { "$ref": "#/$defs/format" }, "uniqueItems": true },
     "change": {
       "type": "object",
       "properties": {
-        "class": { "enum": ["approximated", "textual_fallback", "unwrapped", "omitted", "blocked"] },
-        "feature": {
-          "enum": [
-            "heading",
-            "thematic_break",
-            "blockquote",
-            "bullet_list",
-            "ordered_list",
-            "compound_list",
-            "code_block",
-            "table",
-            "task_list",
-            "media",
-            "emphasis",
-            "strong",
-            "strikethrough",
-            "underline",
-            "highlight",
-            "spoiler",
-            "inline_code",
-            "link",
-            "link_title",
-            "datetime",
-            "angle_brackets",
-            "text",
-            "title",
-            "target_url",
-            "hashtag",
-            "mention"
-          ]
-        },
-        "reason": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "class": { "$ref": "#/$defs/changeClass" },
+        "feature": { "$ref": "#/$defs/feature" },
+        "reason": { "$ref": "#/$defs/reason" },
         "code": {
           "description": "The reason in upper case when the class is blocked, else null.",
           "oneOf": [{ "type": "string", "pattern": "^[A-Z0-9_]+$" }, { "type": "null" }]
@@ -283,9 +324,165 @@
           "type": "array",
           "items": { "type": "string", "pattern": "^[A-Z0-9_]+$" }
         },
-        "threads": { "description": "Whether the overflow fact thread applies.", "type": "boolean" }
+        "threads": { "description": "Whether the overflow fact thread applies.", "type": "boolean" },
+        "facts": {
+          "description": "Facts that can change this target's projection, in the order of the facts object.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/factName" },
+          "uniqueItems": true
+        },
+        "fields": {
+          "description": "Text fields in output order; media names the media kind the field needs.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "$ref": "#/$defs/fieldName" },
+              "required": { "type": "boolean" },
+              "media": { "enum": ["any", "image", "video"] }
+            },
+            "required": ["name", "required", "media"],
+            "additionalProperties": false
+          }
+        },
+        "limits": {
+          "description": "Length and count limits. A fixed limit has maximum and a null fact; a fact with a default has both; a fact without a default has fact only; an unlimited count has neither. Null placements means every placement. At most one limit applies to one field, unit, placement and media kind.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": { "$ref": "#/$defs/fieldName" },
+              "unit": { "$ref": "#/$defs/unit" },
+              "maximum": { "oneOf": [{ "$ref": "#/$defs/offset" }, { "type": "null" }] },
+              "fact": {
+                "oneOf": [
+                  { "enum": ["maxCharacters", "captionLimit", "descriptionLimit", "hashtagLimit"] },
+                  { "type": "null" }
+                ]
+              },
+              "placements": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "items": { "enum": ["post", "reel", "story"] },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  },
+                  { "type": "null" }
+                ]
+              },
+              "media": { "enum": ["any", "with", "without", "image", "video", "gif", "audio"] },
+              "rendering": { "enum": ["payload", "visible"] }
+            },
+            "required": ["field", "unit", "maximum", "fact", "placements", "media", "rendering"],
+            "additionalProperties": false
+          }
+        },
+        "features": {
+          "description": "Declared rules: the default outcome of each feature and the conditional outcomes that replace it.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "feature": { "$ref": "#/$defs/feature" },
+              "class": { "$ref": "#/$defs/changeClass" },
+              "reason": { "$ref": "#/$defs/reason" },
+              "conditions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "when": {
+                      "enum": [
+                        "label_is_href",
+                        "label_invisible",
+                        "title_source",
+                        "empty",
+                        "overflow",
+                        "capped",
+                        "nested",
+                        "info",
+                        "blocks",
+                        "depth",
+                        "columns",
+                        "group",
+                        "cut",
+                        "inline",
+                        "missing",
+                        "count",
+                        "spoiler",
+                        "truncated",
+                        "refused",
+                        "thread",
+                        "code",
+                        "post",
+                        "blank_lines"
+                      ]
+                    },
+                    "class": { "$ref": "#/$defs/changeClass" },
+                    "reason": { "$ref": "#/$defs/reason" }
+                  },
+                  "required": ["when", "class", "reason"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["feature", "class", "reason", "conditions"],
+            "additionalProperties": false
+          }
+        },
+        "media": {
+          "type": "object",
+          "properties": {
+            "formats": {
+              "description": "Item formats published as media; on targets that read inline, only inline items of these formats are placed and the rest are published as a fallback.",
+              "$ref": "#/$defs/formats"
+            },
+            "alt": { "description": "Item formats whose alt the projection publishes.", "$ref": "#/$defs/formats" },
+            "spoiler": {
+              "type": "object",
+              "properties": {
+                "mode": { "enum": ["carried", "widened", "omitted"] },
+                "formats": { "$ref": "#/$defs/formats" }
+              },
+              "required": ["mode", "formats"],
+              "additionalProperties": false
+            },
+            "inline": { "description": "Whether the target reads items[].inline.", "type": "boolean" },
+            "groups": {
+              "description": "Media group layouts the target renders as a group; empty when it renders none.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "layout": { "enum": ["collage", "slideshow"] },
+                  "formats": { "description": "Item formats placed in a group of this layout.", "$ref": "#/$defs/formats" },
+                  "minimum": { "$ref": "#/$defs/count" },
+                  "maximum": { "$ref": "#/$defs/count" }
+                },
+                "required": ["layout", "formats", "minimum", "maximum"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["formats", "alt", "spoiler", "inline", "groups"],
+          "additionalProperties": false
+        }
       },
-      "required": ["name", "form", "offsets", "digest", "manifest", "codes", "threads"],
+      "required": [
+        "name",
+        "form",
+        "offsets",
+        "digest",
+        "manifest",
+        "codes",
+        "threads",
+        "facts",
+        "fields",
+        "limits",
+        "features",
+        "media"
+      ],
       "additionalProperties": false
     },
     "document": {
@@ -504,7 +701,7 @@
     },
     "valueNode": {
       "type": "object",
-      "properties": { "type": { "enum": ["text", "inlineCode"] }, "value": { "type": "string" } },
+      "properties": { "type": { "enum": ["text", "inlineCode", "math"] }, "value": { "type": "string" } },
       "required": ["value"]
     },
     "linkNode": {
@@ -522,9 +719,16 @@
       "properties": {
         "type": { "const": "datetime" },
         "datetime": { "$ref": "#/$defs/nullableString" },
-        "unix": { "type": "integer" }
+        "unix": { "type": "integer" },
+        "format": {
+          "description": "The authored display format; null when absent.",
+          "oneOf": [{ "$ref": "#/$defs/timeFormat" }, { "type": "null" }]
+        }
       },
-      "required": ["datetime", "unix"]
+      "required": ["datetime", "unix", "format"]
+    },
+    "timeFormat": {
+      "enum": ["time", "time-seconds", "date-short", "date", "datetime-short", "datetime", "full", "relative"]
     },
     "mediaReferenceNode": {
       "type": "object",

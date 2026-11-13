@@ -5,7 +5,7 @@ use crate::syntax::state::{Name as StateName, State};
 use crate::syntax::tokenizer::{LabelKind, LabelStart, Tokenizer};
 
 pub fn start(tokenizer: &mut Tokenizer) -> State {
-    let index = tokenizer.point.index;
+    let index = tokenizer.point.index as usize;
     if tokenizer.current == Some(b'[') && tokenizer.spend(Limit::BlockLabels, index, |_| index + 1) {
         tokenizer.enter(Name::GfmFootnoteCallLabel);
         tokenizer.enter(Name::LabelMarker);

@@ -121,7 +121,7 @@ fn selects_limits_by_field_and_context() {
     let facts = Facts { resolved: &resolved, ..Facts::default() };
     let text = target("mastodon-plain").unwrap().measure(Field::Text, POST, "hello world!", &facts).next().unwrap();
     assert_eq!((text.value, text.maximum, text.exceeds()), (12, Some(11), true));
-    assert_eq!(target("youtube-plain").unwrap().applicable(Field::Title, POST).count(), 1);
+    assert_eq!(target("youtube-plain").unwrap().applicable(Field::Title, POST).count(), 2);
     let tiktok = target("tiktok-plain").unwrap();
     assert_eq!(tiktok.applicable(Field::Title, POST).count(), 0);
     assert_eq!(tiktok.applicable(Field::Title, with(Placement::Post)).count(), 1);
@@ -131,8 +131,9 @@ fn measures_youtube_titles_in_code_points() {
     let title = "é".repeat(100);
     let measured: Vec<_> =
         target("youtube-plain").unwrap().measure(Field::Title, POST, &title, &Facts::default()).collect();
-    assert_eq!(measured.len(), 1);
+    assert_eq!(measured.len(), 2);
     assert_eq!((measured[0].unit, Some(measured[0].value)), (Unit::CodePoints, measured[0].maximum));
+    assert_eq!((measured[1].unit, measured[1].value), (Unit::Hashtags, 0));
     assert_eq!(measured[0].value, 100);
 }
 

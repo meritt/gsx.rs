@@ -27,11 +27,11 @@ pub fn sequence_open(tokenizer: &mut Tokenizer) -> State {
         State::Next(StateName::RawTextSequenceOpen)
     } else {
         let state = &tokenizer.tokenize_state;
-        let start = tokenizer.point.index - state.size;
+        let start = tokenizer.point.index as usize - state.size;
         if start >= state.raw_text_scanned && state.raw_text_runs.get(&state.size).is_none_or(|&at| at <= start) {
             return nok(tokenizer);
         }
-        tokenizer.tokenize_state.scan_start = tokenizer.point.index;
+        tokenizer.tokenize_state.scan_start = tokenizer.point.index as usize;
         tokenizer.exit(tokenizer.tokenize_state.token_2);
         State::Retry(StateName::RawTextBetween)
     }
@@ -90,7 +90,7 @@ pub fn sequence_close(tokenizer: &mut Tokenizer) -> State {
         tokenizer.exit(tokenizer.tokenize_state.token_2);
         let size = tokenizer.tokenize_state.size_b;
         let at = tokenizer.tokenize_state.raw_text_runs.entry(size).or_default();
-        *at = (*at).max(tokenizer.point.index - size);
+        *at = (*at).max(tokenizer.point.index as usize - size);
         if tokenizer.tokenize_state.size == tokenizer.tokenize_state.size_b {
             tokenizer.exit(tokenizer.tokenize_state.token_1);
             tokenizer.tokenize_state.marker = 0;

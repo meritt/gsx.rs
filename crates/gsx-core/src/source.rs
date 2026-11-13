@@ -6,21 +6,23 @@ pub struct InvalidText {
     pub start: u32,
 }
 
-pub fn oversized(text: &str) -> Option<(u32, u32)> {
-    let maximum = Limit::DocumentUnits.maximum() as usize;
-    if text.len() <= maximum {
+pub fn oversized(input: &[u8]) -> Option<(u32, u32)> {
+    let maximum = u64::from(Limit::DocumentUnits.maximum());
+    if input.len() as u64 <= maximum {
         return None;
     }
-    let mut units = 0;
-    let mut start = None;
-    for char in text.chars() {
-        let next = units + char.len_utf16();
-        if next > maximum && start.is_none() {
-            start = Some(units);
-        }
-        units = next;
+    let (mut units, mut wide) = (0, false);
+    for &byte in input {
+        let width = u64::from(byte & 0xC0 != 0x80) + u64::from(byte >= 0xF0);
+        wide |= width == 2 && units + 1 == maximum;
+        units += width;
     }
-    start.map(|start| (start as u32, units as u32))
+    oversized_units(units, wide)
+}
+
+pub fn oversized_units(units: u64, wide: bool) -> Option<(u32, u32)> {
+    let maximum = Limit::DocumentUnits.maximum();
+    (units > u64::from(maximum)).then(|| (maximum - u32::from(wide), u32::try_from(units).unwrap_or(u32::MAX)))
 }
 
 pub fn normalize(text: &str) -> Result<Cow<'_, str>, InvalidText> {

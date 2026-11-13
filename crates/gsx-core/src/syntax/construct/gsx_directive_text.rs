@@ -20,7 +20,7 @@ fn is_space_or_eol(byte: u8) -> bool {
 
 pub fn start(tokenizer: &mut Tokenizer) -> State {
     let escaped_colon = tokenizer.events.last().is_some_and(|event| event.name == Name::CharacterEscape);
-    let second = tokenizer.parse_state.bytes.get(tokenizer.point.index + 1);
+    let second = tokenizer.parse_state.bytes.get(tokenizer.point.index as usize + 1);
     if tokenizer.current != Some(b':') || second != Some(&b':') || (tokenizer.previous == Some(b':') && !escaped_colon)
     {
         return State::Nok;

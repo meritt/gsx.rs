@@ -1,7 +1,51 @@
 use gsx_core::document::{Limit, Media};
-use gsx_core::project::{Facts, MediaKind};
+use gsx_core::project::{FACT_MAX_ITEMS, FACT_MAX_UNITS, Facts, Format, MediaFact, MediaKind, Overflow};
 use gsx_core::targets::{TARGETS, target};
-use gsx_core::wire::{invalid_text, parse, project, serialize, targets};
+use gsx_core::wire::{invalid_text, parse, project, refused, serialize, targets};
+
+fn refused_items(items: &[MediaFact]) -> Option<String> {
+    refused(&Facts { items: Some(items), ..Facts::default() })
+}
+
+#[test]
+fn refuses_item_ids_outside_the_media_id_rule() {
+    let item = |id| MediaFact { id, format: Format::Image, alt: None, spoiler: false, inline: false };
+    assert_eq!(refused_items(&[]), None);
+    assert_eq!(refused_items(&[item("a"), item("b.c:d-e_f")]), None);
+    assert_eq!(
+        refused_items(&[item("a"), item("x\"/><img src=\"media:evil")]).as_deref(),
+        Some("item 1 id is not a media ID")
+    );
+    assert_eq!(refused_items(&[item(""), item("-a")]).as_deref(), Some("item 0 id is not a media ID"));
+    let long = "a".repeat(129);
+    assert_eq!(refused_items(&[item(&long[1..])]), None);
+    assert_eq!(refused_items(&[item(&long)]).as_deref(), Some("item 0 id is not a media ID"));
+}
+
+#[test]
+fn refuses_facts_over_their_ceilings() {
+    assert_eq!((FACT_MAX_UNITS, FACT_MAX_ITEMS), (65_536, 1024));
+    let at = format!("{}😀", "a".repeat(FACT_MAX_UNITS - 2));
+    let over = format!("a{at}");
+    let wide = "€".repeat(FACT_MAX_UNITS);
+    let item = |alt| MediaFact { id: "a", format: Format::Image, alt, spoiler: false, inline: false };
+    assert_eq!(refused(&Facts::default()), None);
+    for text in [&at, &wide] {
+        let facts = Facts { title: Some(text), target_url: Some(text), spoiler_text: Some(text), ..Facts::default() };
+        assert_eq!(refused(&facts), None);
+        assert_eq!(refused_items(&[item(None), item(Some(text))]), None);
+    }
+    let units = |name: &str| Some(format!("{name} is over 65536 UTF-16 units"));
+    assert_eq!(refused(&Facts { title: Some(&over), ..Facts::default() }), units("title"));
+    assert_eq!(refused(&Facts { target_url: Some(&over), ..Facts::default() }), units("targetUrl"));
+    assert_eq!(refused(&Facts { spoiler_text: Some(&over), ..Facts::default() }), units("spoilerText"));
+    assert_eq!(refused_items(&[item(None), item(Some(&over))]), units("item 1 alt"));
+    let items = vec![item(None); FACT_MAX_ITEMS + 1];
+    assert_eq!(refused_items(&items[1..]), None);
+    assert_eq!(refused_items(&items).as_deref(), Some("items has 1025 entries, over 1024"));
+    let first = Facts { title: Some(&over), items: Some(&[item(Some(&over))]), ..Facts::default() };
+    assert_eq!(refused(&first), units("item 0 alt"));
+}
 
 #[test]
 fn runs_inputs_at_the_depth_limits_within_a_thread_stack() {
@@ -13,21 +57,43 @@ fn runs_inputs_at_the_depth_limits_within_a_thread_stack() {
     let link =
         format!("[{}![a](https://e.com/i){}](https://e.com)", "**".repeat(inlines - 2), "**".repeat(inlines - 2));
     let directives = format!("{}a{}", "::x[**".repeat(inlines / 2), "**]".repeat(inlines / 2));
+    let wraps = [
+        ("*", "*"),
+        ("~~", "~~"),
+        ("++", "++"),
+        ("==", "=="),
+        ("||", "||"),
+        ("::time[", "]{unix=\"1785423600\" format=\"relative\"}"),
+        ("[", "](https://e.com)"),
+        ("**", "**"),
+    ];
+    let kinds = (0..inlines).rev().fold("$x^2$".to_owned(), |text, level| {
+        let (open, close) = wraps[level % wraps.len()];
+        format!("{open}a {text} b{close}")
+    });
     let inputs = [
         format!("{}{link}", "> ".repeat(containers)),
         format!("{}{directives}", "> ".repeat(containers)),
         format!("{lists}{}- {inline}\n", "  ".repeat(containers - 1)),
         format!("{mixed}{}- > {inline}\n", "    ".repeat(containers / 2)),
+        format!("{}{kinds}", "> - ".repeat(containers / 2)),
+        format!("{}```math\nx^2\n```\n", "> - ".repeat(containers / 2)),
     ];
+    let threaded = Facts { overflow: Overflow::Thread, entities_allowed: true, ..Facts::default() };
     let stack = if cfg!(debug_assertions) { 1 << 20 } else { 128 << 10 };
     std::thread::Builder::new()
         .stack_size(stack)
         .spawn(move || {
+            let kinds = parse(inputs[4].as_bytes(), &[]);
+            assert!(kinds.contains("\"type\":\"math\"") && kinds.contains("\"format\":\"relative\""), "{kinds}");
+            assert!(parse(inputs[5].as_bytes(), &[]).contains("\"lang\":\"math\""), "{}", inputs[5]);
             for input in &inputs {
                 assert!(!parse(input.as_bytes(), &[]).contains("\"error\""), "{input}");
                 assert!(serialize(input.as_bytes(), &[]).contains("\"serialized\""), "{input}");
-                for target in TARGETS {
-                    assert!(project(input.as_bytes(), &[], target, &Facts::default()).contains("\"projection\""));
+                for (target, facts) in
+                    TARGETS.iter().flat_map(|target| [(target, Facts::default()), (target, threaded)])
+                {
+                    assert!(project(input.as_bytes(), &[], target, &facts).contains("\"projection\""), "{input}");
                 }
             }
         })
@@ -59,6 +125,30 @@ fn writes_projection() {
         r#""field":"text","range":[0,4],"truncated":null},"#
     )));
     assert!(json.ends_with(r#""media":[]}}"#), "{json}");
+}
+
+#[test]
+fn projection_carries_the_document_diagnostics() {
+    let media = [Media { id: "a", cover: None }];
+    let input = "::media{id=\"x\"}\n\n::time[soon]{datetime=\"tomorrow\"} ::media{id=\"a\"}\n";
+    let document = parse(input.as_bytes(), &media);
+    let diagnostics = &document[document.find(",\"diagnostics\":").unwrap()..document.len() - 2];
+    for code in ["MEDIA_REFERENCE_UNKNOWN", "DATETIME_INVALID", "MEDIA_REFERENCE_CONTEXT_UNSUPPORTED"] {
+        assert!(diagnostics.contains(code), "{diagnostics}");
+    }
+    let threaded = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    for target in TARGETS {
+        for facts in [&Facts::default(), &threaded] {
+            let json = project(input.as_bytes(), &media, target, facts);
+            assert!(json.contains(&format!("{diagnostics},\"media\":")), "{} {json}", target.name);
+        }
+    }
+    let clean = project(b"a", &[], target("x-plain").unwrap(), &Facts::default());
+    assert!(clean.contains(",\"diagnostics\":[],\"media\":"), "{clean}");
+    let deep = ">".repeat(33);
+    let rejected = project(deep.as_bytes(), &[], target("x-plain").unwrap(), &Facts::default());
+    assert!(rejected.starts_with("{\"error\":"), "{rejected}");
+    assert_eq!(rejected, parse(deep.as_bytes(), &[]));
 }
 
 #[test]
@@ -101,6 +191,60 @@ fn lists_targets_with_their_manifests() {
     }
     assert!(json.contains(r#""name":"bluesky-entities","form":"entities/1","offsets":"utf8""#), "{json}");
     assert!(json.contains(r#""name":"x-plain","form":"plain/1","offsets":null"#), "{json}");
+}
+
+#[test]
+fn lists_target_capabilities_from_the_rule_table() {
+    let json = targets();
+    let expected = [
+        concat!(
+            r#""threads":true,"facts":["media","mediaCount","placement","overflow","items"],"#,
+            r#""fields":[{"name":"text","required":false,"media":"any"}],"#,
+            r#""limits":[{"field":"text","unit":"code-points","maximum":4096,"fact":null,"placements":["post"],"#,
+            r#""media":"without","rendering":"visible"},"#,
+            r#"{"field":"text","unit":"code-points","maximum":1024,"fact":null,"placements":["post","reel"],"#,
+            r#""media":"with","rendering":"visible"},"#,
+            r#"{"field":"text","unit":"code-points","maximum":2048,"fact":null,"placements":["story"],"#,
+            r#""media":"any","rendering":"visible"}],"#,
+            r#""features":[{"feature":"heading","class":"textual_fallback","reason":"heading_as_bold","conditions":[]},"#,
+        ),
+        concat!(
+            r#"{"feature":"text","class":"approximated","reason":"text_truncated","conditions":["#,
+            r#"{"when":"empty","class":"blocked","reason":"text_empty"},"#,
+            r#"{"when":"overflow","class":"blocked","reason":"text_too_long"},"#,
+            r#"{"when":"blank_lines","class":"approximated","reason":"blank_lines_collapsed"},"#,
+            r#"{"when":"thread","class":"approximated","reason":"text_threaded"}]}],"#,
+            r#""media":{"formats":["image","gif","video","audio"],"alt":["image","gif","video","audio"],"#,
+            r#""spoiler":{"mode":"carried","formats":["image","gif","video"]},"inline":false,"groups":[]}},"#,
+            r#"{"name":"telegram-html-rich""#,
+        ),
+        concat!(
+            r#""groups":[{"layout":"collage","formats":["image","video"],"minimum":2,"maximum":50},"#,
+            r#"{"layout":"slideshow","formats":["image"],"minimum":2,"maximum":50}]}}"#,
+        ),
+        concat!(
+            r#""limits":[{"field":"text","unit":"mastodon-weighted","maximum":500,"fact":"maxCharacters","#,
+            r#""placements":null,"media":"any","rendering":"payload"},"#,
+            r#"{"field":"alt","unit":"code-points","maximum":null,"fact":"descriptionLimit","placements":null,"#,
+            r#""media":"any","rendering":"payload"}]"#,
+        ),
+        r#"{"field":"text","unit":"code-points","maximum":null,"fact":null,"placements":null,"media":"any","rendering":"payload"}"#,
+        r#""spoiler":{"mode":"widened","formats":["image","gif","video","audio"]}"#,
+        concat!(
+            r#""media":{"formats":["image","gif","video"],"alt":["image","gif","video"],"#,
+            r#""spoiler":{"mode":"carried","formats":["image","gif","video","audio"]},"inline":true,"#,
+            r#""groups":[{"layout":"collage","formats":["image","gif","video"],"minimum":2,"maximum":10}]}"#,
+        ),
+        concat!(
+            r#""media":{"formats":["image","gif"],"alt":["image","gif"],"spoiler":{"mode":"omitted","formats":[]},"#,
+            r#""inline":true,"groups":[{"layout":"slideshow","formats":["image","gif"],"minimum":2,"maximum":10}]}"#,
+        ),
+        r#""facts":["mediaCount","placement","captionLimit","entitiesAllowed","items"]"#,
+        r#""facts":["mediaCount","title","items"],"fields":[{"name":"title","required":true,"media":"any"}"#,
+    ];
+    for expected in expected {
+        assert!(json.contains(expected), "{expected}\n{json}");
+    }
 }
 
 #[test]
@@ -170,4 +314,55 @@ fn reports_invalid_utf8_at_its_utf16_offset() {
         r#"{"error":{"code":"MARKDOWN_INVALID_TEXT","range":[3,4],"details":{"codePoint":55357}}}"#
     );
     assert_eq!(parse(b"ab\xff", &[]), r#"{"error":{"code":"MARKDOWN_INVALID_TEXT","range":[2,3],"details":{}}}"#);
+}
+
+#[test]
+fn keeps_the_invalid_text_range_well_formed_at_the_last_offset() {
+    assert_eq!(
+        invalid_text(u32::MAX, None),
+        r#"{"error":{"code":"MARKDOWN_INVALID_TEXT","range":[4294967295,4294967295],"details":{}}}"#
+    );
+}
+
+#[test]
+fn rejects_oversized_input_before_validating_its_encoding() {
+    let too_complex = r#"{"error":{"code":"MARKDOWN_TOO_COMPLEX","range":[262144,262146],"#.to_owned()
+        + r#""details":{"limit":"documentUnits","maximum":262144}}}"#;
+    let mut wtf8 = "a".repeat(262_145).into_bytes();
+    wtf8.extend([0xed, 0xa0, 0x80]);
+    assert_eq!(parse(&wtf8, &[]), too_complex);
+    assert_eq!(serialize(&wtf8, &[]), too_complex);
+    let mut within = "a".repeat(262_143).into_bytes();
+    within.extend([0xed, 0xa0, 0x80]);
+    let invalid = r#"{"error":{"code":"MARKDOWN_INVALID_TEXT","range":[262143,262144],"details":{"codePoint":55296}}}"#;
+    assert_eq!(parse(&within, &[]), invalid);
+}
+
+#[test]
+fn reports_oversized_input_from_its_utf16_length() {
+    let too_complex = |start: u32, end: u64| {
+        format!(
+            r#"{{"error":{{"code":"MARKDOWN_TOO_COMPLEX","range":[{start},{end}],"details":{{"limit":"documentUnits","maximum":262144}}}}}}"#
+        )
+    };
+    let a = |count| "a".repeat(count);
+    let cases = [
+        (a(262_145), Some(too_complex(262_144, 262_145))),
+        (format!("{}😀", a(262_143)), Some(too_complex(262_143, 262_145))),
+        (format!("{}😀a", a(262_142)), Some(too_complex(262_144, 262_145))),
+        (format!("{}é€", a(262_143)), Some(too_complex(262_144, 262_145))),
+        (a(262_144), None),
+        (format!("{}😀", a(262_142)), None),
+        ("€".repeat(262_144), None),
+    ];
+    for (text, expected) in cases {
+        let units: Vec<u16> = text.encode_utf16().collect();
+        let at = char::decode_utf16(units[262_143..].iter().copied()).next().and_then(Result::ok).map_or(0, u32::from);
+        let found = gsx_core::wire::oversized(units.len() as u64, at);
+        assert_eq!(found, expected, "{} units", units.len());
+        if let Some(expected) = expected {
+            assert_eq!(parse(text.as_bytes(), &[]), expected);
+        }
+    }
+    assert_eq!(gsx_core::wire::oversized(1 << 33, 0x61), Some(too_complex(262_144, u64::from(u32::MAX))));
 }

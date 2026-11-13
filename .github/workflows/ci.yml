@@ -42,7 +42,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+          key: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock', 'fuzz/Cargo.lock', '.github/workflows/ci.yml') }}
           restore-keys: test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml') }}-
 
       - name: Setup
@@ -89,7 +89,9 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Audit
-        run: cargo deny --locked check
+        run: |
+          cargo deny --locked check
+          cargo deny --locked --manifest-path fuzz/Cargo.toml check
 
       - name: Secrets
         run: |
@@ -423,8 +425,9 @@ jobs:
 
       - name: Fuzz
         run: |
-          cargo "+$FUZZ_TOOLCHAIN" fuzz run parse -- -max_len=4096 -max_total_time=60
-          cargo "+$FUZZ_TOOLCHAIN" fuzz run project -- -max_total_time=60
+          mkdir -p fuzz/corpus/parse fuzz/corpus/project
+          cargo "+$FUZZ_TOOLCHAIN" fuzz run parse fuzz/corpus/parse fuzz/seeds/parse -- -dict=fuzz/gsx.dict -max_len=4096 -max_total_time=60
+          cargo "+$FUZZ_TOOLCHAIN" fuzz run project fuzz/corpus/project fuzz/seeds/project -- -dict=fuzz/gsx.dict -max_total_time=60
 
       - name: Save
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}

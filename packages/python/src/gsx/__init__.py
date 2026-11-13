@@ -7,28 +7,40 @@ from dataclasses import dataclass, field
 from typing import Iterable, List, NamedTuple, Optional, Tuple
 
 __all__ = [
+    "MEDIA_GROUP_MAX",
+    "MEDIA_GROUP_MIN",
+    "MEDIA_ID_MAX_BYTES",
+    "MEDIA_ID_PATTERN",
     "Attachment",
     "Block",
     "Change",
+    "Condition",
     "Details",
     "Diagnostic",
     "Document",
     "Entity",
     "Facts",
     "Field",
+    "Group",
     "InternalError",
     "Item",
+    "Limit",
     "Marker",
     "Measurement",
     "Part",
     "Media",
+    "MediaCapabilities",
     "MediaFact",
     "Node",
     "ParseError",
     "Projection",
     "Range",
+    "Rule",
+    "Spoiler",
     "Target",
+    "TargetField",
     "Truncated",
+    "is_media_id",
     "parse",
     "parse_json",
     "project",
@@ -78,8 +90,19 @@ _lib.gsx_error_free.argtypes = [ctypes.c_void_p]
 _lib.gsx_error_free.restype = None
 _lib.gsx_version.argtypes = []
 _lib.gsx_version.restype = ctypes.c_char_p
+_lib.gsx_is_media_id.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
+_lib.gsx_is_media_id.restype = ctypes.c_bool
+_lib.gsx_media_id_pattern.argtypes = []
+_lib.gsx_media_id_pattern.restype = ctypes.c_char_p
+for _bound in (_lib.gsx_media_id_max_bytes, _lib.gsx_media_group_min, _lib.gsx_media_group_max):
+    _bound.argtypes = []
+    _bound.restype = ctypes.c_size_t
 
 __version__: str = _lib.gsx_version().decode()
+MEDIA_ID_MAX_BYTES: int = _lib.gsx_media_id_max_bytes()
+MEDIA_GROUP_MIN: int = _lib.gsx_media_group_min()
+MEDIA_GROUP_MAX: int = _lib.gsx_media_group_max()
+MEDIA_ID_PATTERN: str = _lib.gsx_media_id_pattern().decode()
 
 
 class Range(NamedTuple):
@@ -124,6 +147,7 @@ class Node:
     title: Optional[str] = None
     datetime: Optional[str] = None
     unix: Optional[int] = None
+    format: Optional[str] = None
     media_id: Optional[str] = None
     media_ids: Optional[List[str]] = None
     layout: Optional[str] = None
@@ -214,6 +238,13 @@ def _text(text: str) -> bytes:
     return _encode(text)
 
 
+def is_media_id(id: str) -> bool:
+    if not isinstance(id, str):
+        raise TypeError("id must be a str")
+    data = _encode(id)
+    return _lib.gsx_is_media_id(data, len(data))
+
+
 def parse_json(text: str, media: Iterable[Media] = ()) -> str:
     data = _text(text)
     array = _media(media)
@@ -244,11 +275,15 @@ def parse(text: str, media: Iterable[Media] = ()) -> Document:
     return Document(
         children=[_node(child) for child in document["children"]],
         markers=[Marker(item["kind"], Range(*item["range"])) for item in document["markers"]],
-        diagnostics=[
-            Diagnostic(item["code"], item["severity"], Range(*item["range"]), _details(item["details"]))
-            for item in document["diagnostics"]
-        ],
+        diagnostics=_diagnostics(document["diagnostics"]),
     )
+
+
+def _diagnostics(diagnostics: list) -> List[Diagnostic]:
+    return [
+        Diagnostic(item["code"], item["severity"], Range(*item["range"]), _details(item["details"]))
+        for item in diagnostics
+    ]
 
 
 @dataclass(frozen=True)
@@ -290,6 +325,7 @@ class Entity:
     style: str
     range: Range
     value: Optional[str]
+    format: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -364,6 +400,8 @@ class Projection:
     fields: List[Field]
     measurements: List[Measurement]
     changes: List[Change]
+    diagnostics: List[Diagnostic]
+    """Diagnostics of the parsed document, as in Document.diagnostics."""
     media: List[str]
     blocks: Optional[List[Block]] = None
     """Present for targets of the blocks/1 form only."""
@@ -379,6 +417,76 @@ class Part:
     measurements: List[Measurement]
     media: List[str]
     items: List[Attachment]
+    range: Range
+    boundary: Optional[str]
+
+
+@dataclass(frozen=True)
+class TargetField:
+    name: str
+    required: bool
+    media: str
+    """The media kind the field needs: "any", "image" or "video"."""
+
+
+@dataclass(frozen=True)
+class Limit:
+    """A fixed limit has maximum and no fact; a fact with a default has both; a fact without a default has fact only; an unlimited count has neither."""
+
+    field: str
+    unit: str
+    maximum: Optional[int]
+    fact: Optional[str]
+    """The fact in its wire spelling, such as "maxCharacters"."""
+    placements: Optional[List[str]]
+    """None means every placement."""
+    media: str
+    rendering: str
+
+
+@dataclass(frozen=True)
+class Condition:
+    when: str
+    class_: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class Rule:
+    """A feature's default outcome and the conditional outcomes that replace it."""
+
+    feature: str
+    class_: str
+    reason: str
+    conditions: List[Condition]
+
+
+@dataclass(frozen=True)
+class Group:
+    layout: str
+    formats: List[str]
+    minimum: int
+    maximum: int
+
+
+@dataclass(frozen=True)
+class Spoiler:
+    mode: str
+    """"carried", "widened" or "omitted"."""
+    formats: List[str]
+
+
+@dataclass(frozen=True)
+class MediaCapabilities:
+    formats: List[str]
+    """Item formats published as media; where inline is read, only inline items of these formats are placed."""
+    alt: List[str]
+    """Item formats whose alt the projection publishes."""
+    spoiler: Spoiler
+    inline: bool
+    """Whether items[].inline is read."""
+    groups: List[Group]
+    """Group layouts rendered as a group; empty when none."""
 
 
 @dataclass(frozen=True)
@@ -392,6 +500,13 @@ class Target:
     """Every code a blocked change of this target can carry."""
     threads: bool
     """Whether overflow "thread" applies."""
+    facts: List[str]
+    """Facts that can change this target's projection, in their wire spelling, such as "maxCharacters"."""
+    fields: List[TargetField]
+    limits: List[Limit]
+    """At most one limit applies to one field, unit, placement and media kind."""
+    features: List[Rule]
+    media: MediaCapabilities
 
 
 class _MediaFact(ctypes.Structure):
@@ -538,6 +653,7 @@ def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Medi
             )
             for item in projection["changes"]
         ],
+        diagnostics=_diagnostics(projection["diagnostics"]),
         media=projection["media"],
         blocks=None if "blocks" not in projection else [_block(block) for block in projection["blocks"]],
         items=None if "items" not in projection else [Attachment(**item) for item in projection["items"]],
@@ -551,7 +667,10 @@ def _fields(fields: list) -> List[Field]:
             item["name"],
             item["text"],
             [Range(*link) for link in item["links"]],
-            [Entity(entity["style"], Range(*entity["range"]), entity["value"]) for entity in item["entities"]],
+            [
+                Entity(entity["style"], Range(*entity["range"]), entity["value"], entity.get("format"))
+                for entity in item["entities"]
+            ],
         )
         for item in fields
     ]
@@ -570,6 +689,8 @@ def _part(part: dict) -> Part:
         _measurements(part["measurements"]),
         part["media"],
         [Attachment(**item) for item in part["items"]],
+        Range(*part["range"]),
+        part["boundary"],
     )
 
 
@@ -585,4 +706,36 @@ def _block(block: dict) -> Block:
 
 def targets() -> List[Target]:
     listing = json.loads(_call("gsx_targets", _lib.gsx_targets))
-    return [Target(**item) for item in listing["targets"]]
+    return [_target(item) for item in listing["targets"]]
+
+
+def _target(item: dict) -> Target:
+    media = item["media"]
+    return Target(
+        item["name"],
+        item["form"],
+        item["offsets"],
+        item["digest"],
+        item["manifest"],
+        item["codes"],
+        item["threads"],
+        item["facts"],
+        [TargetField(**spec) for spec in item["fields"]],
+        [Limit(**limit) for limit in item["limits"]],
+        [
+            Rule(
+                rule["feature"],
+                rule["class"],
+                rule["reason"],
+                [Condition(condition["when"], condition["class"], condition["reason"]) for condition in rule["conditions"]],
+            )
+            for rule in item["features"]
+        ],
+        MediaCapabilities(
+            media["formats"],
+            media["alt"],
+            Spoiler(**media["spoiler"]),
+            media["inline"],
+            [Group(**group) for group in media["groups"]],
+        ),
+    )

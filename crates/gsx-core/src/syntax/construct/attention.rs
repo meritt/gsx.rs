@@ -23,7 +23,7 @@ struct Sequence {
 
 pub fn start(tokenizer: &mut Tokenizer) -> State {
     if let Some(marker @ (b'*' | b'_' | b'~')) = tokenizer.current {
-        let start = tokenizer.point.index;
+        let start = tokenizer.point.index as usize;
         if !tokenizer.spend(Limit::BlockDelimiters, start, |bytes| {
             start + bytes[start..].iter().take_while(|byte| **byte == marker).count()
         }) {
@@ -120,14 +120,14 @@ fn get_sequences(tokenizer: &mut Tokenizer) -> Vec<Sequence> {
                 let end = index + 1;
                 let exit = &tokenizer.events[end];
 
-                let marker = tokenizer.parse_state.bytes[enter.point.index];
+                let marker = tokenizer.parse_state.bytes[enter.point.index as usize];
                 let before_char = if index == 0 || tokenizer.events[index - 1].point.index < enter.point.index {
                     None
                 } else {
-                    char_before_index(tokenizer.parse_state.bytes, enter.point.index)
+                    char_before_index(tokenizer.parse_state.bytes, enter.point.index as usize)
                 };
                 let before = classify_opt(before_char);
-                let after_char = char_after_index(tokenizer.parse_state.bytes, exit.point.index);
+                let after_char = char_after_index(tokenizer.parse_state.bytes, exit.point.index as usize);
                 let after = classify_opt(after_char);
                 let is_marker = |char: Option<char>| matches!(char, Some('~' | '|' | '+' | '='));
                 let open = after == CharacterKind::Other
@@ -142,8 +142,8 @@ fn get_sequences(tokenizer: &mut Tokenizer) -> Vec<Sequence> {
                     stack: stack.clone(),
                     start_point: enter.point,
                     end_point: exit.point,
-                    size: exit.point.index - enter.point.index,
-                    length: exit.point.index - enter.point.index,
+                    size: (exit.point.index - enter.point.index) as usize,
+                    length: (exit.point.index - enter.point.index) as usize,
                     open: if marker == b'_' { open && (before != CharacterKind::Other || !close) } else { open },
                     close: if marker == b'_' { close && (after != CharacterKind::Other || !open) } else { close },
                     marker,
@@ -188,10 +188,10 @@ fn match_sequences(tokenizer: &mut Tokenizer, sequences: &mut Vec<Sequence>, ope
 
     sequences[open].size -= take;
     sequences[close].size -= take;
-    sequences[open].end_point.column -= take;
-    sequences[open].end_point.index -= take;
-    sequences[close].start_point.column += take;
-    sequences[close].start_point.index += take;
+    sequences[open].end_point.column -= take as u32;
+    sequences[open].end_point.index -= take as u32;
+    sequences[close].start_point.column += take as u32;
+    sequences[close].start_point.index += take as u32;
 
     tokenizer.map.add_before(
         open_index + 2,

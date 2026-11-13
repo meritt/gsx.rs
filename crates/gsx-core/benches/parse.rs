@@ -15,7 +15,7 @@ use std::{env, fs};
 use bench::{Bench, Case, typical, units};
 use criterion::{Criterion, SamplingMode};
 use gsx_core::document::parse;
-use gsx_core::project::{Facts, MediaKind, Target, project};
+use gsx_core::project::{Facts, MediaKind, Overflow, Target, project};
 use gsx_core::serialize::serialize;
 use gsx_core::targets::{TARGETS, target};
 use serde_json::{Map, Value, json};
@@ -38,6 +38,11 @@ fn projected() -> Vec<Projected> {
         target: target("tiktok-plain").expect("tiktok-plain is a target"),
         facts: Facts { media: Some(MediaKind::Image), media_count: 1, ..Facts::default() },
     });
+    all.extend(TARGETS.iter().filter(|target| target.threads()).map(|&target| Projected {
+        id: format!("{}-thread", target.name),
+        target,
+        facts: Facts { overflow: Overflow::Thread, ..Facts::default() },
+    }));
     all
 }
 

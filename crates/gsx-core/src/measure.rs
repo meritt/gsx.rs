@@ -38,6 +38,15 @@ impl Unit {
         matches!(self, Unit::Hashtags | Unit::Mentions | Unit::Links)
     }
 
+    pub const fn max_bytes(self) -> Option<usize> {
+        match self {
+            Unit::Utf8Bytes => Some(1),
+            Unit::Utf16CodeUnits => Some(3),
+            Unit::CodePoints => Some(4),
+            _ => None,
+        }
+    }
+
     pub const fn name(self) -> &'static str {
         match self {
             Unit::Graphemes => "graphemes",
@@ -61,6 +70,18 @@ pub enum Fact {
     DescriptionLimit,
     CaptionLimit,
     HashtagLimit,
+}
+
+impl Fact {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Fact::MaxCharacters => "maxCharacters",
+            Fact::CharactersReservedPerUrl => "charactersReservedPerUrl",
+            Fact::DescriptionLimit => "descriptionLimit",
+            Fact::CaptionLimit => "captionLimit",
+            Fact::HashtagLimit => "hashtagLimit",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -94,6 +115,26 @@ pub fn measure(unit: Unit, text: &str, facts: &Facts) -> u32 {
         Unit::Links => count::unique_urls(text, facts.urls),
     };
     u32::try_from(count).unwrap_or(u32::MAX)
+}
+
+pub fn prefixes(unit: Unit, text: &str, facts: &Facts, ends: &[usize]) -> Vec<Option<usize>> {
+    let (values, _) = match unit {
+        Unit::Graphemes => count::cluster_prefixes(text, ends, false),
+        Unit::Utf8Bytes => (ends.iter().map(|&end| text.is_char_boundary(end).then_some(end)).collect(), text.len()),
+        Unit::XWeighted => count::x_weighted_prefixes(text, facts.urls, ends),
+        Unit::MastodonWeighted => count::mastodon_weighted_prefixes(
+            text,
+            facts.urls,
+            facts.elided,
+            facts.resolved(Fact::CharactersReservedPerUrl).unwrap_or(MASTODON_RESERVED_PER_URL) as usize,
+            ends,
+        ),
+        Unit::ThreadsWeighted => count::cluster_prefixes(text, ends, true),
+        Unit::CodePoints | Unit::Utf16CodeUnits | Unit::Hashtags | Unit::Mentions | Unit::Links => {
+            (vec![None; ends.len()], 0)
+        }
+    };
+    values
 }
 
 pub fn markers(unit: Unit, text: &str) -> Vec<usize> {

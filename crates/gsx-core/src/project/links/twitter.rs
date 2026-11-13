@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::OnceLock;
 
@@ -60,15 +59,34 @@ fn scan(text: &[u16], start: usize, set: &Set) -> usize {
     start + text[start..].iter().take_while(|&&unit| set.contains(unit)).count()
 }
 
-fn tlds() -> &'static HashMap<u16, Vec<&'static str>> {
-    static INDEX: OnceLock<HashMap<u16, Vec<&'static str>>> = OnceLock::new();
-    INDEX.get_or_init(|| {
-        let mut index: HashMap<u16, Vec<&'static str>> = HashMap::new();
+struct Tlds {
+    ascii: [Vec<&'static str>; 128],
+    other: Vec<(u16, Vec<&'static str>)>,
+}
+
+fn tlds(first: u16) -> &'static [&'static str] {
+    static INDEX: OnceLock<Tlds> = OnceLock::new();
+    let index = INDEX.get_or_init(|| {
+        let mut index = Tlds { ascii: std::array::from_fn(|_| vec![]), other: vec![] };
         for tld in TLDS.split('|') {
-            index.entry(canonical(tld.encode_utf16().next().unwrap())).or_default().push(tld);
+            if let Some(first) = tld.encode_utf16().next() {
+                let key = canonical(first);
+                if let Some(group) = index.ascii.get_mut(usize::from(key)) {
+                    group.push(tld);
+                } else {
+                    match index.other.binary_search_by_key(&key, |(key, _)| *key) {
+                        Ok(at) => index.other[at].1.push(tld),
+                        Err(at) => index.other.insert(at, (key, vec![tld])),
+                    }
+                }
+            }
         }
         index
-    })
+    });
+    match index.ascii.get(usize::from(first)) {
+        Some(group) => group,
+        None => index.other.binary_search_by_key(&first, |(key, _)| *key).map_or(&[], |at| &index.other[at].1),
+    }
 }
 
 fn top_level(text: &[u16], start: usize) -> Option<usize> {
@@ -77,7 +95,7 @@ fn top_level(text: &[u16], start: usize) -> Option<usize> {
             u8::try_from(unit).map_or(true, |byte| !byte.is_ascii_alphanumeric() && !b"@+-".contains(&byte))
         })
     };
-    for tld in tlds().get(&canonical(at(text, start)?)).into_iter().flatten() {
+    for tld in tlds(canonical(at(text, start)?)) {
         if let Some(end) = literal(text, start, tld)
             && separated(end)
         {

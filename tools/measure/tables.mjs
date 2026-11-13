@@ -105,10 +105,12 @@ for (let point = 0; point < 0x110000; point += 1) {
   }
 }
 
-const map = [];
+const BREAK_BLOCK = 8;
+const runs = [];
 for (let point = 0; point < property.length; point += 1) {
-  if (point === 0 || property[point] !== property[point - 1]) {
-    map.push(point * 256 + property[point]);
+  const last = runs.at(-1);
+  if (!last || property[point] !== last[1] || point - last[0] === 0xffff) {
+    runs.push([point, property[point]]);
   }
 }
 
@@ -165,15 +167,11 @@ for (const sequence of sorted) {
   }
   longest = Math.max(longest, points.length);
 }
-const ends = [];
-let blob = '';
-for (const sequence of sorted) {
-  blob += sequence;
-  ends.push(encoder.encode(blob).length);
+const SEQUENCE_END = '\n';
+if (sorted.some((sequence) => sequence.includes(SEQUENCE_END))) {
+  throw new Error('a sequence contains the sequence terminator');
 }
-if (ends.at(-1) > 0xffff) {
-  throw new Error('sequence blob exceeds u16 offsets');
-}
+const blob = sorted.map((sequence) => sequence + SEQUENCE_END).join('');
 
 const rgi = new RegExp(String.raw`^\p{RGI_Emoji}$`, 'v');
 for (const sequence of sorted) {
@@ -193,7 +191,12 @@ function array(name, type, values, hex = true) {
 
 const rust =
   `pub const UNICODE_VERSION: &str = "${VERSION}";\n\n` +
-  array('BREAK', 'u32', map) +
+  `pub const BREAK_BLOCK: usize = ${BREAK_BLOCK};\n\n` +
+  array('BREAK_STARTS', 'u32', runs.filter((_, index) => index % BREAK_BLOCK === 0).map(([start]) => start)) +
+  '\n' +
+  array('BREAK_DELTAS', 'u16', runs.map(([start], index) => (index ? start - runs[index - 1][0] : 0)), false) +
+  '\n' +
+  array('BREAK_CLASSES', 'u8', runs.map(([, value]) => value)) +
   '\n' +
   array('EMOJI_PRESENTATION', 'u32', inversion(sets.Emoji_Presentation)) +
   '\n' +
@@ -202,8 +205,7 @@ const rust =
   array('RGI_SINGLE', 'u32', inversion(singles)) +
   '\n' +
   `pub const RGI_LONGEST: usize = ${longest};\n\n` +
-  `pub static RGI_SEQUENCES: &str = "${escape(blob)}";\n\n` +
-  array('RGI_ENDS', 'u16', ends, false);
+  `pub static RGI_SEQUENCES: &str = "${escape(blob)}";\n`;
 
 const tables = join(crate, 'src', 'measure', 'tables.rs');
 await writeFile(tables, rust);
@@ -220,7 +222,7 @@ await writeFile(
 );
 
 console.log(
-  `BREAK ${map.length}, EMOJI_PRESENTATION ${inversion(sets.Emoji_Presentation).length}, ` +
-    `RGI_SINGLE ${inversion(singles).length}, RGI_SEQUENCES ${sorted.length} (${ends.at(-1)} bytes, longest ${longest}), ` +
+  `BREAK ${runs.length}, EMOJI_PRESENTATION ${inversion(sets.Emoji_Presentation).length}, ` +
+    `RGI_SINGLE ${inversion(singles).length}, RGI_SEQUENCES ${sorted.length} (${encoder.encode(blob).length} bytes, longest ${longest}), ` +
     `GraphemeBreakTest ${test.length}`
 );

@@ -70,7 +70,8 @@ pub fn count(events: &[Event], state: &ParseState) {
             }
             depth += 1;
             if depth == Limit::InlineDepth.maximum() + 1 {
-                state.exceed(Limit::InlineDepth, event.point.index, events[exit(events, index)].point.index);
+                let end = events[exit(events, index)].point.index;
+                state.exceed(Limit::InlineDepth, event.point.index as usize, end as usize);
             }
         }
         if event.kind != Kind::Enter {
@@ -104,7 +105,8 @@ pub fn count(events: &[Event], state: &ParseState) {
             }
         }
         if *count > limit.maximum() {
-            state.exceed(limit, events[range].point.index, events[exit(events, range)].point.index);
+            let end = events[exit(events, range)].point.index;
+            state.exceed(limit, events[range].point.index as usize, end as usize);
         }
     }
 }

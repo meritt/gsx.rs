@@ -32,6 +32,8 @@ Module paths are relative to [`crates/gsx-core/src`](../crates/gsx-core/src). Co
 
 The tokenizer and document model do not depend on projection or bindings. Projection depends on the document and measurement layers; forms implement its renderer interface, and targets select forms and rules. Renderer callbacks keep platform modules out of the projection engine. Serialization depends on the document and reparses through the same grammar. [Parser ownership](decisions/parser.md) explains the event-stream boundary.
 
+Sorts in the core outside the tokenizer's edit map go through `order::sort_by_key`: one unstable sort of `(u64 key, u32 index)` pairs, stable through the index, so the Wasm build does not carry a sort instance per element type. Keys pack two offsets into one `u64` with `order::pair`, which relies on input and output offsets staying below 2³², as the [input limits](decisions/conformance.md#limits) guarantee. The same bound lets tokenizer points store line, column and byte offset as `u32`, which keeps events compact on 64-bit hosts; `document::parse` rejects oversized input before tokenizing.
+
 A target's rule table drives rendering outcomes, capabilities and its manifest. Keep behavior in that table and shared form configuration so declarations cannot drift from rendering. Bindings share the Rust wire writer; byte-for-byte parity is enforced by [consumer replay](../AGENTS.md#replay-and-performance).
 
 ## Bindings

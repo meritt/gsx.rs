@@ -23,7 +23,7 @@ Repository workflow for `gsx/1`. [Architecture](docs/architecture.md) defines mo
 | `testdata/corpus/` | Generated acceptance results |
 | `testdata/bench/` | Benchmark inputs and recorded measurements |
 | `tools/` | Unicode generators and benchmark reports |
-| `fuzz/` | Fuzz targets and separate lockfile |
+| `fuzz/` | Fuzz targets, seeds, dictionary and separate lockfile |
 
 ## Setup
 
@@ -79,17 +79,18 @@ cargo xtask replay swift
 cargo xtask replay python
 ```
 
-Replay builds and installs packages as consumers, then compares raw parse, serialize and projection JSON with Rust byte for byte. Projection inputs run against every target with empty facts and a populated fact set covering placement, media, limits and threads. The full replay and Swift replay require macOS; npm and Python can run individually on Linux. `GSX_PYTHON` selects Python. npm replay enforces the 365000-byte `gzip -9` budget declared in [`xtask`](xtask/src/main.rs).
+Replay builds and installs packages as consumers, then compares raw parse, serialize and projection JSON with Rust byte for byte. Projection inputs run against every target with empty facts and a populated fact set covering placement, media, limits and threads. Generated size cases at and just over the `documentUnits` limit, including surrogate pairs and lone surrogates at the boundary, plus a lone surrogate well inside it, run parse, serialize and an `x-plain` projection, with empty facts and with a refused item ID. Generated limit cases set each limit fact, and all of them together, to 0, 1 and 4294967295 on every target with truncation, threads and story placement, so 32-bit Wasm arithmetic is compared with 64-bit Rust. Generated ceiling cases set each fact ceiling, at and one past its value, on every target and compare each binding's refusal message with Rust's. Media ID samples compare each binding's predicate answers and rule constants with Rust, and each consumer checks the media ID pattern against the predicate with its own regular expression engine. The full replay and Swift replay require macOS; npm and Python can run individually on Linux. `GSX_PYTHON` selects Python. npm replay enforces the 375000-byte `gzip -9` budget declared in [`xtask`](xtask/src/main.rs).
 
 ```bash
 cargo xtask bench
 cargo xtask bench --wasm
 cargo bench -p gsx-core --bench instructions
-cargo +nightly-2026-11-01 fuzz run parse -- -max_len=4096
-cargo +nightly-2026-11-01 fuzz run project -- -max_total_time=60
+mkdir -p fuzz/corpus/parse fuzz/corpus/project
+cargo +nightly-2026-11-01 fuzz run parse fuzz/corpus/parse fuzz/seeds/parse -- -dict=fuzz/gsx.dict -max_len=4096
+cargo +nightly-2026-11-01 fuzz run project fuzz/corpus/project fuzz/seeds/project -- -dict=fuzz/gsx.dict -max_total_time=60
 ```
 
-Benchmarks write JSON and Markdown under `testdata/bench/baseline/`, identified by commit and runtime. Instruction benchmarks require Valgrind and a `gungraun-runner` matching `Cargo.lock`; CI compares them with the base commit and reports growth above 1% as a warning with the affected benchmarks in the job summary, without failing the check. Instruction counts provide the regression signal because shared-runner wall time is noisy. Fuzzing requires `cargo-fuzz`; CI runs both targets for 60 seconds with `fuzz/Cargo.lock` locked.
+Benchmarks write JSON and Markdown under `testdata/bench/baseline/`, identified by commit and runtime. Instruction benchmarks require Valgrind and a `gungraun-runner` matching `Cargo.lock`; CI compares them with the base commit and reports growth above 1% as a warning with the affected benchmarks in the job summary, without failing the check. Instruction counts provide the regression signal because shared-runner wall time is noisy. Fuzzing requires `cargo-fuzz`; CI runs both targets for 60 seconds with `fuzz/Cargo.lock` locked. New inputs go to the ignored `fuzz/corpus/`; the tracked seeds in `fuzz/seeds/` and the dictionary `fuzz/gsx.dict` start the fuzzers on `::time` formats, math, media figures and groups, thread facts, long paragraphs, blank line runs and nested containers. Each project seed is a fact header in the `arbitrary` layout of the target's `Input` followed by a parse seed; run `node fuzz/seeds.mjs` after changing `fuzz/seeds/parse/` or `Input`.
 
 ## Build
 
@@ -104,7 +105,7 @@ cargo xtask pin --check
 
 `dist` defaults to `dist/v<workspace-version>` and requires an empty destination. It builds and replays the release set; `--wheels <directory>` adds Linux wheels built by CI. An optional destination follows `dist`. `pin [--check] [<release-set-directory>]` writes or checks the Swift binary URL and checksum, defaulting to that release directory.
 
-Reproducible archives use fixed entry order, times and modes. Builds remap the workspace, Cargo home and Rust sources to `/gsx`, `/cargo` and `/rustc/<commit>` so the XCFramework checksum is independent of checkout paths. The Wasm profile uses `opt-level = "s"` for workspace code and `"z"` for dependencies.
+Reproducible archives use fixed entry order, times and modes. Builds remap the workspace, Cargo home and Rust sources to `/gsx`, `/cargo` and `/rustc/<commit>` so the XCFramework checksum is independent of checkout paths. The Wasm profile uses `opt-level = "s"` for workspace code and `"z"` for dependencies. `wasm-opt` runs with `--low-memory-unused`, which assumes no load or store reaches the first KiB of linear memory: the stack occupies the first MiB below the data, and the depth limits keep it far above that range.
 
 ## Release
 

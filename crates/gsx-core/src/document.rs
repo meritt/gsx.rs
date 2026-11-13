@@ -6,11 +6,17 @@ mod tree;
 use std::borrow::Cow;
 use std::fmt;
 
+pub use self::convert::is_media_id;
 pub use crate::source::{Limit, Point};
 pub use crate::syntax::Align;
 
 use crate::source::{self, LineIndex};
 use crate::syntax;
+
+pub const MEDIA_ID_MAX_BYTES: usize = 128;
+pub const MEDIA_ID_PATTERN: &str = r"^[A-Za-z0-9][A-Za-z0-9._:\-]{0,127}$";
+pub const MEDIA_GROUP_MIN: usize = 2;
+pub const MEDIA_GROUP_MAX: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Media<'a> {
@@ -45,6 +51,48 @@ impl Layout {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TimeFormat {
+    Time,
+    TimeSeconds,
+    DateShort,
+    Date,
+    DatetimeShort,
+    Datetime,
+    Full,
+    Relative,
+}
+
+impl TimeFormat {
+    pub const ALL: [TimeFormat; 8] = [
+        TimeFormat::Time,
+        TimeFormat::TimeSeconds,
+        TimeFormat::DateShort,
+        TimeFormat::Date,
+        TimeFormat::DatetimeShort,
+        TimeFormat::Datetime,
+        TimeFormat::Full,
+        TimeFormat::Relative,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            TimeFormat::Time => "time",
+            TimeFormat::TimeSeconds => "time-seconds",
+            TimeFormat::DateShort => "date-short",
+            TimeFormat::Date => "date",
+            TimeFormat::DatetimeShort => "datetime-short",
+            TimeFormat::Datetime => "datetime",
+            TimeFormat::Full => "full",
+            TimeFormat::Relative => "relative",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<TimeFormat> {
+        TimeFormat::ALL.into_iter().find(|format| format.as_str() == value)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
     Paragraph,
@@ -65,9 +113,10 @@ pub enum Kind {
     Highlight,
     Spoiler,
     InlineCode { value: String },
+    Math { value: String },
     Break,
     Link { url: String, source: String, title: Option<String> },
-    Datetime { datetime: Option<String>, unix: i64 },
+    Datetime { datetime: Option<String>, unix: i64, format: Option<TimeFormat> },
     MediaReference { id: String },
     MediaGroup { ids: Vec<String>, layout: Layout },
 }
@@ -249,7 +298,7 @@ impl Document {
     }
 
     pub fn point(&self, offset: u32) -> Point {
-        self.lines.point(offset)
+        self.lines.point(offset.min(self.lines.len()))
     }
 
     pub fn end(&self) -> Point {
@@ -257,7 +306,8 @@ impl Document {
     }
 
     pub fn source(&self, range: Range) -> &str {
-        let (start, end) = (self.lines.byte(range.start), self.lines.byte(range.end));
+        let end = range.end.min(self.lines.len());
+        let (start, end) = (self.lines.byte(range.start.min(end)), self.lines.byte(end));
         match &self.input {
             Some(input) => &input[self.lines.input_byte(start)..self.lines.input_byte(end)],
             None => &self.text[start..end],
@@ -265,11 +315,22 @@ impl Document {
     }
 }
 
+pub(crate) fn oversized(input: &[u8]) -> Option<Error> {
+    source::oversized(input).map(too_large)
+}
+
+pub(crate) fn too_large((start, end): (u32, u32)) -> Error {
+    Error {
+        code: Code::MarkdownTooComplex,
+        range: Some(Range { start, end }),
+        details: Details::Limit(source::Limit::DocumentUnits),
+    }
+}
+
 pub fn parse(input: &str, media: &[Media]) -> Result<Document, Error> {
     let error = |code, range, details| Error { code, range, details };
-    if let Some((start, end)) = source::oversized(input) {
-        let limit = Details::Limit(source::Limit::DocumentUnits);
-        return Err(error(Code::MarkdownTooComplex, Some(Range { start, end }), limit));
+    if let Some(oversized) = oversized(input.as_bytes()) {
+        return Err(oversized);
     }
     let normalized = source::normalize(input).map_err(|invalid| {
         let range = Range { start: invalid.start, end: invalid.start + 1 };
@@ -288,4 +349,14 @@ pub fn parse(input: &str, media: &[Media]) -> Result<Document, Error> {
     let (children, diagnostics) = convert::convert(&root, &prefixes, &text, &lines, media);
     let markers = markers::collect(&events, text.as_bytes(), &lines);
     Ok(Document { text, input, lines, children, markers, diagnostics })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_id_pattern_quantifier_follows_the_byte_limit() {
+        assert!(MEDIA_ID_PATTERN.ends_with(&format!("]{{0,{}}}$", MEDIA_ID_MAX_BYTES - 1)), "{MEDIA_ID_PATTERN}");
+    }
 }

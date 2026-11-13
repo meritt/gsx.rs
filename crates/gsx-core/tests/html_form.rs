@@ -27,6 +27,58 @@ fn telegram_closes_entities_around_inline_code() {
 }
 
 #[test]
+fn telegram_time_applies_the_date_entity_bounds() {
+    let long = "a".repeat(128);
+    let cases = [
+        ("::time[x]{unix=\"0\"}".to_owned(), "<tg-time unix=\"0\">x</tg-time>".to_owned(), None),
+        ("::time[x]{unix=\"2147483647\"}".to_owned(), "<tg-time unix=\"2147483647\">x</tg-time>".to_owned(), None),
+        ("::time[x]{unix=\"-1\"}".to_owned(), "x".to_owned(), Some("datetime_out_of_range")),
+        ("::time[x]{unix=\"2147483648\"}".to_owned(), "x".to_owned(), Some("datetime_out_of_range")),
+        ("::time[x]{unix=\"9007199254740991\"}".to_owned(), "x".to_owned(), Some("datetime_out_of_range")),
+        (
+            format!("::time[{}]{{unix=\"1\"}}", &long[1..]),
+            format!("<tg-time unix=\"1\">{}</tg-time>", &long[1..]),
+            None,
+        ),
+        (format!("::time[{long}]{{unix=\"1\"}}"), long.clone(), Some("datetime_label_too_long")),
+    ];
+    for (name, paragraph) in [("telegram-html", false), ("telegram-html-rich", true)] {
+        for (markdown, expected, reason) in &cases {
+            let projection = run(name, markdown);
+            let expected = if paragraph { format!("<p>{expected}</p>") } else { expected.clone() };
+            assert_eq!(text(&projection), expected, "{name}: {markdown}");
+            let expected: Vec<_> = reason.iter().map(|reason| ("datetime", "unwrapped", *reason)).collect();
+            assert_eq!(changes(&projection), expected, "{name}: {markdown}");
+        }
+    }
+}
+
+#[test]
+fn code_language_follows_the_markdown_language_rule() {
+    let hostile = "```\"><script>alert(1)</script>&amp;\u{202E}\nx\n```";
+    let telegram = run("telegram-html", hostile);
+    assert_eq!(text(&telegram), "<pre>x</pre>");
+    assert_eq!(changes(&telegram), [("code_block", "omitted", "code_block_info_omitted")]);
+    let rich = run("telegram-html-rich", hostile);
+    assert_eq!(text(&rich), "<pre>x</pre>");
+    assert_eq!(changes(&rich), [("code_block", "omitted", "code_block_info_omitted")]);
+    let kept = run("telegram-html", "```c++\nx\n```");
+    assert_eq!(text(&kept), "<pre><code class=\"language-c++\">x</code></pre>");
+    assert_eq!(changes(&kept), []);
+    let facts = Facts { entities_allowed: true, ..Facts::default() };
+    let entities = target("telegram-entities").unwrap();
+    for (markdown, value, reasons) in
+        [(hostile, None, vec!["code_block_info_omitted"]), ("```c++\nx\n```", Some("c++"), vec![])]
+    {
+        let projection = project(&parse(markdown, &[]).unwrap(), entities, &facts);
+        let field = projection.field(FieldName::Text).unwrap();
+        assert_eq!(field.text, "x");
+        assert_eq!(field.entities.iter().map(|entity| entity.value.as_deref()).collect::<Vec<_>>(), [value]);
+        assert_eq!(projection.changes.iter().map(|change| change.reason).collect::<Vec<_>>(), reasons);
+    }
+}
+
+#[test]
 fn telegram_drops_entities_left_empty_by_a_code_split() {
     let telegram = run("telegram-html", "[`b`](https://example.com)");
     assert_eq!(text(&telegram), "<code>b</code>");
@@ -72,7 +124,7 @@ fn rich_blocks_keep_native_structure() {
     let rich = run("telegram-html-rich", "# t\npara\n\n- [x] a\n\n| h | i |\n| :- | -: |\n| 1 | 2 |");
     assert_eq!(
         text(&rich),
-        "<p><b>t</b><br>para</p><br><br><ul><li><input type=\"checkbox\" checked><p>a</p></li></ul><br><br>\
+        "<p><b>t</b></p><p>para</p><ul><li><input type=\"checkbox\" checked><p>a</p></li></ul>\
          <table><tr><th align=\"left\">h</th><th align=\"right\">i</th></tr>\
          <tr><td align=\"left\">1</td><td align=\"right\">2</td></tr></table>"
     );
@@ -150,8 +202,8 @@ fn rich_places_media_inline_with_unreferenced_items_first() {
     let projection = rich("a\n\n::media{id=\"v\"}\n\nb\n\n::media{id=\"a\"}", &items);
     assert_eq!(
         text(&projection),
-        "<img src=\"media:p\"/><br><video src=\"media:g\"></video><br><p>a</p><br><br>\
-         <video src=\"media:v\" tg-spoiler></video><br><br><p>b</p><br><br><audio src=\"media:a\"></audio>"
+        "<img src=\"media:p\"/><video src=\"media:g\"></video><p>a</p>\
+         <video src=\"media:v\" tg-spoiler></video><p>b</p><audio src=\"media:a\"></audio>"
     );
     assert_eq!(changes(&projection), [("media", "omitted", "media_spoiler_omitted")]);
     assert_eq!(text(&rich("", &[image("p", None)])), "<img src=\"media:p\"/>");
@@ -165,7 +217,7 @@ fn rich_groups_supported_kinds_and_splits_the_rest() {
     assert_eq!(text(&collage), "<tg-collage><img src=\"media:p\"/><video src=\"media:v\"></video></tg-collage>");
     assert_eq!(changes(&collage), []);
     let slideshow = rich("::media{ids=\"p,v\" layout=\"slideshow\"}", &items);
-    assert_eq!(text(&slideshow), "<img src=\"media:p\"/><br><video src=\"media:v\"></video>");
+    assert_eq!(text(&slideshow), "<img src=\"media:p\"/><video src=\"media:v\"></video>");
     assert_eq!(changes(&slideshow), [("media", "approximated", "media_group_split")]);
 }
 
@@ -183,7 +235,7 @@ fn rich_media_count_beyond_fifty_is_omitted() {
 fn rich_missing_media_drop_their_anchor() {
     const MISSING: (&str, &str, &str) = ("media", "omitted", "media_missing");
     let middle = rich("a\n\n::media{id=\"x\"}\n\nb", &[]);
-    assert_eq!(text(&middle), "<p>a<br><br>b</p>");
+    assert_eq!(text(&middle), "<p>a</p><p>b</p>");
     assert_eq!(changes(&middle), [MISSING]);
     assert_eq!(text(&rich("::media{id=\"x\"}\n\na", &[])), "<p>a</p>");
     assert_eq!(text(&rich("a\n\n::media{id=\"x\"}", &[])), "<p>a</p>");
@@ -191,7 +243,7 @@ fn rich_missing_media_drop_their_anchor() {
     assert_eq!(text(&singleton), "<img src=\"media:p\"/>");
     assert_eq!(changes(&singleton), [MISSING]);
     let empty = rich("a\n\n::media{ids=\"x,y\" layout=\"collage\"}\n\nb", &[]);
-    assert_eq!(text(&empty), "<p>a<br><br>b</p>");
+    assert_eq!(text(&empty), "<p>a</p><p>b</p>");
     assert_eq!(changes(&empty), [MISSING]);
     let all = rich("::media{id=\"x\"}\n\n::media{id=\"y\"}", &[]);
     assert_eq!(text(&all), "");
@@ -220,7 +272,7 @@ fn rich_reports_the_spoiler_it_cannot_put_on_audio() {
         MediaFact { spoiler: true, ..image("p", None) },
     ];
     let projection = rich("::media{id=\"a\"}\n\n::media{id=\"p\"}", &items);
-    assert_eq!(text(&projection), "<audio src=\"media:a\"></audio><br><br><img src=\"media:p\" tg-spoiler/>");
+    assert_eq!(text(&projection), "<audio src=\"media:a\"></audio><img src=\"media:p\" tg-spoiler/>");
     let spoilers: Vec<_> = projection
         .changes
         .iter()
@@ -232,7 +284,7 @@ fn rich_reports_the_spoiler_it_cannot_put_on_audio() {
 
 #[test]
 fn rich_alts_share_the_text_budget() {
-    let body = "x".repeat(32_768 - 6 - 7 - 1);
+    let body = "x".repeat(32_768 - 2 - 7 - 1);
     let items = [image("p", Some("abc def")), image("q", Some("long alt text")), image("r", Some("z"))];
     let projection =
         rich(&format!("{body}\n\n::media{{id=\"p\"}}\n\n::media{{id=\"q\"}}\n\n::media{{id=\"r\"}}"), &items);
@@ -255,12 +307,29 @@ fn rich_keeps_captions_before_the_cut() {
     let markdown = format!("Intro\n\n::media{{id=\"a\"}}\n\n{}\n\n::media{{id=\"b\"}}", "word ".repeat(7000));
     let projection = rich(&markdown, &[image("a", Some("Described")), image("b", Some("Later"))]);
     assert!(text(&projection).contains("<figure><img src=\"media:a\"/><figcaption>Described</figcaption></figure>"));
-    assert_eq!(projection.measurements[0].value, 32_768);
+    assert!((32_768 - "word ".len()..=32_768).contains(&projection.measurements[0].value));
     assert_eq!(projection.items[0].alt.as_deref(), Some("Described"));
     assert_ne!(projection.items[1].alt.as_deref(), Some("Later"));
     assert!(changes(&projection).contains(&("text", "approximated", "text_truncated")));
     let slots: Vec<_> = projection.changes.iter().filter_map(|change| change.slot).collect();
     assert_eq!(slots, [Slot { block: None, item: 1 }]);
+}
+
+#[test]
+fn rich_counts_block_breaks_between_figures_before_keeping_a_caption_whole() {
+    let ids: Vec<String> = (0..30).map(|index| format!("m{index}")).collect();
+    let mut figures: Vec<String> =
+        ids.iter().enumerate().map(|(index, id)| format!("p{index}\n\n::media{{id=\"{id}\"}}\n\n")).collect();
+    figures.push("word ".repeat(7000));
+    let markdown = figures.concat();
+    let before = (0..30).map(|index| format!("p{index}").len()).sum::<usize>() + 29;
+    let alt = "a".repeat(32_768 + 10 - 1 - before);
+    let items: Vec<_> =
+        ids.iter().enumerate().map(|(index, id)| image(id, (index == 29).then_some(alt.as_str()))).collect();
+    let projection = rich(&markdown, &items);
+    assert!(text(&projection).matches("word").count() > 6000);
+    assert!(projection.measurements[0].value <= 32_768);
+    assert_ne!(projection.items[29].alt.as_deref(), Some(alt.as_str()));
 }
 
 #[test]

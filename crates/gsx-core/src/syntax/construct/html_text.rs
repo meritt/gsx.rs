@@ -10,10 +10,10 @@ const DECLARATION: usize = 2;
 const INSTRUCTION: usize = 3;
 
 fn scan(tokenizer: &mut Tokenizer, kind: usize, next: StateName) -> State {
-    if tokenizer.point.index >= tokenizer.tokenize_state.html_text_unclosed[kind] {
+    if tokenizer.point.index as usize >= tokenizer.tokenize_state.html_text_unclosed[kind] {
         State::Nok
     } else {
-        tokenizer.tokenize_state.scan_start = tokenizer.point.index;
+        tokenizer.tokenize_state.scan_start = tokenizer.point.index as usize;
         State::Next(next)
     }
 }

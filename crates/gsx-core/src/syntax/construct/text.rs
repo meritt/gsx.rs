@@ -17,7 +17,7 @@ pub fn start(tokenizer: &mut Tokenizer) -> State {
 
 pub fn before(tokenizer: &mut Tokenizer) -> State {
     if tokenizer.current.is_some()
-        && tokenizer.parse_state.exceeded.get().is_some_and(|exceeded| exceeded.start <= tokenizer.point.index)
+        && tokenizer.parse_state.exceeded.get().is_some_and(|exceeded| exceeded.start <= tokenizer.point.index as usize)
     {
         tokenizer.tokenize_state.markers = &NO_MARKERS;
         return State::Retry(StateName::TextBeforeData);
@@ -114,9 +114,9 @@ pub fn unopened_label_ends(tokenizer: &mut Tokenizer) -> State {
     let data = |byte| byte == b']' || !MARKERS.contains(byte);
     match tokenizer.current {
         Some(byte) if byte != b'\n' && data(byte) => {
-            let start = tokenizer.point.index;
+            let start = tokenizer.point.index as usize;
             tokenizer.consume_while(data);
-            let run = &tokenizer.parse_state.bytes[start..tokenizer.point.index];
+            let run = &tokenizer.parse_state.bytes[start..tokenizer.point.index as usize];
             for (offset, _) in run.iter().enumerate().filter(|(_, byte)| **byte == b']') {
                 let index = start + offset;
                 tokenizer.spend(Limit::BlockLabelEnds, index, |_| index + 1);
