@@ -4,8 +4,8 @@ import Foundation
 import PackageDescription
 
 let release = (
-    url: "https://github.com/meritt/gsx.rs/releases/download/v0.3.1/gsx-v0.3.1-xcframework.zip",
-    checksum: "841aa0097ed183414e9affa5b26c1a003508a269c6a0244954675bcd3f5e22fc"
+    url: "https://github.com/meritt/gsx.rs/releases/download/v0.3.2/gsx-v0.3.2-xcframework.zip",
+    checksum: "df8ebec34d65c020eeaf8f3356cb6114bd1e8dfcbb5209db30f0b53c855a98ac"
 )
 
 let local = "packages/swift/GSXFFI.xcframework"
