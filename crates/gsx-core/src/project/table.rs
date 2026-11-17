@@ -258,8 +258,8 @@ impl EntityForm {
     }
 }
 
-const RICH_BLOCKS: [&str; 14] =
-    ["p", "pre", "ul", "ol", "li", "blockquote", "table", "tr", "hr", "img", "video", "audio", "figure", "figcaption"];
+const RICH_BLOCKS: [&str; 13] =
+    ["pre", "ul", "ol", "li", "blockquote", "table", "tr", "hr", "img", "video", "audio", "figure", "figcaption"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HtmlBlocks {
