@@ -13,7 +13,7 @@ The `gsx/1` markup for posts and messages. One Rust core parses, serializes and 
 SwiftPM dependency:
 
 ```swift
-.package(url: "https://github.com/meritt/gsx.rs", exact: "0.3.0")
+.package(url: "https://github.com/meritt/gsx.rs", exact: "0.3.2")
 ```
 
 Package platforms and loading: [bindings](docs/decisions/bindings.md#packages).
@@ -176,7 +176,7 @@ Release stream &lt;tg-time unix=&quot;1794409200&quot;&gt;11 November, 18:00 TRT
 <tbody><tr>
 <td width="50%" valign="top">
 <p><strong>text</strong></p>
-<p><code>&lt;p&gt;&lt;b&gt;gsx 0.2 is out&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;Native projections&lt;/b&gt; for 19 targets, from Telegram to TikTok. Write &lt;i&gt;once&lt;/i&gt;, publish everywhere.&lt;br&gt;&lt;br&gt;Read the &lt;u&gt;&lt;a href=&quot;https://example.com/changelog&quot;&gt;changelog&lt;/a&gt;&lt;/u&gt; or run &lt;code&gt;pnpm add @meritt/gsx-wasm&lt;/code&gt;.&lt;/p&gt;&lt;br&gt;&lt;br&gt;&lt;tg-slideshow&gt;&lt;img src=&quot;media:banner&quot;/&gt;&lt;img src=&quot;media:preview&quot;/&gt;&lt;figcaption&gt;1. gsx 0.2: one source, native projections&lt;br&gt;2. The same post adapted for Telegram and Discord&lt;/figcaption&gt;&lt;/tg-slideshow&gt;&lt;br&gt;&lt;br&gt;&lt;blockquote&gt;&lt;p&gt;Keep the message. Adapt the formatting.&lt;/p&gt;&lt;/blockquote&gt;&lt;br&gt;&lt;br&gt;&lt;ul&gt;&lt;li&gt;&lt;p&gt;&lt;mark&gt;One Rust core&lt;/mark&gt; across all bindings&lt;/p&gt;&lt;/li&gt;&lt;li&gt;&lt;p&gt;&lt;s&gt;Per-platform markup&lt;/s&gt; one GSX document&lt;/p&gt;&lt;/li&gt;&lt;li&gt;&lt;p&gt;&lt;u&gt;Explicit limits&lt;/u&gt; and transformation reports&lt;/p&gt;&lt;/li&gt;&lt;li&gt;&lt;p&gt;&lt;tg-spoiler&gt;A surprise&lt;/tg-spoiler&gt; for Discord users&lt;/p&gt;&lt;/li&gt;&lt;/ul&gt;&lt;br&gt;&lt;br&gt;&lt;p&gt;Release stream &lt;tg-time unix=&quot;1794409200&quot;&gt;11 November, 18:00 TRT&lt;/tg-time&gt;. Thanks @meritt! #release #rust&lt;/p&gt;</code></p>
+<p><code>&lt;b&gt;gsx 0.2 is out&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;Native projections&lt;/b&gt; for 19 targets, from Telegram to TikTok. Write &lt;i&gt;once&lt;/i&gt;, publish everywhere.&lt;br&gt;&lt;br&gt;Read the &lt;u&gt;&lt;a href=&quot;https://example.com/changelog&quot;&gt;changelog&lt;/a&gt;&lt;/u&gt; or run &lt;code&gt;pnpm add @meritt/gsx-wasm&lt;/code&gt;.&lt;tg-slideshow&gt;&lt;img src=&quot;media:banner&quot;/&gt;&lt;img src=&quot;media:preview&quot;/&gt;&lt;figcaption&gt;1. gsx 0.2: one source, native projections&lt;br&gt;2. The same post adapted for Telegram and Discord&lt;/figcaption&gt;&lt;/tg-slideshow&gt;&lt;blockquote&gt;Keep the message. Adapt the formatting.&lt;/blockquote&gt;&lt;ul&gt;&lt;li&gt;&lt;mark&gt;One Rust core&lt;/mark&gt; across all bindings&lt;/li&gt;&lt;li&gt;&lt;s&gt;Per-platform markup&lt;/s&gt; one GSX document&lt;/li&gt;&lt;li&gt;&lt;u&gt;Explicit limits&lt;/u&gt; and transformation reports&lt;/li&gt;&lt;li&gt;&lt;tg-spoiler&gt;A surprise&lt;/tg-spoiler&gt; for Discord users&lt;/li&gt;&lt;/ul&gt;&lt;br&gt;&lt;br&gt;Release stream &lt;tg-time unix=&quot;1794409200&quot;&gt;11 November, 18:00 TRT&lt;/tg-time&gt;. Thanks @meritt! #release #rust</code></p>
 <p><strong>items</strong></p>
 <p><code>[<br>
 &nbsp;&nbsp;{<br>

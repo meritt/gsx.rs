@@ -46,29 +46,51 @@ fn text_blocks_have_no_line_breaks_at_their_edges() {
 }
 
 #[test]
-fn rich_html_writes_each_paragraph_as_its_own_block() {
+fn rich_html_separates_paragraphs_with_line_breaks() {
     let rich = |markdown: &str, items: &[MediaFact]| run("telegram-html-rich", markdown, items).fields[0].text.clone();
-    assert_eq!(rich("One.\n\nTwo.\n\nThree.", &[]), "<p>One.</p><p>Two.</p><p>Three.</p>");
-    assert_eq!(rich("Line one\nline two.\n\nNext.", &[]), "<p>Line one<br>line two.</p><p>Next.</p>");
+    assert_eq!(rich("One.\n\nTwo.\n\nThree.", &[]), "One.<br><br>Two.<br><br>Three.");
+    assert_eq!(rich("Line one\nline two.\n\nNext.", &[]), "Line one<br>line two.<br><br>Next.");
     assert_eq!(
         rich("Before.\n\n- one\n- two\n\nAfter.", &[]),
-        "<p>Before.</p><ul><li><p>one</p></li><li><p>two</p></li></ul><p>After.</p>"
+        "Before.<ul><li>one</li><li>two</li></ul><br><br>After."
     );
-    assert_eq!(rich("## Heading\nText.", &[]), "<p><b>Heading</b></p><p>Text.</p>");
+    assert_eq!(rich("1. one\n2. two\n## After", &[]), "<ol start=\"1\"><li>one</li><li>two</li></ol><br><b>After</b>");
     assert_eq!(
-        rich("Before.\n\n> Quote.\n\n```\ncode\n```\n\n---\n\nAfter.", &[]),
-        "<p>Before.</p><blockquote><p>Quote.</p></blockquote><pre>code</pre><hr/><p>After.</p>"
+        rich("1. one\n\n   two\n2. three\n   - four\n\n   five", &[]),
+        "<ol start=\"1\"><li>one<br><br>two</li><li>three<ul><li>four</li></ul><br><br>five</li></ol>"
     );
+    assert_eq!(rich("- one\n- two\n\n- three", &[]), "<ul><li>one</li><li>two</li><li>three</li></ul>");
+    assert_eq!(rich("## Heading\nText.", &[]), "<b>Heading</b><br>Text.");
+    assert_eq!(rich("## Heading\n\nText.", &[]), "<b>Heading</b><br><br>Text.");
     assert_eq!(
-        rich("Before.\n\n::media{id=\"p\"}\n\nAfter.", &[image("p")]),
-        "<p>Before.</p><img src=\"media:p\"/><p>After.</p>"
+        rich("Before.\n\n> Quote.\n>\n> More.\n\n```\ncode\n```\n\n---\n\nAfter.", &[]),
+        "Before.<blockquote>Quote.<br><br>More.</blockquote><pre>code</pre><hr/>After."
     );
+    assert_eq!(rich("Before.\n\n::media{id=\"p\"}\n\nAfter.", &[image("p")]), "Before.<img src=\"media:p\"/>After.");
+    assert_eq!(rich("a\n\n::media{id=\"x\"}\n\nb", &[]), "a<br><br>b");
     assert_eq!(
         rich(
             "::media{ids=\"p,q\" layout=\"slideshow\"}",
             &[image("p"), MediaFact { format: Format::Video, ..image("q") }]
         ),
         "<img src=\"media:p\"/><video src=\"media:q\"></video>"
+    );
+}
+
+#[test]
+fn rich_html_writes_at_most_two_line_breaks_in_a_row() {
+    const COLLAPSED: (Class, Feature, &str) = (Class::Approximated, Feature::Text, "blank_lines_collapsed");
+    let gaps = run("telegram-html-rich", "a\n\n\n\nb\n\n- c\n\n\n\nd", &[]);
+    assert_eq!(gaps.fields[0].text, "a<br><br>b<ul><li>c</li></ul><br><br>d");
+    assert_eq!(reasons(&gaps), [COLLAPSED, COLLAPSED]);
+    let breaks = run("telegram-html-rich", "a\\\n\\\n\\\n\\\nb\\\n\\\nc", &[]);
+    assert_eq!(breaks.fields[0].text, "a<br><br>b<br><br>c");
+    assert_eq!(reasons(&breaks), [COLLAPSED]);
+    let alt = MediaFact { alt: Some("x\n\n\n\ny\n\nz"), ..image("p") };
+    let caption = run("telegram-html-rich", "::media{id=\"p\"}", &[alt]);
+    assert_eq!(
+        caption.fields[0].text,
+        "<figure><img src=\"media:p\"/><figcaption>x<br><br>y<br><br>z</figcaption></figure>"
     );
 }
 

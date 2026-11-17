@@ -42,11 +42,10 @@ fn telegram_time_applies_the_date_entity_bounds() {
         ),
         (format!("::time[{long}]{{unix=\"1\"}}"), long.clone(), Some("datetime_label_too_long")),
     ];
-    for (name, paragraph) in [("telegram-html", false), ("telegram-html-rich", true)] {
+    for name in ["telegram-html", "telegram-html-rich"] {
         for (markdown, expected, reason) in &cases {
             let projection = run(name, markdown);
-            let expected = if paragraph { format!("<p>{expected}</p>") } else { expected.clone() };
-            assert_eq!(text(&projection), expected, "{name}: {markdown}");
+            assert_eq!(text(&projection), *expected, "{name}: {markdown}");
             let expected: Vec<_> = reason.iter().map(|reason| ("datetime", "unwrapped", *reason)).collect();
             assert_eq!(changes(&projection), expected, "{name}: {markdown}");
         }
@@ -124,7 +123,7 @@ fn rich_blocks_keep_native_structure() {
     let rich = run("telegram-html-rich", "# t\npara\n\n- [x] a\n\n| h | i |\n| :- | -: |\n| 1 | 2 |");
     assert_eq!(
         text(&rich),
-        "<p><b>t</b></p><p>para</p><ul><li><input type=\"checkbox\" checked><p>a</p></li></ul>\
+        "<b>t</b><br>para<ul><li><input type=\"checkbox\" checked>a</li></ul>\
          <table><tr><th align=\"left\">h</th><th align=\"right\">i</th></tr>\
          <tr><td align=\"left\">1</td><td align=\"right\">2</td></tr></table>"
     );
@@ -134,7 +133,7 @@ fn rich_blocks_keep_native_structure() {
 #[test]
 fn rich_measures_breaks_as_one_code_point() {
     let rich = run("telegram-html-rich", "a &amp; b\\\nc");
-    assert_eq!(text(&rich), "<p>a &amp; b<br>c</p>");
+    assert_eq!(text(&rich), "a &amp; b<br>c");
     assert_eq!(rich.measurements[0].value, 7);
 }
 
@@ -202,8 +201,8 @@ fn rich_places_media_inline_with_unreferenced_items_first() {
     let projection = rich("a\n\n::media{id=\"v\"}\n\nb\n\n::media{id=\"a\"}", &items);
     assert_eq!(
         text(&projection),
-        "<img src=\"media:p\"/><video src=\"media:g\"></video><p>a</p>\
-         <video src=\"media:v\" tg-spoiler></video><p>b</p><audio src=\"media:a\"></audio>"
+        "<img src=\"media:p\"/><video src=\"media:g\"></video>a\
+         <video src=\"media:v\" tg-spoiler></video>b<audio src=\"media:a\"></audio>"
     );
     assert_eq!(changes(&projection), [("media", "omitted", "media_spoiler_omitted")]);
     assert_eq!(text(&rich("", &[image("p", None)])), "<img src=\"media:p\"/>");
@@ -235,15 +234,15 @@ fn rich_media_count_beyond_fifty_is_omitted() {
 fn rich_missing_media_drop_their_anchor() {
     const MISSING: (&str, &str, &str) = ("media", "omitted", "media_missing");
     let middle = rich("a\n\n::media{id=\"x\"}\n\nb", &[]);
-    assert_eq!(text(&middle), "<p>a</p><p>b</p>");
+    assert_eq!(text(&middle), "a<br><br>b");
     assert_eq!(changes(&middle), [MISSING]);
-    assert_eq!(text(&rich("::media{id=\"x\"}\n\na", &[])), "<p>a</p>");
-    assert_eq!(text(&rich("a\n\n::media{id=\"x\"}", &[])), "<p>a</p>");
+    assert_eq!(text(&rich("::media{id=\"x\"}\n\na", &[])), "a");
+    assert_eq!(text(&rich("a\n\n::media{id=\"x\"}", &[])), "a");
     let singleton = rich("::media{ids=\"p,x\" layout=\"collage\"}", &[image("p", None)]);
     assert_eq!(text(&singleton), "<img src=\"media:p\"/>");
     assert_eq!(changes(&singleton), [MISSING]);
     let empty = rich("a\n\n::media{ids=\"x,y\" layout=\"collage\"}\n\nb", &[]);
-    assert_eq!(text(&empty), "<p>a</p><p>b</p>");
+    assert_eq!(text(&empty), "a<br><br>b");
     assert_eq!(changes(&empty), [MISSING]);
     let all = rich("::media{id=\"x\"}\n\n::media{id=\"y\"}", &[]);
     assert_eq!(text(&all), "");

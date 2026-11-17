@@ -120,10 +120,8 @@ fn emitted_changes_are_declared_by_the_table() {
     }
 }
 
-const CLOSED: [&str; 10] =
-    ["p", "ul", "ol", "blockquote", "pre", "table", "figure", "tg-slideshow", "tg-collage", "details"];
-const OPENED: [&str; 14] = [
-    "p",
+const CLOSED: [&str; 7] = ["blockquote", "pre", "table", "figure", "tg-slideshow", "tg-collage", "details"];
+const OPENED: [&str; 13] = [
     "ul",
     "ol",
     "blockquote",
@@ -142,7 +140,20 @@ const OPENED: [&str; 14] = [
 fn breaks_between_blocks(html: &str) -> Option<String> {
     let closed = CLOSED.iter().map(|tag| format!("</{tag}><br>"));
     let opened = OPENED.iter().map(|tag| format!("<br><{tag}"));
-    let edges = ["/><br>", "<p><br>", "<br></p>", "<p></p>"].map(str::to_owned);
+    let edges = [
+        "/><br>",
+        "<br><br><br>",
+        "<li><br>",
+        "<br></li>",
+        "<blockquote><br>",
+        "<br></blockquote>",
+        "<br></td>",
+        "<br></th>",
+    ]
+    .map(str::to_owned);
+    if html.starts_with("<br>") || html.ends_with("<br>") {
+        return Some("<br> at a field edge".to_owned());
+    }
     closed.chain(opened).chain(edges).find(|pattern| html.contains(pattern.as_str()))
 }
 

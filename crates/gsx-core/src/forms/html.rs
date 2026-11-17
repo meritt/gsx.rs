@@ -633,7 +633,8 @@ impl Html {
             if entries.is_empty() {
                 continue;
             }
-            let caption = format!("<figcaption>{}</figcaption>", escape(&entries.join("\n")).replace('\n', "<br>"));
+            let lines = escape(&entries.join("\n")).replace('\n', BREAK);
+            let caption = format!("<figcaption>{}</figcaption>", collapse_breaks(&lines));
             if figure.group {
                 inserts.push((figure.end, caption));
             } else {
@@ -662,6 +663,7 @@ impl Html {
     fn rich(&mut self, context: &mut Context, nodes: &[Node], level: usize) {
         let mut after = None;
         let mut carry = 0;
+        let mut previous = Previous::Block;
         if level == 1 {
             let placed_ids = references(nodes);
             let unplaced: Vec<usize> = (0..self.media.len().min(self.limit()))
@@ -682,7 +684,7 @@ impl Html {
                 carry = gap;
                 continue;
             }
-            context.gap(after, node, gap);
+            let gap = context.gap(after, node, gap);
             carry = 0;
             after = Some(node.range.end);
             if let Some(indices) = indices {
@@ -690,13 +692,14 @@ impl Html {
                     context.report_when(Feature::Media, Some(node.range), Some(When::Cut));
                 }
                 self.place(context, node, &indices, level);
-            } else {
-                self.rich_block(context, node, level);
+                previous = Previous::Block;
+            } else if let Some(next) = self.rich_block(context, node, level, previous.separator(gap)) {
+                previous = next;
             }
         }
     }
 
-    fn paragraph(&mut self, context: &mut Context, node: &Node, level: usize) {
+    fn paragraph(&mut self, context: &mut Context, node: &Node, level: usize, separator: &str) -> bool {
         let heading = matches!(node.kind, Kind::Heading { .. });
         let children = match node.kind {
             Kind::Paragraph | Kind::Heading { .. } => &node.children[..],
@@ -705,35 +708,34 @@ impl Html {
         let decorated = self.form.tag(Feature::Underline).is_some();
         let depth = level + usize::from(heading) + formatting(children, decorated);
         let start = context.writer().mark();
-        context.writer().raw("<p>");
+        context.writer().raw(separator);
+        let body = context.writer().mark();
         if heading {
             context.report(Feature::Heading, node.range);
             self.heading(context, node);
         } else {
             self.inline(context, children);
         }
-        context.writer().raw("</p>");
         let form = context.target.form;
-        let written = context.writer().since(start);
-        let inner = &written["<p>".len()..written.len() - "</p>".len()];
-        let empty = form.visible_blank(inner, |part| part.chars().all(blank));
-        let lead = inner.len() - inner.trim_start_matches("<br>").len();
-        let trail = inner.len() - inner.trim_end_matches("<br>").len();
-        if empty {
-            return context.writer().edit(|text| text.truncate(start));
+        let inner = context.writer().since(body);
+        if form.visible_blank(inner, |part| part.chars().all(blank)) {
+            context.writer().edit(|text| text.truncate(start));
+            return false;
         }
+        let trimmed = inner.trim_start_matches(BREAK).trim_end_matches(BREAK);
+        let excess = trimmed.contains(EXCESS);
+        let kept = (excess || trimmed.len() < inner.len()).then(|| collapse_breaks(trimmed));
         self.count(context, node.range, depth);
-        if lead + trail > 0 {
-            let body = start + "<p>".len();
-            context.writer().edit(|text| {
-                let end = text.len() - "</p>".len();
-                text.replace_range(end - trail..end, "");
-                text.replace_range(body..body + lead, "");
-            });
+        if excess {
+            context.report_when(Feature::Text, Some(node.range), Some(When::BlankLines));
         }
+        if let Some(kept) = kept {
+            context.writer().edit(|text| text.replace_range(body.., &kept));
+        }
+        true
     }
 
-    fn rich_block(&mut self, context: &mut Context, node: &Node, level: usize) {
+    fn rich_block(&mut self, context: &mut Context, node: &Node, level: usize, separator: &str) -> Option<Previous> {
         match &node.kind {
             Kind::ThematicBreak => {
                 self.count(context, node.range, level);
@@ -772,6 +774,7 @@ impl Html {
                     context.writer().raw("</li>");
                 }
                 context.writer().raw(if *ordered { "</ol>" } else { "</ul>" });
+                return Some(Previous::Flow);
             }
             Kind::Table { align } => {
                 self.count(context, node.range, level);
@@ -810,7 +813,40 @@ impl Html {
                 }
                 context.writer().raw("</table>");
             }
-            _ => self.paragraph(context, node, level),
+            _ => return self.paragraph(context, node, level, separator).then_some(Previous::Flow),
+        }
+        Some(Previous::Block)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Previous {
+    Block,
+    Flow,
+}
+
+impl Previous {
+    fn separator(self, gap: u32) -> &'static str {
+        match self {
+            Previous::Block => "",
+            Previous::Flow if gap > 1 => GAP,
+            Previous::Flow => BREAK,
         }
     }
+}
+
+const BREAK: &str = "<br>";
+const GAP: &str = "<br><br>";
+const EXCESS: &str = "<br><br><br>";
+
+fn collapse_breaks(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(EXCESS) {
+        out.push_str(&rest[..at]);
+        out.push_str(GAP);
+        rest = rest[at..].trim_start_matches(BREAK);
+    }
+    out.push_str(rest);
+    out
 }
