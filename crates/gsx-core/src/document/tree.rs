@@ -280,7 +280,7 @@ impl<'a> Builder<'a> {
         } else {
             b'&'
         };
-        let value = self.find(index, exit, Name::CharacterReferenceValue).map(|i| self.text(i)).unwrap_or_default();
+        let value = self.find(index, exit, Name::CharacterReferenceValue).map_or_default(|i| self.text(i));
         syntax::decode_character_reference(&value, marker, true).unwrap_or_else(|| self.text(index))
     }
 
@@ -573,7 +573,7 @@ impl<'a> Builder<'a> {
             Name::GsxDirectiveText => {
                 let mut n = node(Kind::TextDirective);
                 n.extra_mut().name =
-                    self.find(index, exit, Name::GsxDirectiveTextIdentifier).map(|i| self.text(i)).unwrap_or_default();
+                    self.find(index, exit, Name::GsxDirectiveTextIdentifier).map_or_default(|i| self.text(i));
                 if let Some(label) = self.find(index, exit, Name::GsxDirectiveTextLabelString) {
                     n.children = self.children(label + 1, self.exits[label], true);
                     self.keep_label_space(&mut n.children, self.start(label), self.end(label));
