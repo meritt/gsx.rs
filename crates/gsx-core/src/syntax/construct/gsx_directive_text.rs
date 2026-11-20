@@ -10,7 +10,7 @@ fn is_name_start(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte >= 0x80
 }
 
-fn is_name_continue(byte: u8) -> bool {
+pub(crate) fn is_name_continue(byte: u8) -> bool {
     is_name_start(byte) || matches!(byte, b'-' | b'_')
 }
 

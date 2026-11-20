@@ -579,6 +579,16 @@ fn preserves_explicit_link_sources_and_bounds_directive_labels() {
     assert_eq!(self_close_block.children().len(), 3);
     assert_eq!(self_close_block.children()[1].kind, Kind::Paragraph);
 
+    let neg_zero = parse("::time[zero]{unix=\"-0\"}", &[]).unwrap();
+    assert_eq!(neg_zero.diagnostics().len(), 1);
+    assert_eq!(neg_zero.diagnostics()[0].code, Code::DatetimeInvalid);
+
+    let triple_colon = parse(":::time[x]", &[]).unwrap();
+    assert_eq!(triple_colon.diagnostics(), []);
+
+    let two_bad = parse("::time[a] and ::time[b]", &[]).unwrap();
+    assert_eq!(two_bad.diagnostics().len(), 2);
+
     let tab_fence = parse("  ```\n \tfoo\n  ```", &[]).unwrap();
     assert!(matches!(&tab_fence.children()[0].kind, Kind::Code { value, .. } if value == "  foo"));
 }
@@ -614,4 +624,18 @@ fn html_pairing_and_time_directives_follow_the_tokenizer() {
         let doc = parse(input, &[]).unwrap();
         assert!(!doc.children()[0].children.iter().any(|node| node.kind == Kind::Emphasis), "{input}");
     }
+
+    let followed = parse("::time[x]{datetime=\"2024-01-01T00:00:00Z\"}{y}", &[]).unwrap();
+    assert_eq!(followed.diagnostics(), []);
+    assert!(matches!(followed.children()[0].children[0].kind, Kind::Datetime { .. }));
+
+    assert_eq!(parse("::timeé-", &[]).unwrap().diagnostics(), []);
+
+    let cell = parse("| ::time[a | b] |\n| - | - |", &[]).unwrap();
+    assert_eq!(cell.diagnostics().len(), 1);
+    assert!(!cell.source(cell.diagnostics()[0].range).contains('b'), "{:?}", cell.diagnostics());
+
+    let multiline = parse("::time[a\nb]{unix=\"0\"\n\nnext", &[]).unwrap();
+    assert_eq!(multiline.diagnostics().len(), 1);
+    assert_eq!(multiline.source(multiline.diagnostics()[0].range), "::time[a\nb]{unix=\"0\"");
 }

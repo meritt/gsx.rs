@@ -1,4 +1,4 @@
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::{HashMap, HashSet};
 
 use crate::document::tree::{self, Prefix, decode_string};
@@ -16,6 +16,7 @@ struct Context<'a> {
     diagnostics: RefCell<Vec<Diagnostic>>,
     placed: Vec<(usize, Kind)>,
     closings: OnceCell<Vec<[u32; 2]>>,
+    block: Cell<usize>,
 }
 
 impl Context<'_> {
@@ -53,9 +54,14 @@ impl Context<'_> {
     }
 
     fn text(&self, value: String, start: usize, end: usize) -> Node {
-        if let Some(offset) = time::reserved_offset(&self.text[start..end]) {
+        let slice = &self.text[start..end];
+        let mut at = 0;
+        while let Some(offset) = time::reserved_offset(slice, at) {
             let range = self.malformed(start + offset);
             self.diagnostic(Code::MarkdownMalformed, Severity::Error, Details::None, range.0, range.1);
+            at = range.1.saturating_sub(start).max(offset + 6);
+        }
+        if at > 0 {
             return self.literal(start, end, Some(value));
         }
         self.node(Kind::Text { value }, start, end)
@@ -63,7 +69,8 @@ impl Context<'_> {
 
     fn malformed(&self, start: usize) -> (usize, usize) {
         let bytes = self.text.as_bytes();
-        (start, time::reserved_end(bytes, self.closings.get_or_init(|| time::closing_ends(bytes)), start))
+        let end = time::reserved_end(bytes, self.closings.get_or_init(|| time::closing_ends(bytes)), start);
+        (start, end.min(self.block.get()).max(start))
     }
 }
 
@@ -635,7 +642,7 @@ fn convert_node(node: &tree::Node, end: usize, context: &Context) -> Converted {
         T::TextDirective if node.extra().name == "time" => {
             let raw = &context.text[start..node.end];
             let next = context.text.as_bytes().get(node.end);
-            if !raw.starts_with("::time[") || !raw.contains(']') || next == Some(&b'{') {
+            if !raw.starts_with("::time[") || !raw.contains(']') || (next == Some(&b'{') && !raw.ends_with('}')) {
                 return Converted::One(
                     context.refused(Code::MarkdownMalformed, context.malformed(start), start, end),
                     false,
@@ -766,6 +773,10 @@ fn append(parent: tree::Kind, out: &mut Vec<Node>, mut node: Node, lines: &LineI
 }
 
 fn convert_children(parent: &tree::Node, context: &Context) -> Vec<Node> {
+    let outer = context.block.get();
+    if bounds_inline(parent.kind) {
+        context.block.set(parent.end);
+    }
     let mut out = vec![];
     let items =
         pair_html(&parent.children, context.text).into_iter().map(|(child, end)| Item::Node(child, end)).collect();
@@ -802,6 +813,7 @@ fn convert_children(parent: &tree::Node, context: &Context) -> Vec<Node> {
             }
         }
     }
+    context.block.set(outer);
     out
 }
 
@@ -822,8 +834,15 @@ pub(super) fn convert(
     lines: &LineIndex,
     media: &[Media],
 ) -> (Vec<Node>, Vec<Diagnostic>) {
-    let mut context =
-        Context { text, lines, prefixes, diagnostics: RefCell::default(), placed: vec![], closings: OnceCell::new() };
+    let mut context = Context {
+        text,
+        lines,
+        prefixes,
+        diagnostics: RefCell::default(),
+        placed: vec![],
+        closings: OnceCell::new(),
+        block: Cell::new(text.len()),
+    };
     resolve_media(root, media, &mut context);
     let children = convert_children(root, &context);
     (children, context.diagnostics.into_inner())
