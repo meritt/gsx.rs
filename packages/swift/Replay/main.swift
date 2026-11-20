@@ -2,32 +2,10 @@ import Foundation
 import GSX
 
 struct Case: Decodable {
-    struct Item: Decodable {
-        let id: String
-        let cover: String?
-    }
-
-    struct Given: Decodable {
-        let media: GSX.MediaKind?
-        let mediaCount: Int?
-        let placement: GSX.Placement?
-        let title: String?
-        let targetUrl: String?
-        let maxCharacters: UInt32?
-        let charactersReservedPerUrl: UInt32?
-        let captionLimit: UInt32?
-        let descriptionLimit: UInt32?
-        let hashtagLimit: UInt32?
-        let spoilerText: String?
-        let overflow: GSX.Overflow?
-        let entitiesAllowed: Bool?
-        let items: [GSX.MediaFact]?
-    }
-
     let markdown: String
-    let media: [Item]
+    let media: [GSX.Media]
     let target: String?
-    let facts: Given?
+    let facts: GSX.Facts?
 }
 
 struct MediaRule: Decodable {
@@ -90,13 +68,13 @@ func listing() throws -> String {
         }
         let limits = array(target.limits) { limit in
             #"{"field":\#(quoted(limit.field.rawValue)),"unit":\#(quoted(limit.unit.rawValue)),"#
-                + #""maximum":\#(optional(limit.maximum) { String($0) }),"fact":\#(optional(limit.fact, quoted)),"#
+                + #""maximum":\#(optional(limit.maximum) { String($0) }),"fact":\#(optional(limit.fact) { quoted($0.rawValue) }),"#
                 + #""placements":\#(optional(limit.placements) { array($0) { quoted($0.rawValue) } }),"#
                 + #""media":\#(quoted(limit.media.rawValue)),"rendering":\#(quoted(limit.rendering.rawValue))}"#
         }
         let features = array(target.features) { rule in
             let conditions = array(rule.conditions) {
-                #"{"when":\#(quoted($0.when)),"class":\#(quoted($0.kind.rawValue)),"reason":\#(quoted($0.reason))}"#
+                #"{"when":\#(quoted($0.when.rawValue)),"class":\#(quoted($0.kind.rawValue)),"reason":\#(quoted($0.reason))}"#
             }
             return #"{"feature":\#(quoted(rule.feature.rawValue)),"class":\#(quoted(rule.kind.rawValue)),"#
                 + #""reason":\#(quoted(rule.reason)),"conditions":\#(conditions)}"#
@@ -110,7 +88,7 @@ func listing() throws -> String {
         return #"{"name":\#(quoted(target.name)),"form":\#(quoted(target.form.rawValue)),"#
             + #""offsets":\#(optional(target.offsets) { quoted($0.rawValue) }),"digest":\#(quoted(target.digest)),"#
             + #""manifest":\#(quoted(target.manifest)),"codes":\#(array(target.codes, quoted)),"#
-            + #""threads":\#(target.threads),"facts":\#(array(target.facts, quoted)),"fields":\#(fields),"#
+            + #""threads":\#(target.threads),"facts":\#(array(target.facts) { quoted($0.rawValue) }),"fields":\#(fields),"#
             + #""limits":\#(limits),"features":\#(features),"#
             + #""media":{"formats":\#(formats(media.formats)),"alt":\#(formats(media.alt)),"#
             + #""spoiler":{"mode":\#(quoted(media.spoiler.mode.rawValue)),"formats":\#(formats(media.spoiler.formats))},"#
@@ -170,24 +148,8 @@ for file in arguments.dropFirst() {
             if !line.contains(#""target":"#) { lines.append("-") }
             continue
         }
-        let media = input.media.map { GSX.Media(id: $0.id, cover: $0.cover) }
-        let given = input.facts
-        let facts = GSX.Facts(
-            media: given?.media,
-            mediaCount: given?.mediaCount ?? 0,
-            placement: given?.placement,
-            title: given?.title,
-            targetUrl: given?.targetUrl,
-            maxCharacters: given?.maxCharacters,
-            charactersReservedPerUrl: given?.charactersReservedPerUrl,
-            captionLimit: given?.captionLimit,
-            descriptionLimit: given?.descriptionLimit,
-            hashtagLimit: given?.hashtagLimit,
-            spoilerText: given?.spoilerText,
-            overflow: given?.overflow,
-            entitiesAllowed: given?.entitiesAllowed ?? false,
-            items: given?.items
-        )
+        let media = input.media
+        let facts = input.facts ?? GSX.Facts()
         let json: String
         do {
             json = try input.target.map { try GSX.projectJSON(input.markdown, target: $0, facts: facts, media: media) }
@@ -205,7 +167,7 @@ for file in arguments.dropFirst() {
                 }
                 let fields = wire(json, "projection")["fields"] as? [[String: Any]] ?? []
                 let formats = fields.flatMap { ($0["entities"] as? [[String: Any]] ?? []).map { $0["format"] as? String } }
-                guard projection.fields.flatMap({ $0.entities.map(\.format) }) == formats else {
+                guard projection.fields.flatMap({ $0.entities.map { $0.format?.rawValue } }) == formats else {
                     fatalError("entity formats differ for \(json)")
                 }
             } else {

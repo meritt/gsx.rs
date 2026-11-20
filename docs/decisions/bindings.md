@@ -54,9 +54,9 @@ The media ID members expose the core's [media ID and group rules](conformance.md
 | --- | --- |
 | `@meritt/gsx-wasm` | Browser or Node.js 26.13+; ESM and `gsx.wasm` |
 | `GSX` | Swift tools 6.2, macOS 27+; universal arm64/x86_64 static XCFramework |
-| `gsx` | Python with `ctypes`; macOS 11+ universal2, manylinux_2_28 or musllinux_1_2 on x86_64/aarch64 |
+| `gsx` | Python 3.10+ with `ctypes`; macOS 11+ universal2, manylinux_2_28 or musllinux_1_2 on x86_64/aarch64 |
 
-JavaScript `load()` reads `gsx.wasm` beside the module by default, or accepts a URL, response, response promise, bytes or compiled `WebAssembly.Module`. Keep the Wasm asset available when bundling. A version mismatch raises `VersionError`. A Wasm trap is rethrown after replacing the failed instance; the next call uses fresh memory rather than retrying the failed operation. The gzip size ceiling is enforced by the [npm replay](../../AGENTS.md#replay-and-performance).
+JavaScript `load()` reads `gsx.wasm` beside the module by default, or accepts a URL, response, response promise, bytes or compiled `WebAssembly.Module`; a response that is not OK raises `TypeError` with its HTTP status. Keep the Wasm asset available when bundling. A version mismatch raises `VersionError`. A Wasm trap is rethrown after replacing the failed instance; the next call uses fresh memory rather than retrying the failed operation. The gzip size ceiling is enforced by the [npm replay](../../AGENTS.md#replay-and-performance).
 
 SwiftPM prefers `packages/swift/GSXFFI.xcframework` when present; otherwise it uses the URL and checksum in [`Package.swift`](../../Package.swift). Python wheels include the shared library and require no Python extension ABI.
 
@@ -98,7 +98,7 @@ Facts have ceilings far above every platform limit. `wire::refused` decides them
 
 The generated [gsx.h](../../crates/gsx-ffi/include/gsx.h) defines the ABI. `gsx_parse`, `gsx_serialize`, `gsx_project` and `gsx_targets` return an opaque output handle. Read its borrowed bytes with `gsx_output_json`, then release the handle with `gsx_output_free`. A binding failure returns null and an error handle; read `gsx_error_message` and release it with `gsx_error_free`. Parsing failures remain JSON results. Operation dispatch catches Rust panics; pointer validity remains the caller's responsibility. `gsx_is_media_id` applies the core's media ID rule to UTF-8 bytes, and `GSX_MEDIA_ID_MAX_BYTES`, `GSX_MEDIA_GROUP_MIN` and `GSX_MEDIA_GROUP_MAX` mirror the core constants under a compile-time equality check. cbindgen emits no string constants, so `cargo xtask header` writes `GSX_MEDIA_ID_PATTERN` from `document::MEDIA_ID_PATTERN`, and `cargo xtask header --check` rejects a stale value. Callers that cannot read macros, such as `ctypes`, read the same values from `gsx_media_id_max_bytes`, `gsx_media_group_min`, `gsx_media_group_max` and `gsx_media_id_pattern`; like `gsx_version`, each takes no arguments and needs no struct layout shared with the caller, and the pattern is a static NUL-terminated string.
 
-Optional C limits use negative values for absence. Null string pointers mean absent strings. For `facts.items`, a null pointer with zero length means no selection fact; a non-null pointer with zero length means an explicitly empty selection. An item ID outside the core's media ID rule is a binding error on every binding, with the message from `wire::refused` like the other [fact ceilings](#wire-format), so every generated `media:` reference matches the grammar consumers rewrite. `gsx_version` identifies the linked build.
+Optional C limits use negative values for absence; `gsx_facts_default` returns a `gsx_facts` value with absent limits and zeroed flags (`uint8_t`, zero for false and non-zero for true). Null string pointers mean absent strings. For `facts.items`, a null pointer with zero length means no selection fact; a non-null pointer with zero length means an explicitly empty selection. An item ID outside the core's media ID rule is a binding error on every binding, with the message from `wire::refused` like the other [fact ceilings](#wire-format), so every generated `media:` reference matches the grammar consumers rewrite. `gsx_version` identifies the linked build.
 
 ## Wasm boundary
 
@@ -110,6 +110,6 @@ The [raw Wasm exports](../../crates/gsx-wasm/src/lib.rs) receive UTF-8 in a reus
 | Placement, also C `GSX_PLACEMENT_*` | 0 absent, 1 post, 2 reel, 3 story |
 | Overflow, also C `GSX_OVERFLOW_*` | 0 truncate, 1 thread |
 | Item format, also C `GSX_FORMAT_*` | 0 image, 1 GIF, 2 video, 3 audio |
-| Wasm item flags | Bit 0 spoiler, bit 1 inline; C uses separate boolean fields |
+| Wasm item flags | Bit 0 spoiler, bit 1 inline; C uses separate `uint8_t` fields |
 
 Item IDs, formats, alts and flags are parallel arrays of equal length. An absent alt is `undefined`; `listed` distinguishes an omitted items fact from an empty selection. Parse-time media IDs and covers also have equal lengths. Unknown targets, invalid facts and mismatched arrays are binding errors, distinct from parse-error JSON.

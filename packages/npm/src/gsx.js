@@ -1,26 +1,38 @@
+const VERSION = '@VERSION@';
+
+export class ParseError extends Error {
+  constructor({ code, range, details }) {
+    super(range === null ? code : `${code} at ${range[0]}..${range[1]}`);
+    this.name = 'ParseError';
+    this.code = code;
+    this.range = range;
+    this.details = details;
+  }
+}
+
+export class VersionError extends Error {
+  constructor(found) {
+    super(
+      `gsx.wasm is ${found === undefined ? 'from another build' : `version ${found}`}, gsx.js is version ${VERSION}`
+    );
+    this.name = 'VersionError';
+    this.expected = VERSION;
+    this.found = found;
+  }
+}
+
+function deepFreeze(value) {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const entry of Object.values(value)) {
+      deepFreeze(entry);
+    }
+  }
+
+  return value;
+}
+
 export const load = (() => {
-  const VERSION = '@VERSION@';
-
-  class ParseError extends Error {
-    constructor({ code, range, details }) {
-      super(range === null ? code : `${code} at ${range[0]}..${range[1]}`);
-      this.name = 'ParseError';
-      this.code = code;
-      this.range = range;
-      this.details = details;
-    }
-  }
-
-  class VersionError extends Error {
-    constructor(found) {
-      super(
-        `gsx.wasm is ${found === undefined ? 'from another build' : `version ${found}`}, gsx.js is version ${VERSION}`
-      );
-      this.name = 'VersionError';
-      this.expected = VERSION;
-      this.found = found;
-    }
-  }
 
   function firstLoneSurrogate(text) {
     for (let i = 0; i < text.length; i++) {
@@ -185,8 +197,8 @@ export const load = (() => {
     }
 
     function projectJSON(text, target, facts = {}, media = []) {
-      if (typeof target !== 'string') {
-        throw new TypeError('target must be a string');
+      if (typeof target !== 'string' || !target.isWellFormed()) {
+        throw new TypeError('target must be a well-formed string');
       }
 
       const { title = null, targetUrl = null, spoilerText = null, entitiesAllowed = false, items = null } = facts;
@@ -264,7 +276,7 @@ export const load = (() => {
       serializeJSON,
       project: (text, target, facts, media) => unwrap(projectJSON(text, target, facts, media), 'projection'),
       projectJSON,
-      targets: () => (listed ??= Object.freeze(JSON.parse(call(() => wasm.targets())).targets.map(Object.freeze))),
+      targets: () => (listed ??= deepFreeze(JSON.parse(call(() => wasm.targets())).targets)),
       isMediaId,
     };
   }
@@ -279,13 +291,21 @@ export const load = (() => {
     if (typeof source === 'string') source = new URL(source, import.meta.url);
     if (source instanceof URL) {
       if (source.protocol === 'file:') {
-        const { readFile } = await import('node:fs/promises');
+        const fs = 'node:fs/promises';
+        const { readFile } = await import(/* @vite-ignore */ fs);
         return WebAssembly.compile(await readFile(source));
       }
       source = fetch(source);
     }
     if (source instanceof Promise || (typeof Response === 'function' && source instanceof Response)) {
-      return WebAssembly.compileStreaming(source);
+      const response = await source;
+      if (typeof Response !== 'function' || !(response instanceof Response)) return WebAssembly.compile(response);
+      if (!response.ok) throw new TypeError(`gsx.wasm request failed with HTTP ${response.status}`);
+      const mime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+      if (mime === 'application/wasm' && typeof WebAssembly.compileStreaming === 'function') {
+        return WebAssembly.compileStreaming(response);
+      }
+      return WebAssembly.compile(await response.arrayBuffer());
     }
     return WebAssembly.compile(source);
   }

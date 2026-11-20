@@ -3,10 +3,11 @@ from __future__ import annotations
 import ctypes
 import json
 import os
-from dataclasses import dataclass, field
-from typing import Iterable, List, NamedTuple, Optional, Tuple
+from dataclasses import dataclass
+from typing import Iterable, Literal, NamedTuple, Optional, Sequence, Tuple
 
 __all__ = [
+    "__version__",
     "MEDIA_GROUP_MAX",
     "MEDIA_GROUP_MIN",
     "MEDIA_ID_MAX_BYTES",
@@ -48,6 +49,200 @@ __all__ = [
     "serialize",
     "serialize_json",
     "targets",
+]
+
+Align = Literal["left", "right", "center"]
+Layout = Literal["collage", "slideshow"]
+Provenance = Literal["authored", "literal"]
+TimeFormat = Literal["time", "time-seconds", "date-short", "date", "datetime-short", "datetime", "full", "relative"]
+NodeType = Literal[
+    "paragraph",
+    "heading",
+    "thematicBreak",
+    "blockquote",
+    "list",
+    "listItem",
+    "code",
+    "table",
+    "tableRow",
+    "tableCell",
+    "text",
+    "emphasis",
+    "strong",
+    "delete",
+    "underline",
+    "highlight",
+    "spoiler",
+    "inlineCode",
+    "math",
+    "break",
+    "link",
+    "datetime",
+    "mediaReference",
+    "mediaGroup",
+]
+MarkerKind = Literal[
+    "emphasis",
+    "strong",
+    "strikethrough",
+    "spoiler",
+    "underline",
+    "highlight",
+    "codeText",
+    "codeFence",
+    "heading",
+    "thematicBreak",
+    "blockQuote",
+    "listItem",
+    "taskCheck",
+    "tableDelimiter",
+    "link",
+    "autolink",
+    "escape",
+    "characterReference",
+    "hardBreak",
+    "directive",
+    "media",
+]
+Code = Literal[
+    "DATETIME_INVALID",
+    "DATETIME_TIMEZONE_REQUIRED",
+    "LINK_LITERALIZED",
+    "MARKDOWN_INVALID_TEXT",
+    "MARKDOWN_MALFORMED",
+    "MARKDOWN_TOO_COMPLEX",
+    "MEDIA_DIRECTIVE_INVALID",
+    "MEDIA_REFERENCE_CONTEXT_UNSUPPORTED",
+    "MEDIA_REFERENCE_COVER",
+    "MEDIA_REFERENCE_DUPLICATE",
+    "MEDIA_REFERENCE_UNKNOWN",
+]
+Severity = Literal["warning", "error"]
+Scheme = Literal["http", "https", "relative", "unsupported"]
+ComplexityLimit = Literal[
+    "blockDelimiters",
+    "blockLabels",
+    "blockLabelEnds",
+    "containerDepth",
+    "documentEscapes",
+    "documentHardBreaks",
+    "documentLines",
+    "documentListItems",
+    "documentMathLiterals",
+    "documentPairedDelimiters",
+    "documentTableCells",
+    "documentUnits",
+    "inlineDepth",
+]
+MediaKind = Literal["image", "video", "gif", "audio"]
+MediaFormat = Literal["image", "gif", "video", "audio"]
+Placement = Literal["post", "reel", "story"]
+Overflow = Literal["truncate", "thread"]
+FieldName = Literal["text", "title", "description", "alt"]
+Style = Literal[
+    "bold",
+    "italic",
+    "underline",
+    "strikethrough",
+    "spoiler",
+    "code",
+    "link",
+    "tag",
+    "pre",
+    "blockquote",
+    "date",
+    "mention",
+]
+EntityFormat = Literal["t", "T", "d", "D", "dt", "Dt", "wDt", "r"]
+Unit = Literal[
+    "graphemes",
+    "code-points",
+    "utf16-code-units",
+    "utf8-bytes",
+    "x-weighted",
+    "mastodon-weighted",
+    "threads-weighted",
+    "hashtags",
+    "mentions",
+    "links",
+]
+ChangeClass = Literal["approximated", "textual_fallback", "unwrapped", "omitted", "blocked"]
+Feature = Literal[
+    "heading",
+    "thematic_break",
+    "blockquote",
+    "bullet_list",
+    "ordered_list",
+    "compound_list",
+    "code_block",
+    "table",
+    "task_list",
+    "media",
+    "emphasis",
+    "strong",
+    "strikethrough",
+    "underline",
+    "highlight",
+    "spoiler",
+    "inline_code",
+    "math",
+    "link",
+    "link_title",
+    "datetime",
+    "angle_brackets",
+    "text",
+    "title",
+    "target_url",
+    "hashtag",
+    "mention",
+]
+Boundary = Literal["paragraph", "sentence", "word", "grapheme"]
+TargetForm = Literal["plain/1", "entities/1", "html/1", "markdown/1", "blocks/1"]
+TargetOffsets = Literal["utf8", "utf16"]
+FactName = Literal[
+    "media",
+    "mediaCount",
+    "placement",
+    "title",
+    "targetUrl",
+    "maxCharacters",
+    "charactersReservedPerUrl",
+    "captionLimit",
+    "descriptionLimit",
+    "hashtagLimit",
+    "spoilerText",
+    "overflow",
+    "entitiesAllowed",
+    "items",
+]
+TargetFieldMedia = Literal["any", "image", "video"]
+LimitMedia = Literal["any", "with", "without", "image", "video", "gif", "audio"]
+LimitRendering = Literal["payload", "visible"]
+SpoilerMode = Literal["carried", "widened", "omitted"]
+When = Literal[
+    "label_is_href",
+    "label_invisible",
+    "title_source",
+    "empty",
+    "overflow",
+    "capped",
+    "nested",
+    "info",
+    "blocks",
+    "depth",
+    "columns",
+    "group",
+    "cut",
+    "inline",
+    "missing",
+    "count",
+    "spoiler",
+    "truncated",
+    "refused",
+    "thread",
+    "code",
+    "post",
+    "blank_lines",
 ]
 
 
@@ -118,21 +313,21 @@ class Media:
 
 @dataclass(frozen=True)
 class Details:
-    scheme: Optional[str] = None
+    scheme: Optional[Scheme] = None
     id: Optional[str] = None
     index: Optional[int] = None
-    limit: Optional[str] = None
+    limit: Optional[ComplexityLimit] = None
     maximum: Optional[int] = None
     code_point: Optional[int] = None
 
 
 @dataclass(frozen=True)
 class Node:
-    type: str
+    type: NodeType
     range: Range
-    provenance: str = "authored"
+    provenance: Provenance = "authored"
     gap_before: Optional[int] = None
-    children: List["Node"] = field(default_factory=list)
+    children: Tuple["Node", ...] = ()
     depth: Optional[int] = None
     ordered: Optional[bool] = None
     start: Optional[int] = None
@@ -141,41 +336,41 @@ class Node:
     lang: Optional[str] = None
     meta: Optional[str] = None
     value: Optional[str] = None
-    align: Optional[List[Optional[str]]] = None
+    align: Optional[Tuple[Optional[Align], ...]] = None
     url: Optional[str] = None
     source: Optional[str] = None
     title: Optional[str] = None
     datetime: Optional[str] = None
     unix: Optional[int] = None
-    format: Optional[str] = None
+    format: Optional[TimeFormat] = None
     media_id: Optional[str] = None
-    media_ids: Optional[List[str]] = None
-    layout: Optional[str] = None
+    media_ids: Optional[Tuple[str, ...]] = None
+    layout: Optional[Layout] = None
 
 
 @dataclass(frozen=True)
 class Marker:
-    kind: str
+    kind: MarkerKind
     range: Range
 
 
 @dataclass(frozen=True)
 class Diagnostic:
-    code: str
-    severity: str
+    code: Code
+    severity: Severity
     range: Range
     details: Details
 
 
 @dataclass(frozen=True)
 class Document:
-    children: List[Node]
-    markers: List[Marker]
-    diagnostics: List[Diagnostic]
+    children: Tuple[Node, ...]
+    markers: Tuple[Marker, ...]
+    diagnostics: Tuple[Diagnostic, ...]
 
 
 class ParseError(Exception):
-    def __init__(self, code: str, range: Optional[Range], details: Details) -> None:
+    def __init__(self, code: Code, range: Optional[Range], details: Details) -> None:
         super().__init__(code if range is None else "%s at %d..%d" % (code, range.start, range.end))
         self.code = code
         self.range = range
@@ -196,7 +391,10 @@ def _details(value: dict) -> Details:
 def _node(value: dict) -> Node:
     fields = {_KEYS.get(key, key): item for key, item in value.items()}
     fields["range"] = Range(*value["range"])
-    fields["children"] = [_node(child) for child in value.get("children", ())]
+    fields["children"] = tuple(_node(child) for child in value.get("children", ()))
+    for key in ("align", "media_ids"):
+        if fields.get(key) is not None:
+            fields[key] = tuple(fields[key])
     return Node(**fields)
 
 
@@ -208,11 +406,32 @@ def _encode(text: str) -> bytes:
         return paired.encode("utf-8", "surrogatepass")
 
 
+def _utf8(value: object, name: str) -> bytes:
+    if not isinstance(value, str):
+        raise TypeError(name + " must be a str")
+    try:
+        return value.encode("utf-8")
+    except UnicodeEncodeError:
+        raise TypeError(name + " must be a well-formed str") from None
+
+
+def _opt_utf8(value: object, name: str) -> Optional[bytes]:
+    if value is None:
+        return None
+    return _utf8(value, name)
+
+
+def _flag(value: object, name: str) -> int:
+    if not isinstance(value, bool):
+        raise TypeError(name + " must be a bool")
+    return 1 if value else 0
+
+
 def _media(media: Iterable[Media]) -> ctypes.Array:
     entries = []
     for item in media:
-        ident = item.id.encode("utf-8")
-        cover = None if item.cover is None else item.cover.encode("utf-8")
+        ident = _utf8(item.id, "media.id")
+        cover = _opt_utf8(item.cover, "media.cover")
         entries.append(_Media(ident, len(ident), cover, 0 if cover is None else len(cover)))
     return (_Media * len(entries))(*entries)
 
@@ -221,8 +440,10 @@ def _call(name: str, call) -> str:
     error = ctypes.c_void_p()
     output = call(ctypes.byref(error))
     if not output:
-        message = _lib.gsx_error_message(error).decode("utf-8", "replace") if error else name + " failed"
-        _lib.gsx_error_free(error)
+        try:
+            message = _lib.gsx_error_message(error).decode("utf-8", "replace") if error else name + " failed"
+        finally:
+            _lib.gsx_error_free(error)
         raise InternalError(message)
     try:
         size = ctypes.c_size_t()
@@ -241,6 +462,8 @@ def _text(text: str) -> bytes:
 def is_media_id(id: str) -> bool:
     if not isinstance(id, str):
         raise TypeError("id must be a str")
+    if len(id) > MEDIA_ID_MAX_BYTES:
+        return False
     data = _encode(id)
     return _lib.gsx_is_media_id(data, len(data))
 
@@ -273,17 +496,17 @@ def _unwrap(raw: str, key: str):
 def parse(text: str, media: Iterable[Media] = ()) -> Document:
     document = _unwrap(parse_json(text, media), "document")
     return Document(
-        children=[_node(child) for child in document["children"]],
-        markers=[Marker(item["kind"], Range(*item["range"])) for item in document["markers"]],
+        children=tuple(_node(child) for child in document["children"]),
+        markers=tuple(Marker(item["kind"], Range(*item["range"])) for item in document["markers"]),
         diagnostics=_diagnostics(document["diagnostics"]),
     )
 
 
-def _diagnostics(diagnostics: list) -> List[Diagnostic]:
-    return [
+def _diagnostics(diagnostics: list) -> Tuple[Diagnostic, ...]:
+    return tuple(
         Diagnostic(item["code"], item["severity"], Range(*item["range"]), _details(item["details"]))
         for item in diagnostics
-    ]
+    )
 
 
 @dataclass(frozen=True)
@@ -291,55 +514,55 @@ class MediaFact:
     """An attached media item, matched to media references by id."""
 
     id: str
-    format: str
+    format: MediaFormat
     alt: Optional[str] = None
     spoiler: bool = False
     inline: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Facts:
-    media: Optional[str] = None
+    media: Optional[MediaKind] = None
     media_count: int = 0
+    placement: Optional[Placement] = None
     title: Optional[str] = None
+    target_url: Optional[str] = None
     max_characters: Optional[int] = None
     characters_reserved_per_url: Optional[int] = None
     caption_limit: Optional[int] = None
-    entities_allowed: bool = False
-    items: Optional[Tuple[MediaFact, ...]] = None
-    target_url: Optional[str] = None
     description_limit: Optional[int] = None
-    placement: Optional[str] = None
     hashtag_limit: Optional[int] = None
     """Instagram hashtags allowed in a caption; 5 without it."""
     spoiler_text: Optional[str] = None
     """Mastodon content warning: not rendered, but counted with the text against the status limit."""
-    overflow: Optional[str] = None
+    overflow: Optional[Overflow] = None
     """What a body that does not fit becomes: "truncate" (the default) or "thread" where the target publishes threads."""
+    entities_allowed: bool = False
+    items: Optional[Sequence[MediaFact]] = None
 
 
 @dataclass(frozen=True)
 class Entity:
     """A styled range of the field text in the target's offsets unit."""
 
-    style: str
+    style: Style
     range: Range
     value: Optional[str]
-    format: Optional[str] = None
+    format: Optional[EntityFormat] = None
 
 
 @dataclass(frozen=True)
 class Field:
-    name: str
+    name: FieldName
     text: str
-    links: List[Range]
-    entities: List[Entity]
+    links: Tuple[Range, ...]
+    entities: Tuple[Entity, ...]
 
 
 @dataclass(frozen=True)
 class Measurement:
-    field: str
-    unit: str
+    field: FieldName
+    unit: Unit
     value: int
     maximum: Optional[int]
     block: Optional[int] = None
@@ -368,15 +591,15 @@ class Block:
     """Text, media items with an optional layout, an attached file shown in place, or a separator."""
 
     text: Optional[str] = None
-    items: Optional[List[Item]] = None
-    layout: Optional[str] = None
+    items: Optional[Tuple[Item, ...]] = None
+    layout: Optional[Layout] = None
     file: Optional[Item] = None
     separator: bool = False
 
 
 @dataclass(frozen=True)
 class Truncated:
-    unit: str
+    unit: Unit
     maximum: int
     value: int
     exact: bool
@@ -384,11 +607,11 @@ class Truncated:
 
 @dataclass(frozen=True)
 class Change:
-    class_: str
-    feature: str
+    class_: ChangeClass
+    feature: Feature
     reason: str
     code: Optional[str]
-    field: str
+    field: FieldName
     range: Optional[Range]
     truncated: Optional[Truncated]
     block: Optional[int] = None
@@ -397,35 +620,35 @@ class Change:
 
 @dataclass(frozen=True)
 class Projection:
-    fields: List[Field]
-    measurements: List[Measurement]
-    changes: List[Change]
-    diagnostics: List[Diagnostic]
+    fields: Tuple[Field, ...]
+    measurements: Tuple[Measurement, ...]
+    changes: Tuple[Change, ...]
+    diagnostics: Tuple[Diagnostic, ...]
     """Diagnostics of the parsed document, as in Document.diagnostics."""
-    media: List[str]
-    blocks: Optional[List[Block]] = None
+    media: Tuple[str, ...]
+    blocks: Optional[Tuple[Block, ...]] = None
     """Present for targets of the blocks/1 form only."""
-    items: Optional[List[Attachment]] = None
+    items: Optional[Tuple[Attachment, ...]] = None
     """Media attached to the message with its fitted alt: every media fact item outside the blocks/1 form, items no block can show on Slack blocks; absent when empty."""
-    parts: Optional[List["Part"]] = None
+    parts: Optional[Tuple["Part", ...]] = None
     """With overflow "thread", when the body did not fit: every post of the thread in order; the top level repeats the first."""
 
 
 @dataclass(frozen=True)
 class Part:
-    fields: List[Field]
-    measurements: List[Measurement]
-    media: List[str]
-    items: List[Attachment]
+    fields: Tuple[Field, ...]
+    measurements: Tuple[Measurement, ...]
+    media: Tuple[str, ...]
+    items: Tuple[Attachment, ...]
     range: Range
-    boundary: Optional[str]
+    boundary: Optional[Boundary]
 
 
 @dataclass(frozen=True)
 class TargetField:
-    name: str
+    name: FieldName
     required: bool
-    media: str
+    media: TargetFieldMedia
     """The media kind the field needs: "any", "image" or "video"."""
 
 
@@ -433,21 +656,21 @@ class TargetField:
 class Limit:
     """A fixed limit has maximum and no fact; a fact with a default has both; a fact without a default has fact only; an unlimited count has neither."""
 
-    field: str
-    unit: str
+    field: FieldName
+    unit: Unit
     maximum: Optional[int]
-    fact: Optional[str]
+    fact: Optional[FactName]
     """The fact in its wire spelling, such as "maxCharacters"."""
-    placements: Optional[List[str]]
+    placements: Optional[Tuple[Placement, ...]]
     """None means every placement."""
-    media: str
-    rendering: str
+    media: LimitMedia
+    rendering: LimitRendering
 
 
 @dataclass(frozen=True)
 class Condition:
-    when: str
-    class_: str
+    when: When
+    class_: ChangeClass
     reason: str
 
 
@@ -455,57 +678,57 @@ class Condition:
 class Rule:
     """A feature's default outcome and the conditional outcomes that replace it."""
 
-    feature: str
-    class_: str
+    feature: Feature
+    class_: ChangeClass
     reason: str
-    conditions: List[Condition]
+    conditions: Tuple[Condition, ...]
 
 
 @dataclass(frozen=True)
 class Group:
-    layout: str
-    formats: List[str]
+    layout: Layout
+    formats: Tuple[MediaFormat, ...]
     minimum: int
     maximum: int
 
 
 @dataclass(frozen=True)
 class Spoiler:
-    mode: str
+    mode: SpoilerMode
     """"carried", "widened" or "omitted"."""
-    formats: List[str]
+    formats: Tuple[MediaFormat, ...]
 
 
 @dataclass(frozen=True)
 class MediaCapabilities:
-    formats: List[str]
+    formats: Tuple[MediaFormat, ...]
     """Item formats published as media; where inline is read, only inline items of these formats are placed."""
-    alt: List[str]
+    alt: Tuple[MediaFormat, ...]
     """Item formats whose alt the projection publishes."""
     spoiler: Spoiler
     inline: bool
     """Whether items[].inline is read."""
-    groups: List[Group]
+    groups: Tuple[Group, ...]
     """Group layouts rendered as a group; empty when none."""
 
 
 @dataclass(frozen=True)
 class Target:
     name: str
-    form: str
-    offsets: Optional[str]
+    form: TargetForm
+    offsets: Optional[TargetOffsets]
     digest: str
     manifest: str
-    codes: List[str]
+    codes: Tuple[str, ...]
     """Every code a blocked change of this target can carry."""
     threads: bool
     """Whether overflow "thread" applies."""
-    facts: List[str]
+    facts: Tuple[FactName, ...]
     """Facts that can change this target's projection, in their wire spelling, such as "maxCharacters"."""
-    fields: List[TargetField]
-    limits: List[Limit]
+    fields: Tuple[TargetField, ...]
+    limits: Tuple[Limit, ...]
     """At most one limit applies to one field, unit, placement and media kind."""
-    features: List[Rule]
+    features: Tuple[Rule, ...]
     media: MediaCapabilities
 
 
@@ -516,8 +739,8 @@ class _MediaFact(ctypes.Structure):
         ("format", ctypes.c_uint32),
         ("alt", ctypes.c_char_p),
         ("alt_len", ctypes.c_size_t),
-        ("spoiler", ctypes.c_bool),
-        ("inline", ctypes.c_bool),
+        ("spoiler", ctypes.c_uint8),
+        ("inline", ctypes.c_uint8),
     ]
 
 
@@ -534,7 +757,7 @@ class _Facts(ctypes.Structure):
         ("characters_reserved_per_url", ctypes.c_int64),
         ("caption_limit", ctypes.c_int64),
         ("description_limit", ctypes.c_int64),
-        ("entities_allowed", ctypes.c_bool),
+        ("entities_allowed", ctypes.c_uint8),
         ("items", ctypes.POINTER(_MediaFact)),
         ("items_len", ctypes.c_size_t),
         ("hashtag_limit", ctypes.c_int64),
@@ -582,18 +805,25 @@ def _facts(facts: Facts) -> _Facts:
     count = facts.media_count
     if not isinstance(count, int) or isinstance(count, bool) or not 0 <= count < 1 << 8 * ctypes.sizeof(ctypes.c_size_t):
         raise ValueError("facts.media_count must be a non-negative int that fits size_t")
-    title = None if facts.title is None else facts.title.encode("utf-8")
-    target_url = None if facts.target_url is None else facts.target_url.encode("utf-8")
-    spoiler_text = None if facts.spoiler_text is None else facts.spoiler_text.encode("utf-8")
+    title = _opt_utf8(facts.title, "facts.title")
+    target_url = _opt_utf8(facts.target_url, "facts.target_url")
+    spoiler_text = _opt_utf8(facts.spoiler_text, "facts.spoiler_text")
+    entities_allowed = _flag(facts.entities_allowed, "facts.entities_allowed")
     listed = () if facts.items is None else tuple(facts.items)
     items = None if facts.items is None else (_MediaFact * len(listed))()
     for index, item in enumerate(listed):
         if item.format not in _FORMATS:
             raise ValueError("facts.items format must be 'image', 'gif', 'video' or 'audio'")
-        id_ = item.id.encode("utf-8")
-        alt = None if item.alt is None else item.alt.encode("utf-8")
+        id_ = _utf8(item.id, "facts.items.id")
+        alt = _opt_utf8(item.alt, "facts.items.alt")
         items[index] = _MediaFact(
-            id_, len(id_), _FORMATS[item.format], alt, 0 if alt is None else len(alt), bool(item.spoiler), bool(item.inline)
+            id_,
+            len(id_),
+            _FORMATS[item.format],
+            alt,
+            0 if alt is None else len(alt),
+            _flag(item.spoiler, "facts.items.spoiler"),
+            _flag(item.inline, "facts.items.inline"),
         )
     return _Facts(
         _KINDS[facts.media],
@@ -607,7 +837,7 @@ def _facts(facts: Facts) -> _Facts:
         _limit(facts.characters_reserved_per_url, "facts.characters_reserved_per_url"),
         _limit(facts.caption_limit, "facts.caption_limit"),
         _limit(facts.description_limit, "facts.description_limit"),
-        bool(facts.entities_allowed),
+        entities_allowed,
         items,
         len(listed),
         _limit(facts.hashtag_limit, "facts.hashtag_limit"),
@@ -619,7 +849,7 @@ def _facts(facts: Facts) -> _Facts:
 
 def project_json(text: str, target: str, facts: Facts = Facts(), media: Iterable[Media] = ()) -> str:
     data = _text(text)
-    name = target.encode("utf-8")
+    name = _utf8(target, "target")
     native = _facts(facts)
     array = _media(media)
     return _call(
@@ -639,7 +869,7 @@ def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Medi
     return Projection(
         fields=_fields(projection["fields"]),
         measurements=_measurements(projection["measurements"]),
-        changes=[
+        changes=tuple(
             Change(
                 item["class"],
                 item["feature"],
@@ -652,43 +882,43 @@ def project(text: str, target: str, facts: Facts = Facts(), media: Iterable[Medi
                 item.get("item"),
             )
             for item in projection["changes"]
-        ],
+        ),
         diagnostics=_diagnostics(projection["diagnostics"]),
-        media=projection["media"],
-        blocks=None if "blocks" not in projection else [_block(block) for block in projection["blocks"]],
-        items=None if "items" not in projection else [Attachment(**item) for item in projection["items"]],
-        parts=None if "parts" not in projection else [_part(part) for part in projection["parts"]],
+        media=tuple(projection["media"]),
+        blocks=None if "blocks" not in projection else tuple(_block(block) for block in projection["blocks"]),
+        items=None if "items" not in projection else tuple(Attachment(**item) for item in projection["items"]),
+        parts=None if "parts" not in projection else tuple(_part(part) for part in projection["parts"]),
     )
 
 
-def _fields(fields: list) -> List[Field]:
-    return [
+def _fields(fields: list) -> Tuple[Field, ...]:
+    return tuple(
         Field(
             item["name"],
             item["text"],
-            [Range(*link) for link in item["links"]],
-            [
+            tuple(Range(*link) for link in item["links"]),
+            tuple(
                 Entity(entity["style"], Range(*entity["range"]), entity["value"], entity.get("format"))
                 for entity in item["entities"]
-            ],
+            ),
         )
         for item in fields
-    ]
+    )
 
 
-def _measurements(measurements: list) -> List[Measurement]:
-    return [
+def _measurements(measurements: list) -> Tuple[Measurement, ...]:
+    return tuple(
         Measurement(item["field"], item["unit"], item["value"], item["maximum"], item.get("block"), item.get("item"))
         for item in measurements
-    ]
+    )
 
 
 def _part(part: dict) -> Part:
     return Part(
         _fields(part["fields"]),
         _measurements(part["measurements"]),
-        part["media"],
-        [Attachment(**item) for item in part["items"]],
+        tuple(part["media"]),
+        tuple(Attachment(**item) for item in part["items"]),
         Range(*part["range"]),
         part["boundary"],
     )
@@ -701,12 +931,18 @@ def _block(block: dict) -> Block:
         return Block(file=Item(**block["file"]))
     if "separator" in block:
         return Block(separator=True)
-    return Block(items=[Item(**item) for item in block["items"]], layout=block["layout"])
+    return Block(items=tuple(Item(**item) for item in block["items"]), layout=block["layout"])
 
 
-def targets() -> List[Target]:
-    listing = json.loads(_call("gsx_targets", _lib.gsx_targets))
-    return [_target(item) for item in listing["targets"]]
+_TARGETS: Optional[Tuple[Target, ...]] = None
+
+
+def targets() -> Tuple[Target, ...]:
+    global _TARGETS
+    if _TARGETS is None:
+        listing = json.loads(_call("gsx_targets", _lib.gsx_targets))
+        _TARGETS = tuple(_target(item) for item in listing["targets"])
+    return _TARGETS
 
 
 def _target(item: dict) -> Target:
@@ -717,25 +953,42 @@ def _target(item: dict) -> Target:
         item["offsets"],
         item["digest"],
         item["manifest"],
-        item["codes"],
+        tuple(item["codes"]),
         item["threads"],
-        item["facts"],
-        [TargetField(**spec) for spec in item["fields"]],
-        [Limit(**limit) for limit in item["limits"]],
-        [
+        tuple(item["facts"]),
+        tuple(TargetField(**spec) for spec in item["fields"]),
+        tuple(
+            Limit(
+                limit["field"],
+                limit["unit"],
+                limit["maximum"],
+                limit["fact"],
+                None if limit["placements"] is None else tuple(limit["placements"]),
+                limit["media"],
+                limit["rendering"],
+            )
+            for limit in item["limits"]
+        ),
+        tuple(
             Rule(
                 rule["feature"],
                 rule["class"],
                 rule["reason"],
-                [Condition(condition["when"], condition["class"], condition["reason"]) for condition in rule["conditions"]],
+                tuple(
+                    Condition(condition["when"], condition["class"], condition["reason"])
+                    for condition in rule["conditions"]
+                ),
             )
             for rule in item["features"]
-        ],
+        ),
         MediaCapabilities(
-            media["formats"],
-            media["alt"],
-            Spoiler(**media["spoiler"]),
+            tuple(media["formats"]),
+            tuple(media["alt"]),
+            Spoiler(media["spoiler"]["mode"], tuple(media["spoiler"]["formats"])),
             media["inline"],
-            [Group(**group) for group in media["groups"]],
+            tuple(
+                Group(group["layout"], tuple(group["formats"]), group["minimum"], group["maximum"])
+                for group in media["groups"]
+            ),
         ),
     )

@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { load } from '@meritt/gsx-wasm';
+import { ParseError, VersionError, load } from '@meritt/gsx-wasm';
 
 const [out, ...files] = process.argv.slice(2);
 
@@ -12,7 +12,36 @@ const gsx = await load();
 const lines = [];
 const names = gsx.targets().map(({ name }) => name);
 
-if (names.length === 0 || !Object.isFrozen(gsx.targets()[0])) {
+if (ParseError !== gsx.ParseError || VersionError !== gsx.VersionError) {
+  throw new Error('top-level ParseError and VersionError must match load() exports');
+}
+
+try {
+  await load(new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]));
+  throw new Error('load() accepted a module without version export');
+} catch (error) {
+  if (!(error instanceof VersionError)) throw error;
+}
+
+const wasmUrl = new URL(import.meta.resolve('@meritt/gsx-wasm/gsx.wasm'));
+const fallback = await load(new Response(readFileSync(wasmUrl), { headers: { 'content-type': 'application/octet-stream' } }));
+if (fallback.VERSION !== gsx.VERSION) {
+  throw new Error('compileStreaming fallback failed');
+}
+try {
+  await load(new Response('missing', { status: 404 }));
+  throw new Error('load() accepted an HTTP 404 response');
+} catch (error) {
+  if (!(error instanceof TypeError) || !error.message.includes('HTTP 404')) throw error;
+}
+
+if (
+  names.length === 0 ||
+  !Object.isFrozen(gsx.targets()) ||
+  !Object.isFrozen(gsx.targets()[0]) ||
+  !Object.isFrozen(gsx.targets()[0].limits) ||
+  !Object.isFrozen(gsx.targets()[0].media.formats)
+) {
   throw new Error(`targets() lists ${names}`);
 }
 

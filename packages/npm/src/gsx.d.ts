@@ -30,7 +30,7 @@ export type Node =
         | 'spoiler'
         | 'break';
     })
-  | (NodeBase & { type: 'heading'; depth: number })
+  | (NodeBase & { type: 'heading'; depth: 1 | 2 | 3 | 4 | 5 | 6 })
   | (NodeBase & { type: 'list'; ordered: boolean; start: number | null; spread: boolean })
   | (NodeBase & { type: 'listItem'; spread: boolean; checked: boolean | null })
   | (NodeBase & { type: 'code'; lang: string | null; meta: string | null; value: string })
@@ -94,11 +94,26 @@ export type Code =
   | 'MEDIA_REFERENCE_DUPLICATE'
   | 'MEDIA_REFERENCE_UNKNOWN';
 
+export type ComplexityLimit =
+  | 'blockDelimiters'
+  | 'blockLabels'
+  | 'blockLabelEnds'
+  | 'containerDepth'
+  | 'documentEscapes'
+  | 'documentHardBreaks'
+  | 'documentLines'
+  | 'documentListItems'
+  | 'documentMathLiterals'
+  | 'documentPairedDelimiters'
+  | 'documentTableCells'
+  | 'documentUnits'
+  | 'inlineDepth';
+
 export type Details =
   | Record<string, never>
   | { scheme: 'http' | 'https' | 'relative' | 'unsupported' }
   | { id: string; index?: number }
-  | { limit: string; maximum: number }
+  | { limit: ComplexityLimit; maximum: number }
   | { codePoint: number };
 
 export interface Diagnostic {
@@ -124,7 +139,7 @@ export type Wire = { document: Document } | { error: WireError };
 
 export interface Facts {
   media?: 'image' | 'video' | 'gif' | 'audio' | null;
-  mediaCount?: number;
+  mediaCount?: number | null;
   /** Selects the limits declared for this placement; without it, or when the target declares none there, the first of post, reel, story that declares one. */
   placement?: 'post' | 'reel' | 'story' | null;
   title?: string | null;

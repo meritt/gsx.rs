@@ -1,3 +1,5 @@
+import Foundation
+
 extension GSX {
     public struct Document: Sendable, Hashable, Decodable {
         public let children: [Node]
@@ -148,18 +150,40 @@ extension GSX {
         case http, https, relative, unsupported
     }
 
+    public enum ComplexityLimit: String, Sendable, Hashable, Decodable {
+        case blockDelimiters
+        case blockLabels
+        case blockLabelEnds
+        case containerDepth
+        case documentEscapes
+        case documentHardBreaks
+        case documentLines
+        case documentListItems
+        case documentMathLiterals
+        case documentPairedDelimiters
+        case documentTableCells
+        case documentUnits
+        case inlineDepth
+    }
+
     public struct Details: Sendable, Hashable, Decodable {
         public let scheme: Scheme?
         public let id: String?
         public let index: Int?
-        public let limit: String?
+        public let limit: ComplexityLimit?
         public let maximum: Int?
         public let codePoint: UInt32?
     }
 
-    public struct ParseError: Error, Sendable, Hashable, Decodable {
+    public struct ParseError: Error, Sendable, Hashable, Decodable, CustomStringConvertible, LocalizedError {
         public let code: Code
         public let range: Range<Int>?
         public let details: Details
+
+        public var description: String {
+            if let range { "\(code.rawValue) at \(range.lowerBound)..\(range.upperBound)" } else { code.rawValue }
+        }
+
+        public var errorDescription: String? { description }
     }
 }

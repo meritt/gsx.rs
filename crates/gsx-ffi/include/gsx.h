@@ -47,21 +47,14 @@ typedef struct gsx_error gsx_error;
 
 typedef struct gsx_output gsx_output;
 
-typedef struct gsx_media {
-  const uint8_t *id;
-  size_t id_len;
-  const uint8_t *cover;
-  size_t cover_len;
-} gsx_media;
-
 typedef struct gsx_media_fact {
   const uint8_t *id;
   size_t id_len;
   uint32_t format;
   const uint8_t *alt;
   size_t alt_len;
-  bool spoiler;
-  bool inline_;
+  uint8_t spoiler;
+  uint8_t inline_;
 } gsx_media_fact;
 
 typedef struct gsx_facts {
@@ -76,7 +69,7 @@ typedef struct gsx_facts {
   int64_t characters_reserved_per_url;
   int64_t caption_limit;
   int64_t description_limit;
-  bool entities_allowed;
+  uint8_t entities_allowed;
   const struct gsx_media_fact *items;
   size_t items_len;
   int64_t hashtag_limit;
@@ -85,9 +78,18 @@ typedef struct gsx_facts {
   uint32_t overflow;
 } gsx_facts;
 
+typedef struct gsx_media {
+  const uint8_t *id;
+  size_t id_len;
+  const uint8_t *cover;
+  size_t cover_len;
+} gsx_media;
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
+
+struct gsx_facts gsx_facts_default(void);
 
 struct gsx_output *gsx_parse(const uint8_t *text,
                              size_t len,
