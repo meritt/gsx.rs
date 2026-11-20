@@ -55,7 +55,9 @@ jobs:
           fi
 
       - name: Format
-        run: cargo fmt --all --check
+        run: |
+          cargo fmt --all --check
+          cargo fmt --manifest-path fuzz/Cargo.toml --all --check
 
       - name: Lint
         env:
@@ -187,6 +189,9 @@ jobs:
           pattern: wheel-*
           path: ${{ runner.temp }}/wheels
           merge-multiple: true
+
+      - name: Test
+        run: cargo test --workspace --locked
 
       - name: Package
         run: |
@@ -428,6 +433,15 @@ jobs:
           mkdir -p fuzz/corpus/parse fuzz/corpus/project
           cargo "+$FUZZ_TOOLCHAIN" fuzz run parse fuzz/corpus/parse fuzz/seeds/parse -- -dict=fuzz/gsx.dict -max_len=4096 -max_total_time=60
           cargo "+$FUZZ_TOOLCHAIN" fuzz run project fuzz/corpus/project fuzz/seeds/project -- -dict=fuzz/gsx.dict -max_total_time=60
+
+      - name: Artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Save
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
