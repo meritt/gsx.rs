@@ -24,6 +24,7 @@ pub enum Align {
 }
 
 pub(crate) use construct::gsx_media::candidate_end as media_candidate_end;
+pub(crate) use util::constant::TAB_SIZE;
 
 pub(crate) use budget::Exceeded;
 

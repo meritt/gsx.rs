@@ -521,3 +521,40 @@ fn parses_bench_cases_in_linear_time() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn preserves_explicit_link_sources_and_bounds_directive_labels() {
+    let math_quote = parse("> $x\n>$", &[]).unwrap();
+    assert!(!matches!(math_quote.children()[0].children[0].children[0].kind, Kind::Math { .. }));
+
+    let math_media = parse("$::media{id=\"a\"}$", &[]).unwrap();
+    assert_eq!(math_media.diagnostics(), []);
+
+    let tab_fence = parse("  ```\n \tfoo\n  ```", &[]).unwrap();
+    assert!(matches!(&tab_fence.children()[0].kind, Kind::Code { value, .. } if value == "  foo"));
+}
+
+#[test]
+fn container_prefixes_and_tabs_do_not_leak_into_content() {
+    let shape = |input: &str| {
+        let doc = parse(input, &[]).unwrap();
+        let item = &doc.children()[0].children[0].children[0];
+        item.children.iter().map(|node| std::mem::discriminant(&node.kind)).collect::<Vec<_>>()
+    };
+    assert_eq!(shape(">\t- a\n>\n>     b"), shape(">   - a\n>\n>     b"));
+    let fence = parse(">\t~~~\n>\t  x\n>\t~~~", &[]).unwrap();
+    assert!(matches!(&fence.children()[0].children[0].kind, Kind::Code { value, .. } if value == "  x"));
+
+    let label = parse("> ::time[x\n> ]{unix=\"0\"}", &[]).unwrap();
+    let datetime = &label.children()[0].children[0].children[0];
+    assert!(matches!(datetime.kind, Kind::Datetime { .. }));
+    assert!(matches!(&datetime.children[0].kind, Kind::Text { value } if value == "x\n"), "{:?}", datetime.children);
+
+    let underlined = |input: &str| {
+        let doc = parse(input, &[]).unwrap();
+        let paragraph = &doc.children()[0].children[0];
+        let underline = paragraph.children.iter().find(|node| node.kind == Kind::Underline);
+        underline.map(|node| node.children.iter().map(|child| child.kind.clone()).collect::<Vec<_>>())
+    };
+    assert_eq!(underlined(">++a ++\n>++b++"), underlined("> ++a ++\n> ++b++"));
+}

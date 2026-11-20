@@ -102,7 +102,7 @@ struct Candidate<'n> {
 }
 
 fn collect_candidates<'n>(node: &'n tree::Node, bytes: &[u8], out: &mut Vec<Candidate<'n>>) {
-    if matches!(node.kind, tree::Kind::Code | tree::Kind::InlineCode) {
+    if matches!(node.kind, tree::Kind::Code | tree::Kind::InlineCode | tree::Kind::Math) {
         return;
     }
     let scan = |from: usize, to: usize, out: &mut Vec<Candidate>| {
