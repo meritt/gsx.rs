@@ -6,6 +6,8 @@ pub(super) mod unicode;
 
 use std::ops::Range;
 
+use crate::measure::X_URL_WEIGHT;
+
 pub fn accepted(raw: &str) -> Option<String> {
     let url = url::Url::parse(raw).ok()?;
     (matches!(url.scheme(), "http" | "https")
@@ -14,8 +16,6 @@ pub fn accepted(raw: &str) -> Option<String> {
         && url.password().is_none())
     .then(|| url.into())
 }
-
-const X_MEASURED_UTF16: usize = 280 * 4096 / 23;
 
 struct Units {
     units: Vec<u16>,
@@ -41,8 +41,14 @@ impl Units {
     }
 }
 
-pub fn x_urls(text: &str) -> Option<Vec<Range<usize>>> {
-    if text.len() > X_MEASURED_UTF16 && text.encode_utf16().count() > X_MEASURED_UTF16 {
+pub fn x_urls(text: &str, maximum: Option<usize>) -> Option<Vec<Range<usize>>> {
+    if !text.contains('.') {
+        return Some(vec![]);
+    }
+    if let Some(ceiling) = maximum.map(|maximum| maximum.saturating_mul(twitter::MAX_URL_LENGTH) / X_URL_WEIGHT)
+        && text.len() > ceiling
+        && text.encode_utf16().count() > ceiling
+    {
         return None;
     }
     let units = Units::new(text);

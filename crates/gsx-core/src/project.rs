@@ -13,7 +13,7 @@ mod thread;
 
 use std::borrow::Cow;
 use std::cell::OnceCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range as Span;
 
 use crate::document::{Document, Kind, Node, Provenance, Range, TimeFormat};
@@ -110,6 +110,10 @@ impl Boundary {
 impl Projection {
     pub fn field(&self, name: FieldName) -> Option<&Field> {
         self.fields.iter().find(|field| field.name == name)
+    }
+
+    pub fn is_blocked(&self) -> bool {
+        self.changes.iter().any(|change| change.class == Class::Blocked)
     }
 }
 
@@ -453,7 +457,7 @@ fn render(
         alts: vec![],
         urls: vec![],
         url_cap: target.form.entities().and_then(|form| form.links).map(|cap| {
-            let reserved = facts.target_url.is_some() && target.handles(Feature::TargetUrl);
+            let reserved = target.handles(Feature::TargetUrl) && facts.target_url.and_then(links::accepted).is_some();
             cap - usize::from(reserved)
         }),
         uncapped: false,
@@ -697,10 +701,15 @@ impl Request<'_, '_> {
             text = Cow::Owned(format!("{spoiler}{text}"));
         }
         let (urls, elided, whole) = match unit {
-            Unit::XWeighted | Unit::Links => match links::x_urls(&text) {
-                Some(urls) => (urls, vec![], true),
-                None => (vec![], vec![], false),
-            },
+            Unit::Links => (links::x_urls(&text, None).unwrap_or_default(), vec![], true),
+            Unit::XWeighted => {
+                let maximum =
+                    self.limits().into_iter().find(|limit| limit.unit == unit).and_then(|limit| limit.maximum);
+                match links::x_urls(&text, maximum) {
+                    Some(urls) => (urls, vec![], true),
+                    None => (vec![], vec![], false),
+                }
+            }
             Unit::MastodonWeighted => {
                 let (urls, elided) = links::mastodon_entities(&text);
                 (urls, elided, true)
@@ -1104,7 +1113,8 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                         changes.reserve_exact(first.rendered.changes.len() + 1);
                         changes.append(&mut first.rendered.changes);
                         changes.push(request.change(Feature::Text, None, Some(When::Thread)));
-                        for (part, range) in split.parts.iter().zip(&split.ranges[1..]) {
+                        let parts = std::iter::once(&first).chain(&split.parts);
+                        for (part, range) in parts.zip(&split.ranges) {
                             if Measurement::links_exceeded(&part.measurements) {
                                 changes.push(request.change(Feature::Link, Some(*range), Some(When::Overflow)));
                             }
@@ -1161,7 +1171,7 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         if spec.required && measure::blank(&rendered.text) {
             required.push(request.change(Feature::Title, None, Some(When::Empty)));
         }
-        if Measurement::links_exceeded(&measured) {
+        if threaded.as_ref().is_none_or(|(field, _)| *field != spec.name) && Measurement::links_exceeded(&measured) {
             rendered.changes.push(request.change(Feature::Link, None, Some(When::Overflow)));
         }
         for ((unit, _), spent) in MARKERS.into_iter().zip(&mut spent) {
@@ -1222,9 +1232,25 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
     media(children, &mut references);
     let mut parts = vec![];
     if let Some(threaded) = threaded {
-        parts = threaded_parts(target, threaded, &fields, &measurements, &items);
+        let name = threaded.0;
+        let (built, part0_items) = threaded_parts(target, threaded, &fields, &measurements, &items);
+        parts = built;
         references.clone_from(&parts[0].media);
         items.clone_from(&parts[0].items);
+        measurements.retain(|measurement| {
+            measurement.field != name && measurement.item.is_none() && measurement.block.is_none()
+        });
+        measurements.extend(parts[0].measurements.iter().copied());
+        for change in &mut changes {
+            if let Some(slot) = &mut change.slot
+                && slot.block.is_none()
+            {
+                match part0_items.get(slot.item as usize).copied().flatten() {
+                    Some(mapped) => slot.item = mapped as u32,
+                    None => change.slot = None,
+                }
+            }
+        }
     }
     Projection { fields, measurements, changes, media: references, blocks, items, parts }
 }
@@ -1262,13 +1288,14 @@ fn threaded_parts(
     fields: &[Field],
     measurements: &[Measurement],
     items: &[Attachment],
-) -> Vec<Part> {
-    let placed: Vec<String> = split.media.iter().flatten().map(|id| format!("media:{id}")).collect();
+) -> (Vec<Part>, Vec<Option<usize>>) {
+    let placed: HashSet<String> = split.media.iter().flatten().cloned().collect();
     let mut parts = vec![];
+    let mut part0_items = vec![];
     let first = fields.iter().find(|field| field.name == name).cloned();
     let mut rest = split.parts.into_iter();
     for (index, media) in split.media.into_iter().enumerate() {
-        let (field, measured) = if index == 0 {
+        let (field, mut measured) = if index == 0 {
             let measured = measurements
                 .iter()
                 .filter(|measurement| {
@@ -1290,14 +1317,27 @@ fn threaded_parts(
             };
             (Some(field), measurements)
         };
-        let attached = items
-            .iter()
-            .filter(|item| {
-                media.iter().any(|id| item.reference == format!("media:{id}"))
-                    || (index == 0 && !placed.contains(&item.reference))
-            })
-            .cloned()
-            .collect();
+        let mut mapping = vec![None; items.len()];
+        let mut attached = vec![];
+        for (old, item) in items.iter().enumerate() {
+            let id = item.reference.strip_prefix("media:");
+            if id.is_some_and(|id| media.iter().any(|placed| placed == id))
+                || (index == 0 && !id.is_some_and(|id| placed.contains(id)))
+            {
+                mapping[old] = Some(attached.len());
+                attached.push(item.clone());
+            }
+        }
+        for measurement in measurements {
+            if let (Some(old), None) = (measurement.item, measurement.block)
+                && let Some(mapped) = mapping.get(old).copied().flatten()
+            {
+                measured.push(Measurement { item: Some(mapped), ..*measurement });
+            }
+        }
+        if index == 0 {
+            part0_items = mapping;
+        }
         parts.push(Part {
             fields: field.into_iter().collect(),
             measurements: measured,
@@ -1307,7 +1347,7 @@ fn threaded_parts(
             boundary: split.boundaries[index],
         });
     }
-    parts
+    (parts, part0_items)
 }
 
 struct Locator<'a> {
