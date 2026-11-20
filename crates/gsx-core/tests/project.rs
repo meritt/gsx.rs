@@ -1003,6 +1003,65 @@ fn threads_counts_links_above_49864_units_and_reports_part0_range() {
 }
 
 #[test]
+fn first_line_title_preserves_body_links_and_attributes_title_changes() {
+    let document = parse("**Lead**\n\nVisit https://example.com/a and [site](https://example.com/b).", &[]).unwrap();
+    let projection = project(&document, target("youtube-plain").unwrap(), &Facts::default());
+    let description = projection.field(FieldName::Description).unwrap();
+    assert!(!description.links.is_empty(), "description links must not be cleared");
+    assert!(
+        projection.changes.iter().any(|c| c.feature == Feature::Strong && c.field == FieldName::Title),
+        "first-line rendering changes belong to title: {:?}",
+        projection.changes
+    );
+
+    let ruled = run("youtube-plain", "Lead\n\n---\n\n**More**", &Facts::default());
+    let rule = ruled.changes.iter().find(|c| c.feature == Feature::ThematicBreak).unwrap();
+    assert_eq!(rule.field, FieldName::Description);
+
+    let media = [gsx_core::document::Media { id: "a", cover: None }];
+    let long = parse(&format!("::media{{id=\"a\"}}\n\n{}", "word ".repeat(40)), &media).unwrap();
+    let projection = project(&long, target("youtube-plain").unwrap(), &Facts::default());
+    let truncated = projection.changes.iter().find(|c| c.field == FieldName::Title && c.truncated.is_some()).unwrap();
+    assert_eq!(truncated.range.map(|range| range.start), Some(17));
+}
+
+#[test]
+fn story_placement_does_not_leak_onto_non_story_targets() {
+    for name in ["x-plain", "mastodon-plain", "threads-entities", "discord-markdown"] {
+        let tgt = target(name).unwrap();
+        assert!(!tgt.facts().contains(&"placement"), "{name} should not advertise placement");
+    }
+    let document = parse("Hello\n\n::media{id=\"a\"}", &[gsx_core::document::Media { id: "a", cover: None }]).unwrap();
+    let items = [MediaFact { id: "a", format: Format::Image, alt: None, spoiler: true, inline: false }];
+    let facts = Facts {
+        media: Some(MediaKind::Image),
+        media_count: 1,
+        placement: Some(Placement::Story),
+        items: Some(&items),
+        ..Facts::default()
+    };
+    let mastodon = project(&document, target("mastodon-plain").unwrap(), &facts);
+    assert!(mastodon.items[0].spoiler);
+    assert!(!mastodon.changes.iter().any(|c| c.reason == "media_spoiler_omitted"));
+
+    let vk = project(
+        &parse("one\n\n\n\ntwo", &[]).unwrap(),
+        target("vk-plain").unwrap(),
+        &Facts { media: Some(MediaKind::Video), media_count: 1, ..Facts::default() },
+    );
+    assert!(!vk.changes.iter().any(|c| c.field == FieldName::Title && c.reason == "blank_lines_collapsed"));
+
+    let handle_doc = parse("hi @alice-smith.bsky.social end", &[]).unwrap();
+    let cut = project_with(
+        &handle_doc,
+        target("bluesky-entities").unwrap(),
+        &Facts::default(),
+        &Options { search: None, maximum: Some(15) },
+    );
+    assert_eq!(cut.fields[0].text, "hi…");
+}
+
+#[test]
 fn threads_reserves_a_link_slot_only_for_an_accepted_target_url() {
     let links = (0..5).map(|i| format!("[l{i}](https://e{i}.example/)")).collect::<Vec<_>>().join(" ");
     let document = parse(&links, &[]).unwrap();

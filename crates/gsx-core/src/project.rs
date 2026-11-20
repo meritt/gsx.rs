@@ -142,6 +142,7 @@ pub struct Context<'a> {
     url_cap: Option<usize>,
     uncapped: bool,
     thread: bool,
+    origins: bool,
 }
 
 impl<'a> Context<'a> {
@@ -331,7 +332,7 @@ impl<'a> Context<'a> {
                 let end = self.writer.mark();
                 self.writer.eligible(start..end);
             }
-            if self.thread {
+            if self.origins {
                 self.writer.origin(start, node.range);
             }
         }
@@ -347,7 +348,7 @@ impl<'a> Context<'a> {
         } else {
             let start = self.writer.mark();
             self.writer.push(&map(value, Piece::Whole));
-            if self.thread {
+            if self.origins {
                 self.writer.origin(start, node.range);
             }
         }
@@ -462,6 +463,7 @@ fn render(
         }),
         uncapped: false,
         thread,
+        origins: thread,
     };
     draw(&mut context);
     let mut written = std::mem::replace(&mut context.writer, Writer::new(Escape::None)).finish();
@@ -671,6 +673,10 @@ struct Request<'a, 'b> {
     facts: &'a Facts<'b>,
     options: &'a Options,
     spent: Spent,
+}
+
+fn story(target: &Target, facts: &Facts) -> bool {
+    facts.placement == Some(Placement::Story) && target.has_story()
 }
 
 fn resolved(facts: &Facts) -> Vec<(Fact, u32)> {
@@ -916,7 +922,12 @@ impl Request<'_, '_> {
         }
         let (range, exact) = cut.dropped(outline.end());
         let mut change = self.change(Feature::Text, Some(range), None);
-        change.truncated = Some(Truncated { unit, maximum: maximum as u32, value: value as u32, exact });
+        change.truncated = Some(Truncated {
+            unit,
+            maximum: u32::try_from(maximum).unwrap_or(u32::MAX),
+            value: u32::try_from(value).unwrap_or(u32::MAX),
+            exact,
+        });
         rendered.changes.push(change);
         Fitted { rendered, measurements: self.measurements(&limits, &fitted) }
     }
@@ -956,10 +967,16 @@ fn appended(target: &Target, mut rendered: Rendered, url: Option<&str>) -> Rende
     rendered
 }
 
-fn without_first_line(text: &str) -> String {
-    let mut lines = text.split('\n');
-    lines.by_ref().find(|line| !line.trim().is_empty());
-    lines.collect::<Vec<_>>().join("\n").trim_start().to_owned()
+fn without_first_line_offset(text: &str) -> usize {
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        at += line.len();
+        if !line.trim().is_empty() {
+            let trimmed = text[at..].trim_start();
+            return text.len() - trimmed.len();
+        }
+    }
+    text.len()
 }
 
 fn first_line(text: &str) -> String {
@@ -1051,12 +1068,46 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
         });
     let draw_body = |field, spent, cut: Option<&Cut>, origins| {
         let spent = if removed { [0; 2] } else { spent };
-        let mut rendered =
-            render(target, facts, field, spent, cut, origins, |context| (target.renderer.blocks)(context, body));
+        let mut rendered = render(target, facts, field, spent, cut, origins, |context| {
+            context.origins |= removed;
+            (target.renderer.blocks)(context, body);
+        });
         if removed {
-            rendered.text = without_first_line(&rendered.text);
-            rendered.links.clear();
+            let drop = without_first_line_offset(&rendered.text);
+            let kept_start =
+                rendered.origins.iter().find(|(span, _)| span.end > drop).map_or(u32::MAX, |(_, source)| source.start);
+            let title_end = rendered
+                .origins
+                .iter()
+                .take_while(|(span, _)| span.start < drop)
+                .last()
+                .and_then(|(_, source)| {
+                    body.iter().find(|node| node.range.start <= source.start && source.end <= node.range.end)
+                })
+                .map_or(u32::MAX, |node| node.range.end);
+            let boundary = kept_start.min(title_end);
+            for change in &mut rendered.changes {
+                if change.feature != Feature::Media && change.range.is_some_and(|range| range.end <= boundary) {
+                    change.field = FieldName::Title;
+                }
+            }
+            rendered.text.drain(..drop);
+            let shift = |span: &mut Span<usize>| {
+                if span.start >= drop {
+                    span.start -= drop;
+                    span.end -= drop;
+                    true
+                } else {
+                    false
+                }
+            };
+            rendered.links.retain_mut(shift);
             rendered.styled.clear();
+            if origins {
+                rendered.origins.retain_mut(|(span, _)| shift(span));
+            } else {
+                rendered.origins.clear();
+            }
         }
         rendered
     };
@@ -1081,10 +1132,8 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     changes.push(request.change(Feature::TargetUrl, None, Some(When::Refused)));
                 }
                 let markup = target.form.splits_by_nodes();
-                let threading = facts.overflow == Overflow::Thread
-                    && facts.placement != Some(Placement::Story)
-                    && target.threads()
-                    && !derived;
+                let threading =
+                    facts.overflow == Overflow::Thread && !story(target, facts) && target.threads() && !derived;
                 let mut full = None;
                 let suffix = target_url.as_ref().and_then(Option::as_deref).filter(|_| !derived).filter(|url| {
                     let drawn = full.insert(draw_body(spec.name, spent, None, threading && !markup));
@@ -1136,7 +1185,10 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     fitted.rendered.changes.push(request.change(Feature::TargetUrl, None, None));
                 }
                 if derived {
-                    fitted.rendered.changes.retain(|change| change.feature == Feature::Text);
+                    fitted.rendered.changes.retain(|change| {
+                        change.feature == Feature::Text
+                            && (change.truncated.is_some() || change.class == Class::Blocked)
+                    });
                 }
                 derived = true;
                 fitted
@@ -1154,15 +1206,18 @@ pub fn project_with(document: &Document, target: &'static Target, facts: &Facts,
                     })
                     .unprefixed(),
                 );
-                let mut fitted = request.fit(&|| Outline::of_text(&source), true, &|cut| {
+                let enclosing = body.iter().find(|node| node.media_ids().is_none()).map(|node| node.range);
+                let outline = || {
+                    enclosing.map_or_else(|| Outline::of_text(&source), |range| Outline::of_text_within(&source, range))
+                };
+                let mut fitted = request.fit(&outline, true, &|cut| {
                     Rendered::text(cut.map_or_else(|| source.clone(), |cut| cut.replacement.clone()))
                 });
                 if let Some(heading) = leading {
                     fitted.rendered.changes.extend(draw_heading(heading, spec.name, spent, None).changes);
                 }
                 if removed {
-                    let range = body.first().map(|node| node.range);
-                    fitted.rendered.changes.push(request.change(Feature::Title, range, Some(When::TitleSource)));
+                    fitted.rendered.changes.push(request.change(Feature::Title, enclosing, Some(When::TitleSource)));
                 }
                 fitted
             }
@@ -1417,7 +1472,7 @@ fn explicit_title(request: &Request, title: &str) -> Fitted {
     let mut rendered = Rendered { changes, ..Rendered::text(text) };
     let limits = request.limits();
     let values = request.values(&limits, &rendered);
-    if limits.iter().zip(&values).any(|(limit, value)| limit.maximum.is_some_and(|maximum| *value > maximum)) {
+    if !within(&limits, &values) {
         rendered.changes.push(request.change(Feature::Title, None, None));
     }
     Fitted { measurements: request.measurements(&limits, &values), rendered }

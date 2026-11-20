@@ -145,7 +145,7 @@ pub(super) fn attach(target: &'static Target, facts: &Facts, children: &[Node]) 
     let mut attached = Attached { items: vec![], changes: vec![], measurements: vec![] };
     let ranges = references(children);
     let items = facts.items.unwrap_or_default();
-    let spoilers = if facts.placement == Some(Placement::Story) { Spoilers::None } else { target.spoilers };
+    let spoilers = if super::story(target, facts) { Spoilers::None } else { target.spoilers };
     let post = spoilers == Spoilers::Post && items.iter().any(|fact| fact.spoiler);
     for (index, fact) in items.iter().enumerate() {
         let range = ranges.get(fact.id).map(|&top| children[top].range);
