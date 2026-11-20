@@ -39,7 +39,22 @@ pub fn normalize(text: &str) -> Result<Cow<'_, str>, InvalidText> {
     if !text.contains('\r') {
         return Ok(Cow::Borrowed(text));
     }
-    Ok(Cow::Owned(text.replace("\r\n", "\n").replace('\r', "\n")))
+    let mut out = String::with_capacity(text.len());
+    let mut start = 0;
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'\r' {
+            out.push_str(&text[start..index]);
+            out.push('\n');
+            if bytes.get(index + 1) == Some(&b'\n') {
+                index += 1;
+            }
+            start = index + 1;
+        }
+        index += 1;
+    }
+    out.push_str(&text[start..]);
+    Ok(Cow::Owned(out))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -130,6 +145,7 @@ impl LineIndex {
     }
 
     pub fn byte(&self, utf16: u32) -> usize {
+        let utf16 = utf16.min(self.len);
         self.utf16.as_ref().map_or(utf16 as usize, |units| units.byte(utf16))
     }
 
@@ -146,6 +162,7 @@ impl LineIndex {
     }
 
     pub fn point(&self, offset: u32) -> Point {
+        let offset = offset.min(self.len);
         let line = self.line_starts.partition_point(|&start| start <= offset);
         Point { line: line as u32, column: offset - self.line_starts[line - 1] + 1, offset }
     }

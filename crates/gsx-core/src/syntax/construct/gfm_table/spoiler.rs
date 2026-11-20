@@ -127,12 +127,21 @@ fn mark_code_spans(line: &[u8], inactive: &mut [bool]) {
             }
         }
     }
+    if runs.len() < 2 {
+        return;
+    }
+    let mut ordered: Vec<(usize, usize)> =
+        runs.iter().enumerate().map(|(index, run)| (run.end - run.start, index)).collect();
+    crate::order::sort_by_key(&mut ordered, |&(length, index)| crate::order::pair(length, index));
     let mut index = 0;
     while index < runs.len() {
         let run = &runs[index];
         if !run.escaped {
             let length = run.end - run.start;
-            if let Some(close) = (index + 1..runs.len()).find(|&next| runs[next].end - runs[next].start == length) {
+            let pos = ordered.partition_point(|&(len, at)| (len, at) <= (length, index));
+            if let Some(&(len, close)) = ordered.get(pos)
+                && len == length
+            {
                 inactive[run.start..runs[close].end].fill(true);
                 index = close;
             }

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::iter::Peekable;
 use std::ops::Range;
 
@@ -30,7 +31,7 @@ fn valid<'a>(text: &'a str, spans: &'a [Range<usize>]) -> impl Iterator<Item = &
 }
 
 pub(super) fn unique_urls(text: &str, urls: &[Range<usize>]) -> usize {
-    let mut seen = vec![];
+    let mut seen = HashSet::new();
     admit_urls(text, &mut valid(text, urls).peekable(), text.len(), &mut seen);
     seen.len()
 }
@@ -38,7 +39,7 @@ pub(super) fn unique_urls(text: &str, urls: &[Range<usize>]) -> usize {
 pub(super) fn unique_url_prefixes(text: &str, urls: &[Range<usize>], ends: &[usize]) -> Measured {
     let mut prefixes = Prefixes::new(ends);
     let mut urls = valid(text, urls).peekable();
-    let mut seen: Vec<&str> = vec![];
+    let mut seen = HashSet::new();
     for (at, char) in text.char_indices() {
         if prefixes.wanted(at) && char.is_whitespace() {
             admit_urls(text, &mut urls, at, &mut seen);
@@ -53,13 +54,10 @@ fn admit_urls<'t>(
     text: &'t str,
     urls: &mut Peekable<impl Iterator<Item = &'t Range<usize>>>,
     at: usize,
-    seen: &mut Vec<&'t str>,
+    seen: &mut HashSet<&'t str>,
 ) {
     while let Some(url) = urls.next_if(|url| url.end <= at) {
-        let url = &text[url.clone()];
-        if !seen.contains(&url) {
-            seen.push(url);
-        }
+        seen.insert(&text[url.clone()]);
     }
 }
 
@@ -71,32 +69,7 @@ fn x_char(char: char) -> usize {
 }
 
 pub(super) fn x_weighted(text: &str, urls: &[Range<usize>]) -> usize {
-    let mut urls = valid(text, urls).peekable();
-    let bytes = text.as_bytes();
-    let mut weight = 0;
-    let mut at = 0;
-    while let Some(char) = text[at..].chars().next() {
-        while urls.next_if(|url| url.start < at).is_some() {}
-        if let Some(url) = urls.next_if(|url| url.start == at) {
-            weight += X_URL_WEIGHT;
-            at = url.end;
-            continue;
-        }
-        if char.is_ascii() && bytes.get(at + 1).is_none_or(u8::is_ascii) {
-            weight += 1;
-            at += 1;
-            continue;
-        }
-        let emoji = emoji::rgi_prefix(&text[at..]);
-        if emoji > 0 {
-            weight += 2;
-            at += emoji;
-        } else {
-            weight += x_char(char);
-            at += char.len_utf8();
-        }
-    }
-    weight
+    x_weighted_prefixes(text, urls, &[]).1
 }
 
 pub(super) fn mastodon_weighted(
