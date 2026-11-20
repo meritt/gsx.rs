@@ -303,6 +303,10 @@ impl HtmlForm {
         self.tags.iter().find(|(native, _)| *native == feature).map(|(_, tag)| *tag)
     }
 
+    pub fn item_limit(&self) -> usize {
+        self.structure.map_or(usize::MAX, |structure| structure.items)
+    }
+
     pub fn group(&self, layout: Layout) -> Option<(&'static str, &'static [Format])> {
         self.groups.iter().find(|(native, ..)| *native == layout).map(|&(_, tag, formats)| (tag, formats))
     }

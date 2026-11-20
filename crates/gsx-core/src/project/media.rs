@@ -6,7 +6,7 @@ use crate::measure::{self, Fact, MediaKind, Placement};
 use super::change::{Change, Feature, FieldName, Slot, Truncated};
 use super::facts::{Facts, Format, MediaFact};
 use super::layout::{blank, lines};
-use super::table::{BlocksForm, Spoilers, Target, Unplaced, When};
+use super::table::{BlocksForm, HtmlForm, Spoilers, Target, Unplaced, When};
 use super::{Measurement, shortened};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -144,7 +144,9 @@ pub(super) fn attach(target: &'static Target, facts: &Facts, children: &[Node]) 
     let resolved = super::resolved(facts);
     let mut attached = Attached { items: vec![], changes: vec![], measurements: vec![] };
     let ranges = references(children);
+    let limit = target.form.html().map_or(usize::MAX, HtmlForm::item_limit);
     let items = facts.items.unwrap_or_default();
+    let items = &items[..items.len().min(limit)];
     let spoilers = if super::story(target, facts) { Spoilers::None } else { target.spoilers };
     let post = spoilers == Spoilers::Post && items.iter().any(|fact| fact.spoiler);
     for (index, fact) in items.iter().enumerate() {
@@ -246,8 +248,7 @@ impl Layouter {
     fn change_at(&mut self, field: FieldName, range: Option<Range>, when: When, slot: Option<Slot>) {
         let (class, reason) = self.target.rule(Feature::Media).outcome(Some(when));
         let change = Change { class, feature: Feature::Media, reason, field, range, truncated: None, slot };
-        let mut run = self.laid.changes.iter().rev().take_while(|reported| reported.range == range);
-        if !run.any(|reported| *reported == change) {
+        if !self.laid.changes.contains(&change) {
             self.laid.changes.push(change);
         }
     }
