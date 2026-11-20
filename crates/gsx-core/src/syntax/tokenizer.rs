@@ -6,7 +6,7 @@ use crate::syntax::state::{State, call};
 use crate::syntax::subtokenize::Subresult;
 
 use crate::syntax::util::{constant::TAB_SIZE, edit_map::EditMap};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Container {
@@ -143,6 +143,8 @@ pub struct TokenizeState<'a> {
 
     pub gsx_paired: Vec<(usize, bool, bool)>,
     pub gsx_paired_close: bool,
+    pub gsx_directive_failed: HashSet<usize>,
+    pub gsx_directive_seen: Vec<usize>,
     pub gsx_math_trailing_ws: bool,
     pub gsx_math_slashes: usize,
     pub gfm_table_pipe_data: Vec<usize>,
@@ -236,6 +238,8 @@ impl<'a> Tokenizer<'a> {
                 token_6: Name::Data,
                 gsx_paired: vec![],
                 gsx_paired_close: false,
+                gsx_directive_failed: HashSet::new(),
+                gsx_directive_seen: vec![],
                 gsx_math_trailing_ws: false,
                 gsx_math_slashes: 0,
                 gfm_table_pipe_data: vec![],

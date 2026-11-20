@@ -62,6 +62,7 @@ pub(super) struct Extra {
     pub lang: Option<String>,
     pub meta: Option<String>,
     pub url: String,
+    pub source: Option<String>,
     pub title: Option<String>,
     pub align: Vec<Align>,
     pub name: String,
@@ -72,6 +73,7 @@ static NO_EXTRA: Extra = Extra {
     lang: None,
     meta: None,
     url: String::new(),
+    source: None,
     title: None,
     align: Vec::new(),
     name: String::new(),
@@ -578,7 +580,12 @@ impl<'a> Builder<'a> {
                 if let Some(resource) = resource {
                     let close = self.exits[resource];
                     if let Some(i) = self.find(resource, close, Name::ResourceDestinationString) {
-                        n.extra_mut().url = decode_string(&self.text(i));
+                        let raw = self.text(i);
+                        let extra = n.extra_mut();
+                        extra.url = decode_string(&raw);
+                        extra.source = Some(raw);
+                    } else {
+                        n.extra_mut().source = Some(String::new());
                     }
                     if let Some(i) = self.find(resource, close, Name::ResourceTitleString) {
                         n.extra_mut().title = Some(decode_string(&self.text(i)));

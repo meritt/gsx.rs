@@ -62,7 +62,7 @@ pub fn flow_start(tokenizer: &mut Tokenizer) -> State {
 }
 
 pub fn flow_before(tokenizer: &mut Tokenizer) -> State {
-    let bytes = tokenizer.parse_state.bytes;
+    let bytes = &tokenizer.parse_state.bytes[..tokenizer.limit()];
     if tokenizer.current != Some(b':') {
         return State::Nok;
     }
@@ -86,7 +86,8 @@ pub fn text_start(tokenizer: &mut Tokenizer) -> State {
     if tokenizer.current != Some(b':') || tokenizer.previous == Some(b':') {
         return State::Nok;
     }
-    let Some(end) = candidate_end(tokenizer.parse_state.bytes, tokenizer.point.index as usize) else {
+    let bytes = &tokenizer.parse_state.bytes[..tokenizer.limit()];
+    let Some(end) = candidate_end(bytes, tokenizer.point.index as usize) else {
         return State::Nok;
     };
     tokenizer.tokenize_state.end = end;
