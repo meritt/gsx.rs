@@ -1,9 +1,12 @@
+use std::borrow::Cow;
+
 use super::{closing_bidi, dropped, language, math_block, media, spelled, underlined, wrapper};
 use crate::document::{Align, Kind, Node, Provenance, TimeFormat};
 use crate::project::links::accepted;
 use crate::project::{
     CELL, Class, Context, Feature, LineStart, MarkdownForm, RULE, Renderer, Style, When, href, time_format,
 };
+use crate::syntax::TAB_SIZE;
 
 pub const RENDERER: Renderer = Renderer { blocks, inline };
 
@@ -211,7 +214,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
             Kind::Text { value } => {
                 let literal = node.provenance == Provenance::Literal;
                 let live = form.owned && !context.linked();
-                context.leaf_with(node, value, |piece, _| text(form, piece, literal, live));
+                context.leaf_with(node, value, |piece, _| text(form, piece, literal, live, cell));
             }
             Kind::InlineCode { value } => {
                 let shown = code(form, context.rendered(node, value), false);
@@ -224,7 +227,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
             }
             Kind::Math { value } => {
                 context.report(Feature::Math, node.range);
-                context.leaf_with(node, value, |piece, kind| text(form, &spelled(piece, kind), true, false));
+                context.leaf_with(node, value, |piece, kind| text(form, &spelled(piece, kind), true, false, cell));
             }
             Kind::Break => context.writer().push(form.line_break),
             Kind::Link { url, title, .. } => {
@@ -245,7 +248,7 @@ fn inline_at(context: &mut Context, nodes: &[Node], cell: bool) {
                         let closing = closing_bidi(context.writer().since(mark));
                         context.writer().source(node.range);
                         let shown = raw(href, cell);
-                        context.writer().push(&if bare { shown } else { format!("{closing} ({shown})") });
+                        context.writer().push(&if bare { shown.into_owned() } else { format!("{closing} ({shown})") });
                         continue;
                     }
                 }
@@ -306,10 +309,10 @@ fn datetime(context: &mut Context, node: &Node, unix: i64, format: Option<TimeFo
         return;
     }
     context.writer().source(node.range);
-    context.writer().push(&raw(before.to_owned(), cell));
+    context.writer().push(&raw(before, cell));
     flat(context, &node.children, cell);
     context.writer().source(node.range);
-    context.writer().push(&raw(after.to_owned(), cell));
+    context.writer().push(&raw(after, cell));
 }
 
 fn skip(context: &mut Context, nodes: &[Node]) {
@@ -344,7 +347,10 @@ fn flat(context: &mut Context, nodes: &[Node], cell: bool) {
                 context.leaf_with(node, value, |piece, kind| code(form, &spelled(piece, kind), cell));
             }
             Kind::Break => context.writer().push("\n"),
-            Kind::Link { url, .. } => {
+            Kind::Link { url, title, .. } => {
+                if title.is_some() {
+                    context.report(Feature::LinkTitle, node.range);
+                }
                 let href = href(url);
                 let mut label = String::new();
                 super::label(&node.children, &mut label, true);
@@ -393,10 +399,11 @@ pub fn destination(href: &str) -> String {
 
 fn code(form: &MarkdownForm, value: &str, cell: bool) -> String {
     let value = if form.html { super::html::escape(value) } else { value.to_owned() };
-    raw(value, cell)
+    raw(value, cell).into_owned()
 }
 
-fn raw(value: String, cell: bool) -> String {
+fn raw<'a>(value: impl Into<Cow<'a, str>>, cell: bool) -> Cow<'a, str> {
+    let value = value.into();
     if !cell || !value.contains('|') {
         return value;
     }
@@ -412,7 +419,7 @@ fn raw(value: String, cell: bool) -> String {
             char => out.push(char),
         }
     }
-    out
+    Cow::Owned(out)
 }
 
 fn escape(out: &mut String, value: &str, set: &str) {
@@ -427,7 +434,7 @@ fn escape(out: &mut String, value: &str, set: &str) {
     out.push_str(rest);
 }
 
-fn spans(out: &mut String, line: &str, form: &MarkdownForm, live: bool) {
+fn spans(out: &mut String, line: &str, form: &MarkdownForm, live: bool, cell: bool) {
     if !live {
         escape(out, line, form.escaped);
         return;
@@ -435,13 +442,13 @@ fn spans(out: &mut String, line: &str, form: &MarkdownForm, live: bool) {
     let mut cursor = 0;
     for (start, end) in owned(line) {
         escape(out, &line[cursor..start], form.escaped);
-        out.push_str(&line[start..end]);
+        out.push_str(&raw(&line[start..end], cell));
         cursor = end;
     }
     escape(out, &line[cursor..], form.escaped);
 }
 
-fn text(form: &MarkdownForm, value: &str, literal: bool, live: bool) -> String {
+fn text(form: &MarkdownForm, value: &str, literal: bool, live: bool, cell: bool) -> String {
     let mut out = String::with_capacity(value.len() + value.len() / 4 + 2);
     for (index, line) in value.split('\n').enumerate() {
         if index > 0 {
@@ -451,9 +458,9 @@ fn text(form: &MarkdownForm, value: &str, literal: bool, live: bool) -> String {
             escape(&mut out, line, form.escaped);
         } else if form.neutralised.contains(&LineStart::Ordered) && escaped_ordered(line) {
             out.push('\\');
-            spans(&mut out, &line[1..], form, live);
+            spans(&mut out, &line[1..], form, live, cell);
         } else {
-            spans(&mut out, line, form, live);
+            spans(&mut out, line, form, live, cell);
         }
     }
     out
@@ -471,29 +478,47 @@ fn neutralise(context: &mut Context, mark: usize) {
     let lines = writer.lines(mark);
     for line in lines.into_iter().rev() {
         let offset = line.start - mark;
-        if let Some(at) = neutral(form, &writer.since(mark).as_bytes()[offset..offset + line.len()]) {
+        let bytes = &writer.since(mark).as_bytes()[offset..offset + line.len()];
+        let before = &writer.since(0)[..line.start];
+        let column = before[before.rfind('\n').map_or(0, |at| at + 1)..].chars().count();
+        if form.neutralised.contains(&LineStart::Indented)
+            && let Some((length, spaces)) = indented(bytes, column)
+        {
+            writer.edit(|text| text.replace_range(line.start..line.start + length, &"\u{a0}".repeat(spaces)));
+        } else if let Some(at) = neutral(form, bytes) {
             writer.insert(line.start + at, "\\");
         }
     }
 }
 
+fn indented(line: &[u8], column: usize) -> Option<(usize, usize)> {
+    let length = line.iter().take_while(|&&byte| byte == b' ' || byte == b'\t').count();
+    let end =
+        line[..length].iter().fold(column, |at, &byte| at + if byte == b'\t' { TAB_SIZE - at % TAB_SIZE } else { 1 });
+    let columns = end - column;
+    (columns >= TAB_SIZE).then_some((length, columns))
+}
+
 fn neutral(form: &MarkdownForm, line: &[u8]) -> Option<usize> {
+    let indent = line.iter().take(3).take_while(|&&byte| byte == b' ').count();
+    let rest = &line[indent..];
     form.neutralised.iter().find_map(|rule| match rule {
         LineStart::Heading => {
-            let hashes = line.iter().take_while(|&&byte| byte == b'#').count();
-            ((1..=6).contains(&hashes) && matches!(line.get(hashes), Some(b' ' | b'\t') | None)).then_some(0)
+            let hashes = rest.iter().take_while(|&&byte| byte == b'#').count();
+            ((1..=6).contains(&hashes) && matches!(rest.get(hashes), Some(b' ' | b'\t') | None)).then_some(indent)
         }
         LineStart::Ordered => {
-            let digits = line.iter().take_while(|byte| byte.is_ascii_digit()).count();
+            let digits = rest.iter().take_while(|byte| byte.is_ascii_digit()).count();
             ((1..=9).contains(&digits)
-                && line.get(digits) == Some(&b'.')
-                && matches!(line.get(digits + 1), Some(b' ' | b'\t')))
-            .then_some(digits)
+                && rest.get(digits) == Some(&b'.')
+                && matches!(rest.get(digits + 1), Some(b' ' | b'\t') | None))
+            .then_some(indent + digits)
         }
         LineStart::Setext => {
-            let signs = line.iter().take_while(|&&byte| byte == b'=').count();
-            (signs > 0 && line[signs..].iter().all(|&byte| byte == b' ' || byte == b'\t')).then_some(0)
+            let signs = rest.iter().take_while(|&&byte| byte == b'=').count();
+            (signs > 0 && rest[signs..].iter().all(|&byte| byte == b' ' || byte == b'\t')).then_some(indent)
         }
+        LineStart::Indented => None,
     })
 }
 

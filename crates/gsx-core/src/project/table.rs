@@ -323,6 +323,7 @@ pub enum LineStart {
     Heading,
     Ordered,
     Setext,
+    Indented,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -359,6 +360,7 @@ impl MarkdownForm {
             LineStart::Heading => "heading",
             LineStart::Ordered => "ordered",
             LineStart::Setext => "setext",
+            LineStart::Indented => "indented",
         }));
         let quote_depth = self.quote_depth.map_or_else(|| "none".to_owned(), |depth| depth.to_string());
         let _ = writeln!(

@@ -95,7 +95,7 @@ pub(super) static SLACK_FORM: MarkdownForm = MarkdownForm {
     ],
     escaped: "\\`*_~|{}[]()+-!&<>",
     owned: true,
-    neutralised: &[LineStart::Heading, LineStart::Ordered, LineStart::Setext],
+    neutralised: &[LineStart::Heading, LineStart::Ordered, LineStart::Setext, LineStart::Indented],
     html: true,
     datetime: "<!date^$unix^$format|$label>",
     time_format: "{date_short} {time}",
