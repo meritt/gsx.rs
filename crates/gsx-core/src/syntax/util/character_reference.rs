@@ -1,6 +1,6 @@
 use crate::syntax::util::constant::{
     CHARACTER_REFERENCE_DECIMAL_SIZE_MAX, CHARACTER_REFERENCE_HEXADECIMAL_SIZE_MAX, CHARACTER_REFERENCE_NAMED_SIZE_MAX,
-    CHARACTER_REFERENCES, CHARACTER_REFERENCES_HTML_4,
+    CHARACTER_REFERENCES,
 };
 use std::cmp::Ordering;
 use std::str;
@@ -119,11 +119,8 @@ fn lookup(name: &str) -> Option<&'static str> {
     None
 }
 
-pub fn decode_named(value: &str, html5: bool) -> Option<&'static str> {
-    if html5 {
-        return lookup(value);
-    }
-    CHARACTER_REFERENCES_HTML_4.iter().find(|d| d.0 == value).map(|d| d.1)
+pub fn decode_named(value: &str) -> Option<&'static str> {
+    lookup(value)
 }
 
 pub fn decode_numeric(value: &str, radix: u32) -> String {
@@ -139,11 +136,11 @@ pub fn decode_numeric(value: &str, radix: u32) -> String {
     char::REPLACEMENT_CHARACTER.into()
 }
 
-pub fn decode(value: &str, marker: u8, html5: bool) -> Option<String> {
+pub fn decode(value: &str, marker: u8) -> Option<String> {
     match marker {
         b'#' => Some(decode_numeric(value, 10)),
         b'x' => Some(decode_numeric(value, 16)),
-        b'&' => decode_named(value, html5).map(String::from),
+        b'&' => decode_named(value).map(String::from),
         _ => unreachable!("Unexpected marker `{}`", marker),
     }
 }

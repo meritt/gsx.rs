@@ -32,7 +32,8 @@ import Testing
         _ = try GSX.parse(String(repeating: ">", count: 65))
     } catch let error as GSX.ParseError {
         #expect(error.code == .markdownTooComplex)
-        #expect(error.details.limit == "containerDepth")
+        #expect(error.details.limit == .containerDepth)
+        #expect(!error.description.isEmpty)
     } catch {
         Issue.record(error)
     }

@@ -391,6 +391,7 @@ impl Html {
             context.report_when(feature, Some(node.range), Some(When::Nested));
             return self.inline(context, &node.children);
         }
+        let before = context.writer().mark();
         let underline = self.form.tag(Feature::Underline).filter(|_| {
             feature == Feature::Link
                 && !self.open.iter().any(|element| element.feature == Some(Feature::Underline))
@@ -405,12 +406,16 @@ impl Html {
         let name = start[1..].split([' ', '>']).next().unwrap_or("");
         let end = format!("</{name}>");
         let element = Element { start, end, feature: Some(feature), range: node.range, exclusive };
-        if !self.wrapped(context, element, &node.children) && feature == Feature::Link {
-            context.report_when(feature, Some(node.range), Some(When::LabelInvisible));
-        }
+        let visible = self.wrapped(context, element, &node.children);
         if underline.is_some() {
             let element = self.open.pop().expect("the underline pushed above");
             context.writer().raw(&element.end);
+        }
+        if !visible && feature == Feature::Link {
+            let plain = context.target.form.visible(context.writer().since(before)).into_owned();
+            context.writer().edit(|text| text.truncate(before));
+            context.writer().push(&plain);
+            context.report_when(feature, Some(node.range), Some(When::LabelInvisible));
         }
     }
 
@@ -420,7 +425,7 @@ impl Html {
         self.open.push(element);
         self.inline(context, children);
         let element = self.open.pop().expect("the element pushed above");
-        let written = context.writer().mark() > content;
+        let written = !context.target.form.visible_blank(context.writer().since(content), crate::measure::blank);
         context.writer().raw(&element.end);
         written
     }
@@ -466,7 +471,7 @@ impl Html {
     }
 
     fn limit(&self) -> usize {
-        self.form.structure.map_or(usize::MAX, |structure| structure.items)
+        self.form.item_limit()
     }
 
     fn load(&mut self, context: &mut Context, nodes: &[Node]) {
@@ -634,7 +639,12 @@ impl Html {
                 continue;
             }
             let lines = escape(&entries.join("\n")).replace('\n', BREAK);
-            let caption = format!("<figcaption>{}</figcaption>", collapse_breaks(&lines));
+            let caption = if lines.contains(EXCESS) {
+                context.report_when(Feature::Text, figure.range, Some(When::BlankLines));
+                format!("<figcaption>{}</figcaption>", collapse_breaks(&lines))
+            } else {
+                format!("<figcaption>{lines}</figcaption>")
+            };
             if figure.group {
                 inserts.push((figure.end, caption));
             } else {

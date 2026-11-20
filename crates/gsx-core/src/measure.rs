@@ -117,7 +117,7 @@ pub fn measure(unit: Unit, text: &str, facts: &Facts) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
-pub fn prefixes(unit: Unit, text: &str, facts: &Facts, ends: &[usize]) -> Vec<Option<usize>> {
+pub(crate) fn prefixes(unit: Unit, text: &str, facts: &Facts, ends: &[usize]) -> Vec<Option<usize>> {
     let (values, _) = match unit {
         Unit::Graphemes => count::cluster_prefixes(text, ends, false),
         Unit::Utf8Bytes => (ends.iter().map(|&end| text.is_char_boundary(end).then_some(end)).collect(), text.len()),

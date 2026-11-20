@@ -63,6 +63,8 @@ pub static BLUESKY: Target = entities(
     &[Format::Image, Format::Gif, Format::Video],
 );
 
+const THREADS_LINKS: u32 = 5;
+
 static THREADS_FORM: EntityForm = EntityForm {
     offsets: Offsets::Utf16,
     styles: &[(Feature::Spoiler, Style::Spoiler)],
@@ -71,7 +73,7 @@ static THREADS_FORM: EntityForm = EntityForm {
     code_splits: false,
     detection: Detection::None,
     cap: Some(10),
-    links: Some(5),
+    links: Some(THREADS_LINKS as usize),
     trim: false,
     styled_suffix: false,
     time_formats: &[],
@@ -109,7 +111,7 @@ pub static THREADS: Target = Target {
             },
         ),
         &THREADS_FORM,
-        &[limit(Text, ThreadsWeighted, 500), limit(Text, Links, 5), limit(Alt, CodePoints, 1000)],
+        &[limit(Text, ThreadsWeighted, 500), limit(Text, Links, THREADS_LINKS), limit(Alt, CodePoints, 1000)],
         &[Format::Image, Format::Video],
     )
 };

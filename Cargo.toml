@@ -4,9 +4,9 @@ members = ["crates/*", "xtask"]
 exclude = ["spike"]
 
 [workspace.package]
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.100"
 license = "MIT"
 authors = ["Alexey Simonenko <alexey@simonenko.dev>"]
 repository = "https://github.com/meritt/gsx.rs"

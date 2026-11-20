@@ -6,7 +6,7 @@ use crate::syntax::state::{State, call};
 use crate::syntax::subtokenize::Subresult;
 
 use crate::syntax::util::{constant::TAB_SIZE, edit_map::EditMap};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Container {
@@ -143,6 +143,10 @@ pub struct TokenizeState<'a> {
 
     pub gsx_paired: Vec<(usize, bool, bool)>,
     pub gsx_paired_close: bool,
+    pub gsx_directive_failed: HashSet<usize>,
+    pub gsx_directive_seen: Vec<usize>,
+    pub gsx_math_trailing_ws: bool,
+    pub gsx_math_slashes: usize,
     pub gfm_table_pipe_data: Vec<usize>,
     pub gfm_table_columns: usize,
 
@@ -234,6 +238,10 @@ impl<'a> Tokenizer<'a> {
                 token_6: Name::Data,
                 gsx_paired: vec![],
                 gsx_paired_close: false,
+                gsx_directive_failed: HashSet::new(),
+                gsx_directive_seen: vec![],
+                gsx_math_trailing_ws: false,
+                gsx_math_slashes: 0,
                 gfm_table_pipe_data: vec![],
                 gfm_table_columns: 0,
                 scan_start: 0,
@@ -250,6 +258,10 @@ impl<'a> Tokenizer<'a> {
             lazy: false,
             resolvers: vec![],
         }
+    }
+
+    pub fn limit(&self) -> usize {
+        (self.pushed_to as usize).min(self.parse_state.bytes.len())
     }
 
     pub fn register_resolver(&mut self, name: ResolveName) {
@@ -305,7 +317,9 @@ impl<'a> Tokenizer<'a> {
         let at = (self.point.line - self.first_line) as usize;
 
         if self.point.column == 1 && at != self.column_start.len() {
+            let previous = self.previous;
             self.move_to(self.column_start[at]);
+            self.previous = previous;
         }
     }
 
@@ -335,7 +349,7 @@ impl<'a> Tokenizer<'a> {
         }
         let bytes = self.parse_state.bytes;
         let start = self.point.index as usize;
-        let end = (self.pushed_to as usize).min(bytes.len());
+        let end = self.limit();
         let run = bytes.get(start..end).map_or(0, |rest| {
             rest.iter().position(|&byte| byte == b'\t' || byte == b'\n' || !keep(byte)).unwrap_or(rest.len())
         });

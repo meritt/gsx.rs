@@ -70,7 +70,7 @@ extension GSX {
         }
     }
 
-    public struct Facts: Sendable, Hashable {
+    public struct Facts: Sendable, Hashable, Decodable {
         public var media: MediaKind?
         public var mediaCount: Int
         public var placement: Placement?
@@ -119,6 +119,29 @@ extension GSX {
             self.overflow = overflow
             self.entitiesAllowed = entitiesAllowed
             self.items = items
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case media, mediaCount, placement, title, targetUrl, maxCharacters, charactersReservedPerUrl, captionLimit
+            case descriptionLimit, hashtagLimit, spoilerText, overflow, entitiesAllowed, items
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            media = try c.decodeIfPresent(MediaKind.self, forKey: .media)
+            mediaCount = try c.decodeIfPresent(Int.self, forKey: .mediaCount) ?? 0
+            placement = try c.decodeIfPresent(Placement.self, forKey: .placement)
+            title = try c.decodeIfPresent(String.self, forKey: .title)
+            targetUrl = try c.decodeIfPresent(String.self, forKey: .targetUrl)
+            maxCharacters = try c.decodeIfPresent(UInt32.self, forKey: .maxCharacters)
+            charactersReservedPerUrl = try c.decodeIfPresent(UInt32.self, forKey: .charactersReservedPerUrl)
+            captionLimit = try c.decodeIfPresent(UInt32.self, forKey: .captionLimit)
+            descriptionLimit = try c.decodeIfPresent(UInt32.self, forKey: .descriptionLimit)
+            hashtagLimit = try c.decodeIfPresent(UInt32.self, forKey: .hashtagLimit)
+            spoilerText = try c.decodeIfPresent(String.self, forKey: .spoilerText)
+            overflow = try c.decodeIfPresent(Overflow.self, forKey: .overflow)
+            entitiesAllowed = try c.decodeIfPresent(Bool.self, forKey: .entitiesAllowed) ?? false
+            items = try c.decodeIfPresent([MediaFact].self, forKey: .items)
         }
     }
 
@@ -182,7 +205,7 @@ extension GSX {
                 self = .text(text)
             } else if let file = try container.decodeIfPresent(Item.self, forKey: .file) {
                 self = .file(file)
-            } else if container.contains(.separator) {
+            } else if try container.decodeIfPresent(Bool.self, forKey: .separator) == true {
                 self = .separator
             } else {
                 self = .media(
@@ -210,11 +233,15 @@ extension GSX {
     }
 
     public struct Entity: Sendable, Hashable, Decodable {
+        public enum Format: String, Sendable, Hashable, Decodable {
+            case t, T, d, D, dt, Dt, wDt, r
+        }
+
         public let style: Style
         /// A range of the field text in the target's `offsets` unit.
         public let range: Range<Int>
         public let value: String?
-        public let format: String?
+        public let format: Format?
     }
 
     public enum Unit: String, Sendable, Hashable, Decodable {
@@ -291,6 +318,11 @@ extension GSX {
         }
     }
 
+    public enum FactName: String, Sendable, Hashable, Decodable {
+        case media, mediaCount, placement, title, targetUrl, maxCharacters, charactersReservedPerUrl
+        case captionLimit, descriptionLimit, hashtagLimit, spoilerText, overflow, entitiesAllowed, items
+    }
+
     public struct Target: Sendable, Hashable, Decodable {
         public enum Form: String, Sendable, Hashable, Decodable {
             case plain = "plain/1"
@@ -314,7 +346,7 @@ extension GSX {
         /// Whether `overflow: .thread` applies.
         public let threads: Bool
         /// Facts that can change this target's projection, in their wire spelling, such as `maxCharacters`.
-        public let facts: [String]
+        public let facts: [FactName]
         public let fields: [TargetField]
         /// At most one limit applies to one field, unit, placement and media kind.
         public let limits: [Limit]
@@ -347,7 +379,7 @@ extension GSX {
         public let unit: Unit
         public let maximum: Int?
         /// The fact in its wire spelling, such as `maxCharacters`.
-        public let fact: String?
+        public let fact: FactName?
         /// `nil` means every placement.
         public let placements: [Placement]?
         public let media: Media
@@ -357,7 +389,16 @@ extension GSX {
     /// A feature's default outcome and the conditional outcomes that replace it.
     public struct Rule: Sendable, Hashable, Decodable {
         public struct Condition: Sendable, Hashable, Decodable {
-            public let when: String
+            public enum When: String, Sendable, Hashable, Decodable {
+                case labelIsHref = "label_is_href"
+                case labelInvisible = "label_invisible"
+                case titleSource = "title_source"
+                case empty, overflow, capped, nested, info, blocks, depth, columns, group, cut, inline, missing, count
+                case spoiler, truncated, refused, thread, code, post
+                case blankLines = "blank_lines"
+            }
+
+            public let when: When
             public let kind: ChangeClass
             public let reason: String
 

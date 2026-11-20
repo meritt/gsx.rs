@@ -521,3 +521,121 @@ fn parses_bench_cases_in_linear_time() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn parses_unclosed_directive_attributes_and_cell_media_in_linear_time() {
+    let dir_small = "::a{#".repeat(1000);
+    let dir_large = "::a{#".repeat(8000);
+    let dir_eq = format!("{}=", "::a{#".repeat(8000));
+    assert!(parse(&dir_large, &[]).is_ok());
+    assert!(parse(&dir_eq, &[]).is_ok());
+    let growth = seconds_per_byte(&dir_large) / seconds_per_byte(&dir_small);
+    assert!(growth < 4.0, "unclosed directive attributes scaled {growth:.1}x per byte");
+
+    let valid_after = parse("::a{#::time[now]{unix=\"1794139200\"}", &[]).unwrap();
+    assert!(matches!(
+        valid_after.children()[0].children.last().map(|node| &node.kind),
+        Some(Kind::Datetime { unix: 1_794_139_200, .. })
+    ));
+
+    let cell_small = format!("| {} | b |\n| - | - |", "::media{".repeat(500));
+    let cell_large = format!("| {} | b |\n| - | - |", "::media{".repeat(4000));
+    assert!(parse(&cell_large, &[]).is_ok());
+    let growth = seconds_per_byte(&cell_large) / seconds_per_byte(&cell_small);
+    assert!(growth < 4.0, "unclosed table media scaled {growth:.1}x per byte");
+
+    let cell = parse("| ::media{foo | bar |\n| - | - |", &[]).unwrap();
+    assert_eq!(cell.diagnostics().len(), 1);
+    assert!(cell.source(cell.diagnostics()[0].range).contains("::media{foo"));
+    assert!(!cell.source(cell.diagnostics()[0].range).contains("bar"));
+}
+
+#[test]
+fn preserves_explicit_link_sources_and_bounds_directive_labels() {
+    for (input, expected) in [
+        ("[![alt](https://img.example/a.png)](https://example.com)", "https://example.com"),
+        ("[`a](b)`](https://example.com)", "https://example.com"),
+        ("[a\\](b](https://example.com)", "https://example.com"),
+        ("[a]( https://example.com )", "https://example.com"),
+    ] {
+        let doc = parse(input, &[]).unwrap();
+        let link = &doc.children()[0].children[0];
+        assert!(matches!(&link.kind, Kind::Link { source, .. } if source == expected), "{input}: got {:?}", link.kind);
+    }
+
+    let long_label = format!("::time[{}]{{unix=\"1794139200\"}}", "a".repeat(1001));
+    let doc = parse(&long_label, &[]).unwrap();
+    assert!(doc.diagnostics().iter().any(|d| d.code == Code::MarkdownMalformed));
+
+    let math_quote = parse("> $x\n>$", &[]).unwrap();
+    assert!(!matches!(math_quote.children()[0].children[0].children[0].kind, Kind::Math { .. }));
+
+    let math_media = parse("$::media{id=\"a\"}$", &[]).unwrap();
+    assert_eq!(math_media.diagnostics(), []);
+
+    let self_close = parse("a <span/>*text*</span>", &[]).unwrap();
+    assert!(self_close.children()[0].children.iter().any(|node| node.kind == Kind::Emphasis));
+    let self_close_block = parse("<div/>\n\n*text*\n\n</div>", &[]).unwrap();
+    assert_eq!(self_close_block.children().len(), 3);
+    assert_eq!(self_close_block.children()[1].kind, Kind::Paragraph);
+
+    let neg_zero = parse("::time[zero]{unix=\"-0\"}", &[]).unwrap();
+    assert_eq!(neg_zero.diagnostics().len(), 1);
+    assert_eq!(neg_zero.diagnostics()[0].code, Code::DatetimeInvalid);
+
+    let triple_colon = parse(":::time[x]", &[]).unwrap();
+    assert_eq!(triple_colon.diagnostics(), []);
+
+    let two_bad = parse("::time[a] and ::time[b]", &[]).unwrap();
+    assert_eq!(two_bad.diagnostics().len(), 2);
+
+    let tab_fence = parse("  ```\n \tfoo\n  ```", &[]).unwrap();
+    assert!(matches!(&tab_fence.children()[0].kind, Kind::Code { value, .. } if value == "  foo"));
+}
+
+#[test]
+fn container_prefixes_and_tabs_do_not_leak_into_content() {
+    let shape = |input: &str| {
+        let doc = parse(input, &[]).unwrap();
+        let item = &doc.children()[0].children[0].children[0];
+        item.children.iter().map(|node| std::mem::discriminant(&node.kind)).collect::<Vec<_>>()
+    };
+    assert_eq!(shape(">\t- a\n>\n>     b"), shape(">   - a\n>\n>     b"));
+    let fence = parse(">\t~~~\n>\t  x\n>\t~~~", &[]).unwrap();
+    assert!(matches!(&fence.children()[0].children[0].kind, Kind::Code { value, .. } if value == "  x"));
+
+    let label = parse("> ::time[x\n> ]{unix=\"0\"}", &[]).unwrap();
+    let datetime = &label.children()[0].children[0].children[0];
+    assert!(matches!(datetime.kind, Kind::Datetime { .. }));
+    assert!(matches!(&datetime.children[0].kind, Kind::Text { value } if value == "x\n"), "{:?}", datetime.children);
+
+    let underlined = |input: &str| {
+        let doc = parse(input, &[]).unwrap();
+        let paragraph = &doc.children()[0].children[0];
+        let underline = paragraph.children.iter().find(|node| node.kind == Kind::Underline);
+        underline.map(|node| node.children.iter().map(|child| child.kind.clone()).collect::<Vec<_>>())
+    };
+    assert_eq!(underlined(">++a ++\n>++b++"), underlined("> ++a ++\n> ++b++"));
+}
+
+#[test]
+fn html_pairing_and_time_directives_follow_the_tokenizer() {
+    for input in ["a <b title=/>*x*</b>", "a <b title=\">\">*x*</b>"] {
+        let doc = parse(input, &[]).unwrap();
+        assert!(!doc.children()[0].children.iter().any(|node| node.kind == Kind::Emphasis), "{input}");
+    }
+
+    let followed = parse("::time[x]{datetime=\"2024-01-01T00:00:00Z\"}{y}", &[]).unwrap();
+    assert_eq!(followed.diagnostics(), []);
+    assert!(matches!(followed.children()[0].children[0].kind, Kind::Datetime { .. }));
+
+    assert_eq!(parse("::timeé-", &[]).unwrap().diagnostics(), []);
+
+    let cell = parse("| ::time[a | b] |\n| - | - |", &[]).unwrap();
+    assert_eq!(cell.diagnostics().len(), 1);
+    assert!(!cell.source(cell.diagnostics()[0].range).contains('b'), "{:?}", cell.diagnostics());
+
+    let multiline = parse("::time[a\nb]{unix=\"0\"\n\nnext", &[]).unwrap();
+    assert_eq!(multiline.diagnostics().len(), 1);
+    assert_eq!(multiline.source(multiline.diagnostics()[0].range), "::time[a\nb]{unix=\"0\"");
+}

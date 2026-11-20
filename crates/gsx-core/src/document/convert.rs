@@ -1,4 +1,4 @@
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::{HashMap, HashSet};
 
 use crate::document::tree::{self, Prefix, decode_string};
@@ -16,6 +16,7 @@ struct Context<'a> {
     diagnostics: RefCell<Vec<Diagnostic>>,
     placed: Vec<(usize, Kind)>,
     closings: OnceCell<Vec<[u32; 2]>>,
+    block: Cell<usize>,
 }
 
 impl Context<'_> {
@@ -53,9 +54,14 @@ impl Context<'_> {
     }
 
     fn text(&self, value: String, start: usize, end: usize) -> Node {
-        if let Some(offset) = time::reserved_offset(&self.text[start..end]) {
+        let slice = &self.text[start..end];
+        let mut at = 0;
+        while let Some(offset) = time::reserved_offset(slice, at) {
             let range = self.malformed(start + offset);
             self.diagnostic(Code::MarkdownMalformed, Severity::Error, Details::None, range.0, range.1);
+            at = range.1.saturating_sub(start).max(offset + 6);
+        }
+        if at > 0 {
             return self.literal(start, end, Some(value));
         }
         self.node(Kind::Text { value }, start, end)
@@ -63,7 +69,8 @@ impl Context<'_> {
 
     fn malformed(&self, start: usize) -> (usize, usize) {
         let bytes = self.text.as_bytes();
-        (start, time::reserved_end(bytes, self.closings.get_or_init(|| time::closing_ends(bytes)), start))
+        let end = time::reserved_end(bytes, self.closings.get_or_init(|| time::closing_ends(bytes)), start);
+        (start, end.min(self.block.get()).max(start))
     }
 }
 
@@ -101,15 +108,21 @@ struct Candidate<'n> {
     node: Option<(tree::Kind, &'n [tree::Node], usize)>,
 }
 
-fn collect_candidates<'n>(node: &'n tree::Node, bytes: &[u8], out: &mut Vec<Candidate<'n>>) {
-    if matches!(node.kind, tree::Kind::Code | tree::Kind::InlineCode) {
+fn bounds_inline(kind: tree::Kind) -> bool {
+    matches!(kind, tree::Kind::Root | tree::Kind::Paragraph | tree::Kind::Heading | tree::Kind::TableCell)
+}
+
+fn collect_candidates<'n>(node: &'n tree::Node, bytes: &[u8], limit: usize, out: &mut Vec<Candidate<'n>>) {
+    if matches!(node.kind, tree::Kind::Code | tree::Kind::InlineCode | tree::Kind::Math) {
         return;
     }
+    let limit = if bounds_inline(node.kind) { node.end } else { limit };
+    let slice = &bytes[..limit];
     let scan = |from: usize, to: usize, out: &mut Vec<Candidate>| {
         let mut at = from;
         while at < to {
             if bytes[at] == b':'
-                && let Some(end) = syntax::media_candidate_end(bytes, at)
+                && let Some(end) = syntax::media_candidate_end(slice, at)
             {
                 out.push(Candidate { start: at, end, node: None });
                 at = end;
@@ -125,7 +138,7 @@ fn collect_candidates<'n>(node: &'n tree::Node, bytes: &[u8], out: &mut Vec<Cand
         if child.kind == tree::Kind::MediaDirective {
             out.push(Candidate { start: child.start, end: child.end, node: Some((node.kind, &node.children, index)) });
         } else {
-            collect_candidates(child, bytes, out);
+            collect_candidates(child, bytes, limit, out);
         }
     }
     scan(cursor, node.end, out);
@@ -144,7 +157,7 @@ fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
         .map(|(child, end)| (child.end, end))
         .collect();
     let mut candidates = vec![];
-    collect_candidates(root, bytes, &mut candidates);
+    collect_candidates(root, bytes, bytes.len(), &mut candidates);
     crate::order::sort_by_key(&mut candidates, |candidate| candidate.start as u64);
     let (mut line_start, mut scanned) = (0, 0);
     for candidate in candidates {
@@ -161,10 +174,12 @@ fn resolve_media(root: &tree::Node, media: &[Media], context: &mut Context) {
                 let is_media = |kind: tree::Kind| kind == tree::Kind::MediaDirective;
                 let previous = index.checked_sub(1).map(|at| &siblings[at]);
                 let next = siblings.get(index + 1);
-                let previous_ok = previous
-                    .is_none_or(|node| is_media(node.kind) || context.line(start) - context.line(node.end) >= 2);
-                let next_ok =
-                    next.is_none_or(|node| is_media(node.kind) || context.line(node.start) - context.line(end) >= 2);
+                let previous_ok = previous.is_none_or(|node| {
+                    is_media(node.kind) || context.line(start).saturating_sub(context.line(node.end)) >= 2
+                });
+                let next_ok = next.is_none_or(|node| {
+                    is_media(node.kind) || context.line(node.start).saturating_sub(context.line(end)) >= 2
+                });
                 let after = paired.partition_point(|&(from, _)| from <= start);
                 let unpaired = after == 0 || paired[after - 1].1 <= start;
                 prefix_ok && previous_ok && next_ok && unpaired
@@ -538,41 +553,6 @@ fn link_scheme(url: &str) -> Scheme {
     }
 }
 
-fn explicit_inline(raw: &str) -> bool {
-    raw.match_indices(']').any(|(at, _)| raw[at + 1..].trim_start_matches(whitespace).starts_with('('))
-}
-
-fn explicit_destination(raw: &str) -> Option<&str> {
-    let start = raw.find("](")? + 2;
-    let bytes = raw.as_bytes();
-    if bytes.get(start) == Some(&b'<') {
-        let mut index = start + 1;
-        while index < bytes.len() {
-            match bytes[index] {
-                b'\\' => index += 1,
-                b'>' => return Some(&raw[start + 1..index]),
-                _ => {}
-            }
-            index += 1;
-        }
-        return None;
-    }
-    let mut depth = 0;
-    let mut index = start;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\\' => index += 1,
-            b'(' => depth += 1,
-            b')' if depth == 0 => return Some(&raw[start..index]),
-            b')' => depth -= 1,
-            byte if byte.is_ascii_whitespace() && depth == 0 => return Some(&raw[start..index]),
-            _ => {}
-        }
-        index += 1;
-    }
-    None
-}
-
 enum Converted {
     One(Node, bool),
     Many(Vec<Node>),
@@ -621,7 +601,7 @@ fn without_open_escape<'r>(raw: &'r str, text: &str, end: usize) -> &'r str {
 fn link_node(node: &tree::Node, context: &Context) -> Converted {
     let (start, end) = (node.start, node.end);
     let raw = &context.text[start..end];
-    if !(raw.starts_with('[') && explicit_inline(raw)) {
+    let Some(destination) = node.extra().source.as_deref() else {
         if let Some(inner) = raw.strip_prefix('<').and_then(|rest| rest.strip_suffix('>')) {
             let Some(url) = href(inner) else {
                 let scheme = if inner.contains(':') { link_scheme(inner) } else { Scheme::Unsupported };
@@ -636,13 +616,10 @@ fn link_node(node: &tree::Node, context: &Context) -> Converted {
             context.text(decode_string(without_open_escape(raw, context.text, end)), start, end),
             false,
         );
-    }
+    };
     let Some(url) = href(&node.extra().url) else {
         let details = Details::Scheme(link_scheme(&node.extra().url));
         context.diagnostic(Code::LinkLiteralized, Severity::Warning, details, start, end);
-        return Converted::One(context.literal(start, end, None), false);
-    };
-    let Some(destination) = explicit_destination(raw) else {
         return Converted::One(context.literal(start, end, None), false);
     };
     let kind = Kind::Link { url, source: destination.into(), title: node.extra().title.clone() };
@@ -665,7 +642,7 @@ fn convert_node(node: &tree::Node, end: usize, context: &Context) -> Converted {
         T::TextDirective if node.extra().name == "time" => {
             let raw = &context.text[start..node.end];
             let next = context.text.as_bytes().get(node.end);
-            if !raw.starts_with("::time[") || !raw.contains(']') || next == Some(&b'{') {
+            if !raw.starts_with("::time[") || !raw.contains(']') || (next == Some(&b'{') && !raw.ends_with('}')) {
                 return Converted::One(
                     context.refused(Code::MarkdownMalformed, context.malformed(start), start, end),
                     false,
@@ -717,8 +694,42 @@ fn html_tag(node: &tree::Node, text: &str, closing: bool) -> Option<String> {
     let length = inner.find(|char: char| !(char.is_ascii_alphanumeric() || char == '-')).unwrap_or(inner.len());
     let name = &inner[..length];
     let ok = name.starts_with(|char: char| char.is_ascii_alphabetic())
-        && if closing { length == inner.len() } else { !inner[length..].contains('>') && !inner.starts_with('/') };
+        && (if closing { length == inner.len() } else { !self_closing(&inner[length..]) });
     ok.then(|| name.to_ascii_lowercase())
+}
+
+fn self_closing(attributes: &str) -> bool {
+    let bytes = attributes.trim_end().as_bytes();
+    let mut at = 0;
+    let mut value = false;
+    while at < bytes.len() {
+        match bytes[at] {
+            byte if byte.is_ascii_whitespace() => at += 1,
+            b'=' => {
+                value = true;
+                at += 1;
+            }
+            quote @ (b'"' | b'\'') if value => {
+                at += 1 + bytes[at + 1..].iter().position(|&byte| byte == quote).map_or(bytes.len(), |end| end + 1);
+                value = false;
+            }
+            _ if value => {
+                at += bytes[at..].iter().position(u8::is_ascii_whitespace).unwrap_or(bytes.len() - at);
+                value = false;
+            }
+            b'/' if at + 1 == bytes.len() => return true,
+            _ => {
+                at += 1;
+                while at < bytes.len() && !bytes[at].is_ascii_whitespace() && bytes[at] != b'=' {
+                    if bytes[at] == b'/' && at + 1 == bytes.len() {
+                        return true;
+                    }
+                    at += 1;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn pair_html<'n>(children: &'n [tree::Node], text: &str) -> Vec<(&'n tree::Node, usize)> {
@@ -762,6 +773,10 @@ fn append(parent: tree::Kind, out: &mut Vec<Node>, mut node: Node, lines: &LineI
 }
 
 fn convert_children(parent: &tree::Node, context: &Context) -> Vec<Node> {
+    let outer = context.block.get();
+    if bounds_inline(parent.kind) {
+        context.block.set(parent.end);
+    }
     let mut out = vec![];
     let items =
         pair_html(&parent.children, context.text).into_iter().map(|(child, end)| Item::Node(child, end)).collect();
@@ -798,6 +813,7 @@ fn convert_children(parent: &tree::Node, context: &Context) -> Vec<Node> {
             }
         }
     }
+    context.block.set(outer);
     out
 }
 
@@ -818,8 +834,15 @@ pub(super) fn convert(
     lines: &LineIndex,
     media: &[Media],
 ) -> (Vec<Node>, Vec<Diagnostic>) {
-    let mut context =
-        Context { text, lines, prefixes, diagnostics: RefCell::default(), placed: vec![], closings: OnceCell::new() };
+    let mut context = Context {
+        text,
+        lines,
+        prefixes,
+        diagnostics: RefCell::default(),
+        placed: vec![],
+        closings: OnceCell::new(),
+        block: Cell::new(text.len()),
+    };
     resolve_media(root, media, &mut context);
     let children = convert_children(root, &context);
     (children, context.diagnostics.into_inner())

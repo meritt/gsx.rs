@@ -94,13 +94,23 @@ def main(out, files):
     names = [target.name for target in gsx.targets()]
     if "x-plain" not in names:
         raise AssertionError("targets() lists " + repr(names))
-    if gsx.is_media_id("a" + chr(0xD800)) or gsx.is_media_id(chr(0xD83D) + chr(0xDE00)):
-        raise AssertionError("is_media_id accepts surrogates")
-    try:
-        gsx.is_media_id(b"a")
-        raise AssertionError("is_media_id accepts bytes")
-    except TypeError:
-        pass
+    if gsx.targets() is not gsx.targets():
+        raise AssertionError("targets() is not cached")
+    hash(gsx.targets())
+    if gsx.is_media_id("a" + chr(0xD800)) or gsx.is_media_id(chr(0xD83D) + chr(0xDE00)) or gsx.is_media_id("a" * 100000):
+        raise AssertionError("is_media_id accepts invalid ids")
+    for bad in (
+        lambda: gsx.is_media_id(b"a"),
+        lambda: gsx.project_json("a", 123),
+        lambda: gsx.project_json("a", "x-plain", gsx.Facts(entities_allowed=1)),
+        lambda: gsx.project_json("a", "x-plain", gsx.Facts(title=123)),
+        lambda: gsx.Facts(None, 0),
+    ):
+        try:
+            bad()
+            raise AssertionError("accepted invalid type")
+        except TypeError:
+            pass
     try:
         items = (gsx.MediaFact('x"/><img src="media:evil', "image"),)
         gsx.project_json("", "telegram-html-rich", gsx.Facts(items=items))

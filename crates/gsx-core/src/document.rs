@@ -298,7 +298,7 @@ impl Document {
     }
 
     pub fn point(&self, offset: u32) -> Point {
-        self.lines.point(offset.min(self.lines.len()))
+        self.lines.point(offset)
     }
 
     pub fn end(&self) -> Point {

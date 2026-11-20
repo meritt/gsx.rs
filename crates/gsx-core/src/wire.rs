@@ -556,26 +556,22 @@ impl Out {
         self.0.push('}');
     }
 
-    fn item(&mut self, item: &Item) {
-        let Item { reference, alt, spoiler } = item;
+    fn media_item(&mut self, reference: &str, alt: Option<&str>, spoiler: bool) {
         self.raw("{\"reference\":");
         self.string(reference);
         self.key("alt");
-        self.optional(alt.as_deref());
+        self.optional(alt);
         self.key("spoiler");
-        self.bool(*spoiler);
+        self.bool(spoiler);
         self.0.push('}');
     }
 
+    fn item(&mut self, item: &Item) {
+        self.media_item(&item.reference, item.alt.as_deref(), item.spoiler);
+    }
+
     fn attachment(&mut self, attachment: &Attachment) {
-        let Attachment { reference, alt, spoiler } = attachment;
-        self.raw("{\"reference\":");
-        self.string(reference);
-        self.key("alt");
-        self.optional(alt.as_deref());
-        self.key("spoiler");
-        self.bool(*spoiler);
-        self.0.push('}');
+        self.media_item(&attachment.reference, attachment.alt.as_deref(), attachment.spoiler);
     }
 
     fn limit(&mut self, limit: &Limit) {

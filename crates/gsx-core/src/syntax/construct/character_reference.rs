@@ -55,7 +55,7 @@ pub fn value(tokenizer: &mut Tokenizer) -> State {
                 tokenizer.point.index as usize,
             );
 
-            if decode_named(slice.as_str(), true).is_none() {
+            if decode_named(slice.as_str()).is_none() {
                 tokenizer.tokenize_state.marker = 0;
                 tokenizer.tokenize_state.size = 0;
                 return State::Nok;

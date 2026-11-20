@@ -155,4 +155,25 @@ fn slack_escapes_pipes_in_table_cells() {
     let projection = run("slack-markdown", "| a | b |\n| - | -: |\n| `x\\|y` | c |");
     assert_eq!(text(&projection), "| a | b |\n| :--- | ---: |\n| `x\\|y` | c |");
     assert_eq!(projection.changes, []);
+
+    let url_pipe = run("slack-markdown", "| a | b |\n| - | - |\n| https://example.com/?a=1\\|2 | c |");
+    assert_eq!(text(&url_pipe), "| a | b |\n| :--- | :--- |\n| https://example.com/?a=1\\|2 | c |");
+
+    let time_title = run("slack-markdown", "::time[[site](https://example.com \"Title\")]{unix=\"1794139200\"}");
+    assert!(time_title.changes.iter().any(|c| c.feature == Feature::LinkTitle));
+
+    let spaced_heading = run("slack-markdown", "&#32;# heading");
+    assert_eq!(text(&spaced_heading), " \\# heading");
+
+    let bare_ordered = run("slack-markdown", "7\\.");
+    assert_eq!(text(&bare_ordered), "7\\.");
+
+    let indented = run("slack-markdown", "&#32;&#32;&#32;&#32;\\# b");
+    assert_eq!(text(&indented), "\u{a0}\u{a0}\u{a0}\u{a0}# b");
+    let shallow = run("slack-markdown", "&#32;&#32;&#32;b");
+    assert_eq!(text(&shallow), "   b");
+    let tab_stop = run("slack-markdown", "- &#9;x");
+    assert_eq!(text(&tab_stop), "- \tx");
+    let discord = run("discord-markdown", "&#32;&#32;&#32;&#32;b");
+    assert_eq!(text(&discord), "    b");
 }

@@ -1,4 +1,5 @@
 use crate::document::Code;
+use crate::syntax;
 
 const SAFE: i128 = 9_007_199_254_740_991;
 
@@ -115,7 +116,7 @@ pub(super) fn absolute(value: &str) -> Result<i64, Code> {
 
 pub(super) fn unix(value: &str) -> Result<i64, Code> {
     let digits = value.strip_prefix('-').unwrap_or(value);
-    let canonical = digits == "0"
+    let canonical = value == "0"
         || (!digits.is_empty() && !digits.starts_with('0') && digits.bytes().all(|byte| byte.is_ascii_digit()));
     if !canonical || digits.len() > 20 {
         return Err(Code::DatetimeInvalid);
@@ -127,22 +128,31 @@ pub(super) fn unix(value: &str) -> Result<i64, Code> {
     i64::try_from(number).map_err(|_| Code::DatetimeInvalid)
 }
 
-pub(super) fn reserved_offset(raw: &str) -> Option<usize> {
+pub(super) fn reserved_offset(raw: &str, from: usize) -> Option<usize> {
     let bytes = raw.as_bytes();
     let mut slashes = 0;
-    for (index, &byte) in bytes.iter().enumerate() {
+    let mut colon = false;
+    for (index, &byte) in bytes.iter().enumerate().skip(from) {
         if byte == b'\\' {
             slashes += 1;
+            colon = false;
             continue;
         }
-        if byte == b':'
-            && slashes % 2 == 0
-            && raw[index..].starts_with("::time")
-            && !bytes.get(index + 6).is_some_and(|next| next.is_ascii_alphanumeric() || b"_.-".contains(next))
-        {
-            return Some(index);
+        if byte == b':' {
+            let escaped = slashes % 2 == 1;
+            if !escaped
+                && !colon
+                && raw[index..].starts_with("::time")
+                && !bytes.get(index + 6).is_some_and(|&next| syntax::is_directive_name_continue(next) || next == b'.')
+            {
+                return Some(index);
+            }
+            colon = !escaped;
+            slashes = 0;
+            continue;
         }
         slashes = 0;
+        colon = false;
     }
     None
 }
@@ -154,18 +164,16 @@ pub(super) fn closing_ends(bytes: &[u8]) -> Vec<[u32; 2]> {
     for (index, &byte) in bytes.iter().enumerate().rev() {
         let at = index as u32;
         let quoted = match byte {
-            b'\n' => [at; 2],
             b'\\' => after,
             b'"' => [at, next[1]],
             b'\'' => [next[0], at],
             _ => next,
         };
         ends[index] = match byte {
-            b'\n' => [at; 2],
             b'\\' => ends[index + 2],
             b'"' | b'\'' => {
                 let exit = next[usize::from(byte == b'\'')];
-                if exit < len && bytes[exit as usize] != b'\n' { ends[exit as usize + 1] } else { [exit; 2] }
+                if exit < len { ends[exit as usize + 1] } else { [exit; 2] }
             }
             b']' => [at + 1, ends[index + 1][1]],
             b'}' => [ends[index + 1][0], at + 1],

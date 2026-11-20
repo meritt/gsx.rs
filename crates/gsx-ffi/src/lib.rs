@@ -65,12 +65,16 @@ unsafe fn output(slot: *mut *mut Error, f: impl FnOnce() -> Result<String, Strin
 }
 
 /// # Safety
-/// `entries` points to `len` entries, or `len` is 0.
+/// `entries` is properly aligned and points to `len` readable entries with
+/// `len * size_of::<T>() <= isize::MAX`, or `len` is 0.
 unsafe fn slice<'a, T>(entries: *const T, len: usize, what: &str) -> Result<&'a [T], String> {
     match (entries.is_null(), len) {
         (_, 0) => Ok(&[]),
         (true, _) => Err(format!("{what} is NULL")),
-        // SAFETY: not NULL, and the caller promises `len` readable entries.
+        (false, _) if len.checked_mul(std::mem::size_of::<T>()).is_none_or(|bytes| bytes > isize::MAX as usize) => {
+            Err(format!("{what} length {len} exceeds isize::MAX"))
+        }
+        // SAFETY: not NULL, within isize::MAX bytes, and the caller promises `len` aligned readable entries.
         (false, _) => Ok(unsafe { std::slice::from_raw_parts(entries, len) }),
     }
 }
@@ -128,8 +132,8 @@ pub struct MediaFact {
     pub format: u32,
     pub alt: *const u8,
     pub alt_len: usize,
-    pub spoiler: bool,
-    pub inline: bool,
+    pub spoiler: u8,
+    pub inline: u8,
 }
 
 #[repr(C)]
@@ -146,13 +150,37 @@ pub struct Facts {
     pub characters_reserved_per_url: i64,
     pub caption_limit: i64,
     pub description_limit: i64,
-    pub entities_allowed: bool,
+    pub entities_allowed: u8,
     pub items: *const MediaFact,
     pub items_len: usize,
     pub hashtag_limit: i64,
     pub spoiler_text: *const u8,
     pub spoiler_text_len: usize,
     pub overflow: u32,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gsx_facts_default() -> Facts {
+    Facts {
+        media: GSX_MEDIA_NONE,
+        media_count: 0,
+        placement: GSX_PLACEMENT_NONE,
+        title: ptr::null(),
+        title_len: 0,
+        target_url: ptr::null(),
+        target_url_len: 0,
+        max_characters: -1,
+        characters_reserved_per_url: -1,
+        caption_limit: -1,
+        description_limit: -1,
+        entities_allowed: 0,
+        items: ptr::null(),
+        items_len: 0,
+        hashtag_limit: -1,
+        spoiler_text: ptr::null(),
+        spoiler_text_len: 0,
+        overflow: GSX_OVERFLOW_TRUNCATE,
+    }
 }
 
 impl Facts {
@@ -178,7 +206,7 @@ impl Facts {
                 GSX_FORMAT_AUDIO => Format::Audio,
                 other => return Err(format!("item format {other} is not GSX_FORMAT_*")),
             };
-            list.push(CoreMediaFact { id, format, alt, spoiler: entry.spoiler, inline: entry.inline });
+            list.push(CoreMediaFact { id, format, alt, spoiler: entry.spoiler != 0, inline: entry.inline != 0 });
         }
         Ok(Some(list))
     }
@@ -227,7 +255,7 @@ impl Facts {
                 GSX_OVERFLOW_THREAD => Overflow::Thread,
                 other => return Err(format!("overflow {other} is not GSX_OVERFLOW_*")),
             },
-            entities_allowed: self.entities_allowed,
+            entities_allowed: self.entities_allowed != 0,
             items,
         })
     }
@@ -265,9 +293,10 @@ pub unsafe extern "C" fn gsx_serialize(
 
 /// # Safety
 /// As for `gsx_parse`; `target` points to `target_len` bytes; `facts` is `NULL` (no facts) or
-/// points to a `gsx_facts` whose `title` is `NULL` or points to `title_len` bytes and whose `items`
-/// is `NULL` with `items_len` 0 (no items fact) or points to `items_len` media facts, each `id` and
-/// `alt` as `id` and `cover` of `gsx_parse` media.
+/// points to a `gsx_facts` whose `title`, `target_url` and `spoiler_text` are `NULL` or point to
+/// their respective byte lengths, and whose `items` is `NULL` with `items_len` 0 (no items fact)
+/// or points to `items_len` aligned media facts, each `id` and `alt` as `id` and `cover` of
+/// `gsx_parse` media.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gsx_project(
     text: *const u8,
@@ -305,10 +334,13 @@ pub unsafe extern "C" fn gsx_targets(error: *mut *mut Error) -> *mut Output {
 }
 
 /// # Safety
-/// `id` points to `len` bytes, or `len` is 0.
+/// `id` points to `len` bytes, or `len` is 0, or `len > GSX_MEDIA_ID_MAX_BYTES`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gsx_is_media_id(id: *const u8, len: usize) -> bool {
-    // SAFETY: `id` is as this function's contract states.
+    if len == 0 || len > GSX_MEDIA_ID_MAX_BYTES || id.is_null() {
+        return false;
+    }
+    // SAFETY: `id` is not NULL and `len <= GSX_MEDIA_ID_MAX_BYTES`; the caller promises `len` readable bytes.
     unsafe { string(id, len, "media id") }.is_ok_and(document::is_media_id)
 }
 
@@ -350,17 +382,17 @@ unsafe fn media_list<'a>(media: *const Media, media_len: usize) -> Result<Vec<Co
 }
 
 /// # Safety
-/// `output` came from this library and is not freed yet; `len` is `NULL` or writable. The string
-/// lives until `gsx_output_free`.
+/// `output` is `NULL` or came from this library and is not freed yet; `len` is `NULL` or writable.
+/// The string lives until `gsx_output_free`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gsx_output_json(output: *const Output, len: *mut usize) -> *const c_char {
-    // SAFETY: `output` is a live `Output`, as this function's contract states.
-    let json = unsafe { &(*output).0 };
+    // SAFETY: `output` is `NULL` or a live `Output`, as this function's contract states.
+    let json = unsafe { output.as_ref() }.map(|output| &output.0);
     if !len.is_null() {
         // SAFETY: not NULL, and the caller promises it is writable.
-        unsafe { *len = json.as_bytes().len() };
+        unsafe { *len = json.map_or(0, |json| json.as_bytes().len()) };
     }
-    json.as_ptr()
+    json.map_or(ptr::null(), |json| json.as_ptr())
 }
 
 /// # Safety
@@ -374,10 +406,14 @@ pub unsafe extern "C" fn gsx_output_free(output: *mut Output) {
 }
 
 /// # Safety
-/// `error` came from this library and is not freed yet. The string lives until `gsx_error_free`.
+/// `error` is `NULL` or came from this library and is not freed yet. The string lives until
+/// `gsx_error_free`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gsx_error_message(error: *const Error) -> *const c_char {
-    // SAFETY: `error` is a live `Error`, as this function's contract states.
+    if error.is_null() {
+        return ptr::null();
+    }
+    // SAFETY: `error` is not NULL and is a live `Error`, as this function's contract states.
     unsafe { (*error).0.as_ptr() }
 }
 
@@ -504,19 +540,13 @@ mod tests {
             placement: GSX_PLACEMENT_STORY,
             title: title.as_ptr(),
             title_len: title.len(),
-            target_url: ptr::null(),
-            target_url_len: 0,
             max_characters: 100,
-            characters_reserved_per_url: -1,
-            caption_limit: -1,
-            description_limit: -1,
-            entities_allowed: true,
-            items: ptr::null(),
-            items_len: 0,
+            entities_allowed: 2,
             hashtag_limit: 3,
             spoiler_text: spoiler.as_ptr(),
             spoiler_text_len: spoiler.len(),
             overflow: GSX_OVERFLOW_THREAD,
+            ..gsx_facts_default()
         };
         let core = CoreFacts {
             media: Some(MediaKind::Video),
@@ -554,8 +584,8 @@ mod tests {
             format: GSX_FORMAT_GIF,
             alt: alt.as_ptr(),
             alt_len: alt.len(),
-            spoiler: true,
-            inline: true,
+            spoiler: 1,
+            inline: 2,
         };
         let items = [item];
         let facts = Facts { items: items.as_ptr(), items_len: 1, ..facts };
@@ -606,7 +636,13 @@ mod tests {
             let output = gsx_parse(ptr::null(), 0, ptr::null(), 0, ptr::null_mut());
             assert!(!output.is_null());
             gsx_output_free(output);
+            let mut len = 99;
+            assert!(gsx_output_json(ptr::null(), &raw mut len).is_null());
+            assert_eq!(len, 0);
+            assert!(gsx_error_message(ptr::null()).is_null());
         }
+        let defaults = gsx_facts_default();
+        assert_eq!(project(b"Hello", "x-plain", Some(&defaults)).unwrap(), project(b"Hello", "x-plain", None).unwrap());
         let bad = [0xffu8];
         let entry = Media { id: bad.as_ptr(), id_len: 1, cover: ptr::null(), cover_len: 0 };
         assert_eq!(parse(b"a", &[entry]).unwrap_err(), "media id must be UTF-8");
@@ -625,6 +661,7 @@ mod tests {
             assert!(valid.iter().all(|id| gsx_is_media_id(id.as_ptr(), id.len())));
             assert!(!invalid.iter().any(|id| gsx_is_media_id(id.as_ptr(), id.len())));
             assert!(!gsx_is_media_id(ptr::null(), 0));
+            assert!(!gsx_is_media_id(ptr::null(), usize::MAX));
         }
     }
 

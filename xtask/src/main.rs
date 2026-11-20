@@ -219,6 +219,7 @@ fn wheel() -> Result<PathBuf> {
         return Err(format!("{} has version {}, Cargo.toml {version}", pyproject.display(), field("version")?));
     }
     let summary = field("description")?;
+    let requires_python = field("requires-python")?;
 
     let work = root.join("target/staging/wheel");
     fresh_dir(&work)?;
@@ -253,6 +254,7 @@ fn wheel() -> Result<PathBuf> {
         &tree.join(&info).join("METADATA"),
         &format!(
             "Metadata-Version: 2.4\nName: gsx\nVersion: {version}\nSummary: {summary}\n\
+             Requires-Python: {requires_python}\n\
              License-Expression: MIT\nLicense-File: LICENSE\n\
              Project-URL: Repository, https://github.com/meritt/gsx.rs\n"
         ),

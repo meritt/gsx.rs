@@ -172,6 +172,13 @@ impl<'a> Outline<'a> {
         Self::new(vec![leaf], vec![(0, usize::from(!text.is_empty()))], 0)
     }
 
+    pub fn of_text_within(text: &'a str, source: Range) -> Self {
+        let mut outline = Self::of_text(text);
+        outline.leaves[0].source = Some((source.start, false));
+        outline.end = source.end;
+        outline
+    }
+
     pub fn of_rendered(text: &'a str) -> Self {
         let leaf = Leaf {
             node: None,
@@ -559,7 +566,7 @@ fn entities(value: &str) -> Vec<(usize, usize)> {
                 ranges.push((start, end));
             }
         }
-        let name = |char: char| word(char) || char == '_' || (sigil == "@" && char == '.');
+        let name = |char: char| word(char) || char == '_' || (sigil == "@" && matches!(char, '.' | '-'));
         let end = at + 1 + rest.chars().take_while(|&char| name(char)).map(char::len_utf8).sum::<usize>();
         if end > at + 1 {
             ranges.push((at, end));

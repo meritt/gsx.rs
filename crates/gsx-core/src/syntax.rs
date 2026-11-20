@@ -23,7 +23,9 @@ pub enum Align {
     Center,
 }
 
+pub(crate) use construct::gsx_directive_text::is_name_continue as is_directive_name_continue;
 pub(crate) use construct::gsx_media::candidate_end as media_candidate_end;
+pub(crate) use util::constant::TAB_SIZE;
 
 pub(crate) use budget::Exceeded;
 

@@ -33,7 +33,7 @@ Use rustup and the versions in [`rust-toolchain.toml`](rust-toolchain.toml), [`.
 bindgen_version="$(cargo pkgid --locked -p wasm-bindgen | cut -d@ -f2)"
 cargo install wasm-bindgen-cli --version "=$bindgen_version" --locked --root target/tools
 
-rustup toolchain install nightly-2026-11-01 --profile minimal --component miri,rust-src
+rustup toolchain install nightly-2026-11-10 --profile minimal --component miri,rust-src
 ```
 
 `xtask` finds wasm-bindgen in `target/tools/bin`; `WASM_BINDGEN` and `WASM_OPT` override executable paths. CI installation steps are in [ci.yml](.github/workflows/ci.yml).
@@ -49,7 +49,7 @@ cargo xtask header --check
 cargo deny --locked check
 cargo test --workspace --locked
 cargo package -p gsx-core --locked
-cargo +nightly-2026-11-01 miri test -p gsx-ffi --lib --locked
+cargo +nightly-2026-11-10 miri test -p gsx-ffi --lib --locked
 ```
 
 ## Corpus
@@ -86,8 +86,8 @@ cargo xtask bench
 cargo xtask bench --wasm
 cargo bench -p gsx-core --bench instructions
 mkdir -p fuzz/corpus/parse fuzz/corpus/project
-cargo +nightly-2026-11-01 fuzz run parse fuzz/corpus/parse fuzz/seeds/parse -- -dict=fuzz/gsx.dict -max_len=4096
-cargo +nightly-2026-11-01 fuzz run project fuzz/corpus/project fuzz/seeds/project -- -dict=fuzz/gsx.dict -max_total_time=60
+cargo +nightly-2026-11-10 fuzz run parse fuzz/corpus/parse fuzz/seeds/parse -- -dict=fuzz/gsx.dict -max_len=4096
+cargo +nightly-2026-11-10 fuzz run project fuzz/corpus/project fuzz/seeds/project -- -dict=fuzz/gsx.dict -max_total_time=60
 ```
 
 Benchmarks write JSON and Markdown under `testdata/bench/baseline/`, identified by commit and runtime. Instruction benchmarks require Valgrind and a `gungraun-runner` matching `Cargo.lock`; CI compares them with the base commit and reports growth above 1% as a warning with the affected benchmarks in the job summary, without failing the check. Instruction counts provide the regression signal because shared-runner wall time is noisy. Fuzzing requires `cargo-fuzz`; CI runs both targets for 60 seconds with `fuzz/Cargo.lock` locked. New inputs go to the ignored `fuzz/corpus/`; the tracked seeds in `fuzz/seeds/` and the dictionary `fuzz/gsx.dict` start the fuzzers on `::time` formats, math, media figures and groups, thread facts, long paragraphs, blank line runs and nested containers. Each project seed is a fact header in the `arbitrary` layout of the target's `Input` followed by a parse seed; run `node fuzz/seeds.mjs` after changing `fuzz/seeds/parse/` or `Input`.

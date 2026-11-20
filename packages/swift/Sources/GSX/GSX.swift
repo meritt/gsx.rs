@@ -2,7 +2,7 @@ import Foundation
 import GSXFFI
 
 public enum GSX {
-    public struct Media: Sendable, Hashable {
+    public struct Media: Sendable, Hashable, Decodable {
         public var id: String
         public var cover: String?
 
@@ -12,7 +12,7 @@ public enum GSX {
         }
     }
 
-    public struct InternalError: Error, Sendable, CustomStringConvertible {
+    public struct InternalError: Error, Sendable, Hashable, CustomStringConvertible {
         public let message: String
 
         public var description: String { message }
@@ -129,7 +129,7 @@ public enum GSX {
                                             characters_reserved_per_url: limit(facts.charactersReservedPerUrl),
                                             caption_limit: limit(facts.captionLimit),
                                             description_limit: limit(facts.descriptionLimit),
-                                            entities_allowed: facts.entitiesAllowed,
+                                            entities_allowed: facts.entitiesAllowed ? 1 : 0,
                                             items: items,
                                             items_len: itemCount,
                                             hashtag_limit: limit(facts.hashtagLimit),
@@ -184,8 +184,8 @@ public enum GSX {
                     format: item.format.native,
                     alt: span.alt.map { base + $0.lowerBound },
                     alt_len: span.alt?.count ?? 0,
-                    spoiler: item.spoiler,
-                    inline_: item.inline
+                    spoiler: item.spoiler ? 1 : 0,
+                    inline_: item.inline ? 1 : 0
                 )
             }
             return entries.withUnsafeBufferPointer { entries in

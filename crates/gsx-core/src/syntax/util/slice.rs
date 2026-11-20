@@ -40,7 +40,7 @@ impl<'a> Slice<'a> {
         let mut end = position.end.index as usize;
 
         if before > 0 {
-            before = TAB_SIZE - before;
+            before = TAB_SIZE - (position.start.column as usize).saturating_sub(1) % TAB_SIZE;
             start += 1;
         }
 

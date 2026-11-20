@@ -3,8 +3,8 @@
 use arbitrary::Arbitrary;
 use gsx_core::document::{Media, parse};
 use gsx_core::project::{
-    Attachment, Boundary, Facts, Form, Format, MediaFact, MediaKind, Options, Overflow, Placement, Projection,
-    Search, Target, project_with,
+    Attachment, Boundary, Facts, Form, Format, MediaFact, MediaKind, Options, Overflow, Placement, Projection, Search,
+    Target, project_with,
 };
 use gsx_core::targets::TARGETS;
 use gsx_core::wire;

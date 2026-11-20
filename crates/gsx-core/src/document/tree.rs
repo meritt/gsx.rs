@@ -1,6 +1,4 @@
-use crate::syntax::{self, Align, Event, Kind as EventKind, Name};
-
-const TAB_SIZE: usize = 4;
+use crate::syntax::{self, Align, Event, Kind as EventKind, Name, TAB_SIZE};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Kind {
@@ -64,6 +62,7 @@ pub(super) struct Extra {
     pub lang: Option<String>,
     pub meta: Option<String>,
     pub url: String,
+    pub source: Option<String>,
     pub title: Option<String>,
     pub align: Vec<Align>,
     pub name: String,
@@ -74,6 +73,7 @@ static NO_EXTRA: Extra = Extra {
     lang: None,
     meta: None,
     url: String::new(),
+    source: None,
     title: None,
     align: Vec::new(),
     name: String::new(),
@@ -128,6 +128,7 @@ struct Builder<'a> {
     events: &'a [Event],
     bytes: &'a [u8],
     exits: Vec<usize>,
+    prefixes: &'a [Prefix],
 }
 
 fn ignored(name: Name) -> bool {
@@ -154,6 +155,22 @@ fn ignored(name: Name) -> bool {
 impl<'a> Builder<'a> {
     fn raw(&self, start: usize, end: usize) -> &'a str {
         std::str::from_utf8(&self.bytes[start..end]).expect("event boundaries are char boundaries")
+    }
+
+    fn unprefixed(&self, start: usize, end: usize) -> String {
+        let first = self.prefixes.partition_point(|prefix| prefix.end <= start);
+        let mut out = String::new();
+        let mut cursor = start;
+        for prefix in self.prefixes[first..].iter().take_while(|prefix| prefix.start < end) {
+            if prefix.start > cursor {
+                out.push_str(self.raw(cursor, prefix.start));
+            }
+            cursor = cursor.max(prefix.end);
+        }
+        if cursor < end {
+            out.push_str(self.raw(cursor, end));
+        }
+        out
     }
 
     fn start(&self, index: usize) -> usize {
@@ -204,17 +221,19 @@ impl<'a> Builder<'a> {
 
     fn chunk(&self, index: usize, out: &mut String) {
         let (start, end) = (&self.events[index].point, &self.events[self.exits[index]].point);
-        let (mut from, mut to) = (start.index as usize, end.index as usize);
-        if start.vs > 0 {
-            out.extend(std::iter::repeat_n(' ', TAB_SIZE - start.vs as usize));
-            from += 1;
+        if start.index == end.index {
+            out.extend(std::iter::repeat_n(' ', end.vs.saturating_sub(start.vs) as usize));
+            return;
         }
-        if end.vs > 0 {
-            to += 1;
+        let (mut from, to) = (start.index as usize, end.index as usize);
+        if start.vs > 0 {
+            let remaining = TAB_SIZE - ((start.column as usize).saturating_sub(1) % TAB_SIZE);
+            out.extend(std::iter::repeat_n(' ', remaining));
+            from += 1;
         }
         out.push_str(self.raw(from, to));
         if end.vs > 0 {
-            out.extend(std::iter::repeat_n(' ', TAB_SIZE - end.vs as usize));
+            out.extend(std::iter::repeat_n(' ', end.vs as usize));
         }
     }
 
@@ -280,8 +299,8 @@ impl<'a> Builder<'a> {
         } else {
             b'&'
         };
-        let value = self.find(index, exit, Name::CharacterReferenceValue).map(|i| self.text(i)).unwrap_or_default();
-        syntax::decode_character_reference(&value, marker, true).unwrap_or_else(|| self.text(index))
+        let value = self.find(index, exit, Name::CharacterReferenceValue).map_or_default(|i| self.text(i));
+        syntax::decode_character_reference(&value, marker).unwrap_or_else(|| self.text(index))
     }
 
     fn phrasing_in(&self, from: usize, to: usize, name: Name) -> Vec<Node> {
@@ -291,14 +310,14 @@ impl<'a> Builder<'a> {
     fn keep_label_space(&self, children: &mut Vec<Node>, start: usize, end: usize) {
         let space = |from: usize, to: usize| {
             let mut node = Node::new(Kind::Text, from, to);
-            node.value = self.raw(from, to).into();
+            node.value = self.unprefixed(from, to);
             node
         };
         let lead = children.first().map_or(end, |child| child.start);
         if lead > start {
             match children.first_mut().filter(|child| child.kind == Kind::Text) {
                 Some(first) => {
-                    first.value.insert_str(0, self.raw(start, lead));
+                    first.value.insert_str(0, &self.unprefixed(start, lead));
                     first.start = start;
                 }
                 None => children.insert(0, space(start, lead)),
@@ -308,7 +327,7 @@ impl<'a> Builder<'a> {
         if trail < end {
             match children.last_mut().filter(|child| child.kind == Kind::Text) {
                 Some(last) => {
-                    last.value.push_str(self.raw(trail, end));
+                    last.value.push_str(&self.unprefixed(trail, end));
                     last.end = end;
                 }
                 None => children.push(space(trail, end)),
@@ -368,6 +387,9 @@ impl<'a> Builder<'a> {
                     first.value.drain(..width);
                     if first.value.is_empty() {
                         n.children.remove(0);
+                        if let Some(next) = n.children.first() {
+                            n.start = next.start;
+                        }
                     } else {
                         first.start += width;
                         n.start = first.start;
@@ -558,7 +580,12 @@ impl<'a> Builder<'a> {
                 if let Some(resource) = resource {
                     let close = self.exits[resource];
                     if let Some(i) = self.find(resource, close, Name::ResourceDestinationString) {
-                        n.extra_mut().url = decode_string(&self.text(i));
+                        let raw = self.text(i);
+                        let extra = n.extra_mut();
+                        extra.url = decode_string(&raw);
+                        extra.source = Some(raw);
+                    } else {
+                        n.extra_mut().source = Some(String::new());
                     }
                     if let Some(i) = self.find(resource, close, Name::ResourceTitleString) {
                         n.extra_mut().title = Some(decode_string(&self.text(i)));
@@ -573,7 +600,7 @@ impl<'a> Builder<'a> {
             Name::GsxDirectiveText => {
                 let mut n = node(Kind::TextDirective);
                 n.extra_mut().name =
-                    self.find(index, exit, Name::GsxDirectiveTextIdentifier).map(|i| self.text(i)).unwrap_or_default();
+                    self.find(index, exit, Name::GsxDirectiveTextIdentifier).map_or_default(|i| self.text(i));
                 if let Some(label) = self.find(index, exit, Name::GsxDirectiveTextLabelString) {
                     n.children = self.children(label + 1, self.exits[label], true);
                     self.keep_label_space(&mut n.children, self.start(label), self.end(label));
@@ -663,7 +690,7 @@ fn character_reference(raw: &str, start: usize) -> Option<(String, usize)> {
     if size == 0 || size > maximum || bytes.get(body + size) != Some(&b';') {
         return None;
     }
-    syntax::decode_character_reference(&raw[body..body + size], marker, true).map(|value| (value, body + size + 1))
+    syntax::decode_character_reference(&raw[body..body + size], marker).map(|value| (value, body + size + 1))
 }
 
 pub(super) fn decode_string(raw: &str) -> String {
@@ -795,7 +822,7 @@ pub(super) fn build(events: &[Event], bytes: &[u8]) -> (Node, Vec<Prefix>) {
         }
     }
     let prefixes = prefixes(events, &exits, bytes);
-    let builder = Builder { events, bytes, exits };
+    let builder = Builder { events, bytes, exits, prefixes: &prefixes };
     let mut root = Node::new(Kind::Root, 0, bytes.len());
     root.children = builder.children(0, events.len(), false);
     (root, prefixes)

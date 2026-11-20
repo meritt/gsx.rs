@@ -10,7 +10,7 @@ fn is_name_start(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte >= 0x80
 }
 
-fn is_name_continue(byte: u8) -> bool {
+pub(crate) fn is_name_continue(byte: u8) -> bool {
     is_name_start(byte) || matches!(byte, b'-' | b'_')
 }
 
@@ -106,6 +106,7 @@ pub fn label_data(tokenizer: &mut Tokenizer) -> State {
             if tokenizer.tokenize_state.size_b > LABEL_BALANCE_MAX {
                 return State::Retry(StateName::GsxDirectiveTextLabelNok);
             }
+            tokenizer.tokenize_state.size += 1;
             tokenizer.consume();
             State::Next(StateName::GsxDirectiveTextLabelData)
         }
@@ -114,6 +115,7 @@ pub fn label_data(tokenizer: &mut Tokenizer) -> State {
             State::Retry(StateName::GsxDirectiveTextLabelClose)
         }
         Some(b'\n') => {
+            tokenizer.tokenize_state.size += 1;
             tokenizer.consume();
             tokenizer.exit(Name::Data);
             State::Next(StateName::GsxDirectiveTextLabelLineStart)
@@ -122,6 +124,7 @@ pub fn label_data(tokenizer: &mut Tokenizer) -> State {
             if byte == b']' {
                 tokenizer.tokenize_state.size_b -= 1;
             }
+            tokenizer.tokenize_state.size += 1;
             tokenizer.consume();
             State::Next(if byte == b'\\' {
                 StateName::GsxDirectiveTextLabelEscape
@@ -180,6 +183,7 @@ pub fn label_nok(tokenizer: &mut Tokenizer) -> State {
 
 pub fn after_label(tokenizer: &mut Tokenizer) -> State {
     if tokenizer.current == Some(b'{') {
+        tokenizer.tokenize_state.gsx_directive_seen.clear();
         tokenizer.attempt(
             State::Next(StateName::GsxDirectiveTextAfterAttributes),
             State::Next(StateName::GsxDirectiveTextAfterAttributes),
@@ -191,6 +195,8 @@ pub fn after_label(tokenizer: &mut Tokenizer) -> State {
 }
 
 pub fn after_attributes(tokenizer: &mut Tokenizer) -> State {
+    let state = &mut tokenizer.tokenize_state;
+    state.gsx_directive_failed.extend(state.gsx_directive_seen.drain(..));
     tokenizer.exit(Name::GsxDirectiveText);
     State::Ok
 }
@@ -204,16 +210,23 @@ pub fn attributes_start(tokenizer: &mut Tokenizer) -> State {
 }
 
 pub fn attributes_between(tokenizer: &mut Tokenizer) -> State {
+    if let Some(byte) = tokenizer.current
+        && is_space_or_eol(byte)
+    {
+        tokenizer.consume();
+        return State::Next(StateName::GsxDirectiveTextAttributesBetween);
+    }
+    let at = tokenizer.point.index as usize;
+    if tokenizer.tokenize_state.gsx_directive_failed.contains(&at) {
+        return State::Nok;
+    }
+    tokenizer.tokenize_state.gsx_directive_seen.push(at);
     match tokenizer.current {
         Some(b'#' | b'.') => {
             tokenizer.enter(Name::GsxDirectiveTextAttribute);
             tokenizer.enter(Name::GsxDirectiveTextAttributeShortcut);
             tokenizer.consume();
             State::Next(StateName::GsxDirectiveTextAttributeShortcutStart)
-        }
-        Some(byte) if is_space_or_eol(byte) => {
-            tokenizer.consume();
-            State::Next(StateName::GsxDirectiveTextAttributesBetween)
         }
         Some(byte) if is_name_continue(byte) => {
             tokenizer.enter(Name::GsxDirectiveTextAttribute);
@@ -356,6 +369,7 @@ pub fn attribute_value_quoted_after(tokenizer: &mut Tokenizer) -> State {
 
 pub fn attributes_end(tokenizer: &mut Tokenizer) -> State {
     if tokenizer.current == Some(b'}') {
+        tokenizer.tokenize_state.gsx_directive_seen.clear();
         tokenizer.enter(Name::GsxDirectiveTextAttributesMarker);
         tokenizer.consume();
         tokenizer.exit(Name::GsxDirectiveTextAttributesMarker);

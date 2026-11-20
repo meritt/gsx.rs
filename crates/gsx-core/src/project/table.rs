@@ -303,6 +303,10 @@ impl HtmlForm {
         self.tags.iter().find(|(native, _)| *native == feature).map(|(_, tag)| *tag)
     }
 
+    pub fn item_limit(&self) -> usize {
+        self.structure.map_or(usize::MAX, |structure| structure.items)
+    }
+
     pub fn group(&self, layout: Layout) -> Option<(&'static str, &'static [Format])> {
         self.groups.iter().find(|(native, ..)| *native == layout).map(|&(_, tag, formats)| (tag, formats))
     }
@@ -319,6 +323,7 @@ pub enum LineStart {
     Heading,
     Ordered,
     Setext,
+    Indented,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -355,6 +360,7 @@ impl MarkdownForm {
             LineStart::Heading => "heading",
             LineStart::Ordered => "ordered",
             LineStart::Setext => "setext",
+            LineStart::Indented => "indented",
         }));
         let quote_depth = self.quote_depth.map_or_else(|| "none".to_owned(), |depth| depth.to_string());
         let _ = writeln!(
@@ -829,6 +835,14 @@ impl Target {
         self.conditions(Feature::Text, When::Thread)
     }
 
+    pub fn has_story(&self) -> bool {
+        self.limits.iter().any(|limit| {
+            limit.field != FieldName::Alt
+                && limit.placements != Placement::ALL
+                && limit.placements.contains(&Placement::Story)
+        })
+    }
+
     pub fn facts(&self) -> Vec<&'static str> {
         let bodies = || self.limits.iter().filter(|limit| limit.field != FieldName::Alt);
         let limited = |fact: Fact| {
@@ -847,10 +861,7 @@ impl Target {
             ("mediaCount", empty),
             (
                 "placement",
-                self.threads()
-                    || self.spoilers != Spoilers::None
-                    || self.alt_placements != Placement::ALL
-                    || bodies().any(|limit| limit.placements != Placement::ALL),
+                self.alt_placements != Placement::ALL || bodies().any(|limit| limit.placements != Placement::ALL),
             ),
             ("title", self.fields.iter().any(|field| field.source == Source::Title { fact: true })),
             ("targetUrl", self.handles(Feature::TargetUrl)),

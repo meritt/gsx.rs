@@ -360,3 +360,36 @@ fn fitting_counts_visible_text_and_keeps_markup_closed() {
     assert_eq!(text(&projection), "<b>bold words…</b>");
     assert_eq!(projection.measurements[0].value, 11);
 }
+
+#[test]
+fn invisible_html_links_omit_empty_anchor_tags() {
+    for name in ["telegram-html", "telegram-html-rich", "max-html"] {
+        for input in [
+            "Hello [](https://example.com) world",
+            "Hello [ ](https://example.com) world",
+            "Hello [\u{200B}](https://example.com) world",
+        ] {
+            let document = parse(input, &[]).unwrap();
+            let projection = project(&document, target(name).unwrap(), &Facts::default());
+            assert!(!text(&projection).contains("<a "), "{name} {input:?}: {}", text(&projection));
+            assert!(
+                changes(&projection).contains(&("link", "omitted", "link_label_invisible")),
+                "{name} {input:?}: {:?}",
+                changes(&projection)
+            );
+        }
+    }
+    let broken = run("telegram-html-rich", "Hello [\n](https://example.com) world");
+    assert_eq!(text(&broken), "Hello <br> world");
+}
+
+#[test]
+fn rich_html_trims_items_over_fifty_and_reports_figcaption_blank_lines() {
+    let ids: Vec<String> = (0..52).map(|index| format!("m{index}")).collect();
+    let items: Vec<_> = ids.iter().map(|id| image(id, None)).collect();
+    let projection = rich("Intro", &items);
+    assert_eq!(projection.items.len(), 50);
+
+    let caption = rich("Intro\n\n::media{id=\"a\"}", &[image("a", Some("one\n\n\ntwo"))]);
+    assert!(changes(&caption).contains(&("text", "approximated", "blank_lines_collapsed")));
+}

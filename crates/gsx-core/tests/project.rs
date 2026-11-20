@@ -932,3 +932,144 @@ fn every_output_trims_blank_lines_around_the_content() {
     }
     assert!(checked > 4000 && parts > 500, "{checked} outputs and {parts} thread parts checked");
 }
+
+#[test]
+fn threaded_item_indices_stay_in_bounds_and_per_part() {
+    let media =
+        [gsx_core::document::Media { id: "a", cover: None }, gsx_core::document::Media { id: "b", cover: None }];
+    let markdown =
+        format!("{}\n\n::media{{id=\"a\"}}\n\n{}\n\n::media{{id=\"b\"}}", "word ".repeat(60), "more ".repeat(60));
+    let document = parse(&markdown, &media).unwrap();
+    let long_alt = "z".repeat(2500);
+    let items = [
+        MediaFact { id: "a", format: Format::Image, alt: Some("short"), spoiler: false, inline: false },
+        MediaFact { id: "b", format: Format::Image, alt: Some(&long_alt), spoiler: false, inline: false },
+    ];
+    let facts = Facts {
+        media: Some(MediaKind::Image),
+        media_count: 2,
+        overflow: Overflow::Thread,
+        items: Some(&items),
+        ..Facts::default()
+    };
+    let projection = project(&document, target("bluesky-entities").unwrap(), &facts);
+    assert!(projection.parts.len() >= 2);
+    for measurement in &projection.measurements {
+        if let Some(index) = measurement.item {
+            assert!(index < projection.items.len(), "top-level measurement item {index} >= {}", projection.items.len());
+        }
+    }
+    for change in &projection.changes {
+        if let Some(slot) = change.slot {
+            assert!((slot.item as usize) < projection.items.len());
+        }
+    }
+    for part in &projection.parts {
+        let alt_measurements: Vec<_> = part.measurements.iter().filter(|m| m.item.is_some()).collect();
+        assert_eq!(alt_measurements.len(), part.items.len() * 2);
+        for m in alt_measurements {
+            assert!(m.item.unwrap() < part.items.len());
+        }
+    }
+}
+
+#[test]
+fn threads_counts_links_above_49864_units_and_reports_part0_range() {
+    let urls = (0..7).map(|i| format!("https://e{i}.example/")).collect::<Vec<_>>().join(" ");
+    let markdown = format!("{urls}\n\n{}", "a ".repeat(30_000));
+    let document = parse(&markdown, &[]).unwrap();
+    let facts = Facts { overflow: Overflow::Thread, ..Facts::default() };
+    let projection = project(&document, target("threads-entities").unwrap(), &facts);
+    assert!(projection.parts.len() >= 2);
+    assert!(
+        !projection.is_blocked(),
+        "threads should split at 5 links even on >49864-unit input: {:?}",
+        projection.changes
+    );
+
+    let six_same_word = (0..6).map(|i| format!("https://e{i}.example/")).collect::<Vec<_>>().join(" ");
+    let big_doc = parse(&format!("{six_same_word}\n\n{}", "w ".repeat(300)), &[]).unwrap();
+    let blocked = project(
+        &big_doc,
+        target("threads-entities").unwrap(),
+        &Facts { overflow: Overflow::Thread, max_characters: Some(500), ..Facts::default() },
+    );
+    assert!(blocked.parts.len() >= 2);
+    for change in &blocked.changes {
+        if change.reason == "link_limit_exceeded" && change.class == Class::Blocked {
+            assert!(change.range.is_some(), "threaded blocked link_limit_exceeded must carry part range");
+        }
+    }
+}
+
+#[test]
+fn first_line_title_preserves_body_links_and_attributes_title_changes() {
+    let document = parse("**Lead**\n\nVisit https://example.com/a and [site](https://example.com/b).", &[]).unwrap();
+    let projection = project(&document, target("youtube-plain").unwrap(), &Facts::default());
+    let description = projection.field(FieldName::Description).unwrap();
+    assert!(!description.links.is_empty(), "description links must not be cleared");
+    assert!(
+        projection.changes.iter().any(|c| c.feature == Feature::Strong && c.field == FieldName::Title),
+        "first-line rendering changes belong to title: {:?}",
+        projection.changes
+    );
+
+    let ruled = run("youtube-plain", "Lead\n\n---\n\n**More**", &Facts::default());
+    let rule = ruled.changes.iter().find(|c| c.feature == Feature::ThematicBreak).unwrap();
+    assert_eq!(rule.field, FieldName::Description);
+
+    let media = [gsx_core::document::Media { id: "a", cover: None }];
+    let long = parse(&format!("::media{{id=\"a\"}}\n\n{}", "word ".repeat(40)), &media).unwrap();
+    let projection = project(&long, target("youtube-plain").unwrap(), &Facts::default());
+    let truncated = projection.changes.iter().find(|c| c.field == FieldName::Title && c.truncated.is_some()).unwrap();
+    assert_eq!(truncated.range.map(|range| range.start), Some(17));
+}
+
+#[test]
+fn story_placement_does_not_leak_onto_non_story_targets() {
+    for name in ["x-plain", "mastodon-plain", "threads-entities", "discord-markdown"] {
+        let tgt = target(name).unwrap();
+        assert!(!tgt.facts().contains(&"placement"), "{name} should not advertise placement");
+    }
+    let document = parse("Hello\n\n::media{id=\"a\"}", &[gsx_core::document::Media { id: "a", cover: None }]).unwrap();
+    let items = [MediaFact { id: "a", format: Format::Image, alt: None, spoiler: true, inline: false }];
+    let facts = Facts {
+        media: Some(MediaKind::Image),
+        media_count: 1,
+        placement: Some(Placement::Story),
+        items: Some(&items),
+        ..Facts::default()
+    };
+    let mastodon = project(&document, target("mastodon-plain").unwrap(), &facts);
+    assert!(mastodon.items[0].spoiler);
+    assert!(!mastodon.changes.iter().any(|c| c.reason == "media_spoiler_omitted"));
+
+    let vk = project(
+        &parse("one\n\n\n\ntwo", &[]).unwrap(),
+        target("vk-plain").unwrap(),
+        &Facts { media: Some(MediaKind::Video), media_count: 1, ..Facts::default() },
+    );
+    assert!(!vk.changes.iter().any(|c| c.field == FieldName::Title && c.reason == "blank_lines_collapsed"));
+
+    let handle_doc = parse("hi @alice-smith.bsky.social end", &[]).unwrap();
+    let cut = project_with(
+        &handle_doc,
+        target("bluesky-entities").unwrap(),
+        &Facts::default(),
+        &Options { search: None, maximum: Some(15) },
+    );
+    assert_eq!(cut.fields[0].text, "hi…");
+}
+
+#[test]
+fn threads_reserves_a_link_slot_only_for_an_accepted_target_url() {
+    let links = (0..5).map(|i| format!("[l{i}](https://e{i}.example/)")).collect::<Vec<_>>().join(" ");
+    let document = parse(&links, &[]).unwrap();
+    let threads = target("threads-entities").unwrap();
+    let unwrapped = |url| {
+        let facts = Facts { target_url: Some(url), ..Facts::default() };
+        project(&document, threads, &facts).changes.iter().filter(|c| c.reason == "link_limit_exceeded").count()
+    };
+    assert_eq!(unwrapped("notaurl"), 0);
+    assert_eq!(unwrapped("https://example.com/post"), 1);
+}

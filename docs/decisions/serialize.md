@@ -43,7 +43,7 @@ Authored text uses numeric character references such as `&#42;` where characters
 - Always: backtick, `*`, `[`, `]`, `<`, `~`, `|`, `$` and U+FEFF.
 - `\` unless followed by an alphanumeric or a space; `_` unless between alphanumerics; `&` before `#` or an ASCII alphanumeric.
 - `+` and `=` when doubled or at a line start; `#`, `>` and `-` at a line start; `.` or `)` after one to nine initial ASCII digits.
-- `:` before an ASCII alphanumeric, a non-ASCII character or `/`; `@` after an ASCII alphanumeric, `.`, `+`, `-` or `_`; `.` after case-insensitive `www`. These prevent autolinks from consuming a following character reference.
+- `:` before `/` or after another `:` before an ASCII alphanumeric or a non-ASCII character; `@` after an ASCII alphanumeric, `.`, `+`, `-` or `_`; `.` after case-insensitive `www`. These prevent autolinks and directives from consuming a following character reference.
 - Leading and trailing spaces or tabs, line endings that cannot remain soft breaks, and an alphanumeric next to emphasis when no delimiter can flank otherwise.
 
 Literal nodes retain source spelling with normalized line endings and container prefixes, including lazy continuation lines. A literal at the start of a paragraph continuation receives four spaces to prevent block interpretation. A task paragraph opening with a hard break retains its checkbox separator exactly once. Paragraphs and headings whose canonical inline form changes the tree retain their source spelling too.
